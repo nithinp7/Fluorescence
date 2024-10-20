@@ -1,29 +1,14 @@
-#include "DemoScene.h"
-#include "RayTracingDemo.h"
-#include "RayTracedReflectionsDemo.h"
-#include "BindlessDemo.h"
-#include "PathTracing.h"
-#include "DiffuseProbes.h"
-#include "ParticleSystem.h"
-#include "SphericalHarmonics.h"
+#include "Fluorescence.h"
 
 #include <Althea/Application.h>
 
 #include <iostream>
 
 using namespace AltheaEngine;
-using namespace AltheaDemo;
 
 int main() {
-  Application app("Althea Demo", "../..", "../../Extern/Althea");
-  //app.createGame<DemoScene::DemoScene>(); // BROKEN
-  app.createGame<RayTracingDemo::RayTracingDemo>();
-  // app.createGame<RayTracedReflectionsDemo::RayTracedReflectionsDemo>();
-  // app.createGame<BindlessDemo::BindlessDemo>();
-  // app.createGame<ParticleSystem::ParticleSystem>();
-  // app.createGame<PathTracing::PathTracing>();
-  // app.createGame<DiffuseProbes::DiffuseProbes>();
-  // app.createGame<SphericalHarmonics::SphericalHarmonics>();
+  Application app("Fluorescence", "..", "../Extern/Althea");
+   app.createGame<Fluorescence::Fluorescence>();
 
   try {
     app.run();

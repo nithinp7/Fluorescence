@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 
 project(
-    AltheaDemo
+    Fluorescence
     VERSION 0.1.0
     LANGUAGES CXX C)
 
@@ -26,15 +26,16 @@ function(glob_files out_var_name regexes)
 endfunction()
 
 glob_files(SRC_FILES_LIST Src/*.cpp)
-add_executable(AltheaDemo ${SRC_FILES_LIST})
+add_executable(Fluorescence ${SRC_FILES_LIST})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE MAX_UV_COORDS=4)
 
 add_subdirectory(Extern/Althea)
-# if (MSVC)
-#     target_compile_options(${targetName} PRIVATE /W4 /WX /wd4201 /bigobj)
-# else()
-#     target_compile_options(${targetName} PRIVATE -Werror -Wall -Wextra -Wconversion -Wpedantic -Wshadow -Wsign-conversion)
-# endif()
+if (MSVC)
+  add_compile_options(/MP)
+  target_link_options(Fluorescence PRIVATE $<$<CONFIG:Debug>:/INCREMENTAL>)
+  target_compile_options(Fluorescence PRIVATE $<$<CONFIG:Debug>:/ZI>)
+endif()
+
 target_link_libraries(${PROJECT_NAME} PUBLIC Althea)
 

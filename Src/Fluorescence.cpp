@@ -1,4 +1,4 @@
-#include "BindlessDemo.h"
+#include "Fluorescence.h"
 
 #include <Althea/Application.h>
 #include <Althea/Camera.h>
@@ -27,8 +27,7 @@
 
 using namespace AltheaEngine;
 
-namespace AltheaDemo {
-namespace BindlessDemo {
+namespace Fluorescence {
 namespace {
 struct ForwardPassPushConstants {
   uint32_t matrixBufferHandle;
@@ -43,9 +42,9 @@ struct DeferredPassPushConstants {
 };
 } // namespace
 
-BindlessDemo::BindlessDemo() {}
+Fluorescence::Fluorescence() {}
 
-void BindlessDemo::initGame(Application& app) {
+void Fluorescence::initGame(Application& app) {
   const VkExtent2D& windowDims = app.getSwapChainExtent();
   this->_pCameraController = std::make_unique<CameraController>(
       app.getInputManager(),
@@ -87,11 +86,11 @@ void BindlessDemo::initGame(Application& app) {
       });
 }
 
-void BindlessDemo::shutdownGame(Application& app) {
+void Fluorescence::shutdownGame(Application& app) {
   this->_pCameraController.reset();
 }
 
-void BindlessDemo::createRenderState(Application& app) {
+void Fluorescence::createRenderState(Application& app) {
   const VkExtent2D& extent = app.getSwapChainExtent();
   this->_pCameraController->getCamera().setAspectRatio(
       (float)extent.width / (float)extent.height);
@@ -104,7 +103,7 @@ void BindlessDemo::createRenderState(Application& app) {
   this->_createDeferredPass(app);
 }
 
-void BindlessDemo::destroyRenderState(Application& app) {
+void Fluorescence::destroyRenderState(Application& app) {
   Gui::destroyRenderState(app);
 
   this->_models.clear();
@@ -124,7 +123,7 @@ void BindlessDemo::destroyRenderState(Application& app) {
   this->_globalHeap = {};
 }
 
-void BindlessDemo::tick(Application& app, const FrameContext& frame) {
+void Fluorescence::tick(Application& app, const FrameContext& frame) {
   {
     Gui::startRecordingImgui();
     const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
@@ -185,7 +184,7 @@ void BindlessDemo::tick(Application& app, const FrameContext& frame) {
   // this->_pointLights.updateResource(frame);
 }
 
-void BindlessDemo::_createModels(
+void Fluorescence::_createModels(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer) {
 
@@ -226,7 +225,7 @@ void BindlessDemo::_createModels(
   //     glm::vec3(10.0f, -1.0f, 0.0f)));
 }
 
-void BindlessDemo::_createGlobalResources(
+void Fluorescence::_createGlobalResources(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer) {
   this->_globalHeap = GlobalHeap(app);
@@ -282,7 +281,7 @@ void BindlessDemo::_createGlobalResources(
   // this->_SSR.getReflectionBuffer().registerToHeap(this->_globalHeap);
 }
 
-void BindlessDemo::_createForwardPass(Application& app) {
+void Fluorescence::_createForwardPass(Application& app) {
   std::vector<SubpassBuilder> subpassBuilders;
 
   //  FORWARD GLTF PASS
@@ -325,7 +324,7 @@ void BindlessDemo::_createForwardPass(Application& app) {
       gBuffer.getAttachmentViewsA());
 }
 
-void BindlessDemo::_createDeferredPass(Application& app) {
+void Fluorescence::_createDeferredPass(Application& app) {
   VkClearValue colorClear;
   colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
   VkClearValue depthClear;
@@ -396,7 +395,7 @@ struct DrawableEnvMap {
 };
 } // namespace
 
-void BindlessDemo::draw(
+void Fluorescence::draw(
     Application& app,
     VkCommandBuffer commandBuffer,
     const FrameContext& frame) {
@@ -492,5 +491,4 @@ void BindlessDemo::draw(
 
   Gui::draw(app, frame, commandBuffer);
 }
-} // namespace BindlessDemo
-} // namespace AltheaDemo
+} // namespace Fluorescence
