@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Shared/CommonStructures.h"
+
 #include <Althea/Allocator.h>
 #include <Althea/CameraController.h>
 #include <Althea/ComputePipeline.h>
@@ -33,7 +35,7 @@ namespace AltheaEngine {
 class Application;
 } // namespace AltheaEngine
 
-namespace Fluorescence {
+namespace flr {
 
 class Fluorescence : public IGameInstance {
 public:
@@ -53,30 +55,14 @@ public:
       const FrameContext& frame) override;
 
 private:
-  bool _adjustingExposure = false;
-
-  std::unique_ptr<CameraController> _pCameraController;
-
   void _createGlobalResources(
       Application& app,
       SingleTimeCommandBuffer& commandBuffer);
-  GlobalHeap _globalHeap;
-  GlobalUniformsResource _globalUniforms;
-  GlobalResources _globalResources;
-  PointLightCollection _pointLights;
+  GlobalHeap m_heap;
+  TransientUniforms<FlrUniforms> m_uniforms;
 
-  void _createModels(Application& app, SingleTimeCommandBuffer& commandBuffer);
-  std::vector<Model> _models;
-
-  void _createForwardPass(Application& app);
-  std::unique_ptr<RenderPass> _pForwardPass;
-  FrameBuffer _forwardFrameBuffer;
-
-  void _createDeferredPass(Application& app);
-  std::unique_ptr<RenderPass> _pDeferredPass;
-  SwapChainFrameBufferCollection _swapChainFrameBuffers;
-
-  ScreenSpaceReflection _SSR;
-  float _exposure = 0.3f;
+  void _createDisplayPass(Application& app);
+  RenderPass m_displayPass;
+  SwapChainFrameBufferCollection m_swapChainFrameBuffers;
 };
-} // namespace Fluorescence
+} // namespace flr

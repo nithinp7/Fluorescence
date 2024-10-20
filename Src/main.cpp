@@ -7,8 +7,8 @@
 using namespace AltheaEngine;
 
 int main() {
-  Application app("Fluorescence", "..", "../Extern/Althea");
-   app.createGame<Fluorescence::Fluorescence>();
+  Application app("Fluorescence", "..", "../Extern/Althea", 1440, 1280);
+   app.createGame<flr::Fluorescence>();
 
   try {
     app.run();
