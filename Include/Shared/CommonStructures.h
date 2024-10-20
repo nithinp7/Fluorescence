@@ -1,7 +1,7 @@
 #ifndef _FLR_COMMON_STRUCTURES_
 #define _FLR_COMMON_STRUCTURES_
 
-#include "../../Extern/Althea/Include/Althea/Common/CommonTranslations.h"
+#include <../Include/Althea/Common/CommonTranslations.h>
 
 struct FlrUniforms {
   vec2 mouseUv;
