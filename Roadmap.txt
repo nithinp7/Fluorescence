@@ -1,0 +1,14 @@
+FLUORESCENCE ROADMAP:
+- compute / shading graphs
+- focus on 2d for now
+
+graph concept:
+- define resources
+- define shaders, that declare resource usage
+- define shader execution order, left-to-right
+- exact stage determined by resource usage...
+
+- .flr projects
+
+graph editor
+- 
