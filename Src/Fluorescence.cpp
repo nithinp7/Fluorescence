@@ -1,5 +1,7 @@
 #include "Fluorescence.h"
 
+#include "GraphEditor/Graph.h"
+
 #include <Althea/Application.h>
 #include <Althea/Camera.h>
 #include <Althea/Cubemap.h>
@@ -62,102 +64,6 @@ void Fluorescence::destroyRenderState(Application& app) {
   m_heap = {};
 }
 
-namespace {
-struct NodeConnector;
-// TODO: move this to a dedicated layout manager class...
-// this is just some quick prototyping...
-struct NodeConnectionSlot {
-  NodeConnector* m_connector;
-  glm::vec2 m_pos;
-};
-struct NodeLayout {
-  float m_slotRadius = 0.05f;
-  float m_padding = 0.05f;
-
-  glm::vec2 m_pos = glm::vec2(50.0f);
-  glm::vec2 m_scale = glm::vec2(255.0f);
-  // TODO: Fixed-size arrays would be better here
-  std::vector<NodeConnectionSlot> m_inputSlots;
-  std::vector<NodeConnectionSlot> m_outputSlots;
-
-  void draw(ImDrawList* drawList) {
-    ImGuiIO& io = ImGui::GetIO();
-    glm::vec2 wpos =
-        m_pos + glm::vec2(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y);
-
-    drawList->AddRectFilled(
-        ImVec2(wpos.x, wpos.y),
-        ImVec2(wpos.x + m_scale.x, wpos.y + m_scale.y),
-        ImColor(88, 88, 88, 255),
-        m_padding * m_scale.x);
-    
-    for (const NodeConnectionSlot& slot : m_inputSlots) {
-      glm::vec2 slotPos = wpos + slot.m_pos * m_scale;
-      glm::vec2 start = slotPos - m_scale * m_slotRadius;
-      glm::vec2 end = slotPos + m_scale * m_slotRadius;
-
-      drawList->AddRectFilled(
-          ImVec2(start.x, start.y),
-          ImVec2(end.x, end.y),
-          ImColor(188, 24, 24, 255),
-          m_scale.x * m_slotRadius);
-    }
-
-    for (const NodeConnectionSlot& slot : m_outputSlots) {
-      glm::vec2 slotPos = wpos + slot.m_pos * m_scale;
-      glm::vec2 start = slotPos - m_scale * m_slotRadius;
-      glm::vec2 end = slotPos + m_scale * m_slotRadius;
-
-      drawList->AddRectFilled(
-          ImVec2(start.x, start.y),
-          ImVec2(end.x, end.y),
-          ImColor(24, 188, 24, 255),
-          m_scale.x * m_slotRadius);
-    }
-
-    ImGui::SetCursorPos(ImVec2(m_pos.x, m_pos.y));
-    ImGui::InvisibleButton("node", ImVec2(m_scale.x, m_scale.y));
-    if (ImGui::IsItemActive()) {
-      m_pos.x += io.MouseDelta.x;
-      m_pos.y += io.MouseDelta.y;
-    }
-  }
-
-  void addInputSlot() {
-    {
-      NodeConnectionSlot& slot = m_inputSlots.emplace_back();
-      slot.m_connector = nullptr;
-    }
-
-    float spacing = (1.0f - 2.0f * m_padding) / m_inputSlots.size();
-    glm::vec2 pos(m_padding, m_padding + 0.5f * spacing);
-    for (NodeConnectionSlot& slot : m_inputSlots) {
-      slot.m_pos = pos;
-      pos.y += spacing;
-    }
-  }
-
-  void addOutputSlot() {
-    {
-      NodeConnectionSlot& slot = m_outputSlots.emplace_back();
-      slot.m_connector = nullptr;
-    }
-
-    float spacing = (1.0f - 2.0f * m_padding) / m_outputSlots.size();
-    glm::vec2 pos(1.0f - m_padding, m_padding + 0.5f * spacing);
-    for (NodeConnectionSlot& slot : m_outputSlots) {
-      slot.m_pos = pos;
-      pos.y += spacing;
-    }
-  }
-};
-struct NodeConnector {
-  NodeLayout* srcNode;
-  uint32_t srcSlot;
-  NodeLayout* dstNode;
-  uint32_t dstSlot;
-};
-} // namespace
 void Fluorescence::tick(Application& app, const FrameContext& frame) {
   {
     Gui::startRecordingImgui();
@@ -171,29 +77,8 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
 
     ImGui::EndMainMenuBar();
 
-    // TODO: move this somewhere else
-    static NodeLayout node{};
-
-    static bool s_bShowGraphEditor = true;
-
-    if (s_bShowGraphEditor) {
-      const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-
-      if (ImGui::Begin("GraphEditor")) {
-        if (ImGui::Button("Add Input"))
-          node.addInputSlot();
-        ImGui::SameLine();
-        if (ImGui::Button("Add Output"))
-          node.addOutputSlot();
-        
-        ImGui::BeginGroup();
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        node.draw(drawList);
-        ImGui::EndGroup();
-      }
-
-      ImGui::End();
-    }
+    static GraphEditor::Graph graph;
+    graph.draw();
 
     Gui::finishRecordingImgui();
   }

@@ -25,7 +25,7 @@ function(glob_files out_var_name regexes)
     set(${ARGV0} "${files}" PARENT_SCOPE)
 endfunction()
 
-glob_files(SRC_FILES_LIST Src/*.cpp)
+glob_files(SRC_FILES_LIST "Src/*.cpp" "Src/*/*.cpp")
 add_executable(Fluorescence ${SRC_FILES_LIST})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE MAX_UV_COORDS=4)

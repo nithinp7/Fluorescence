@@ -6,8 +6,14 @@ graph concept:
 - define resources
 - define shaders, that declare resource usage
 - define shader execution order, left-to-right
-- exact stage determined by resource usage...
+- exact stages determined by resource usage...
+- 
 
+Graph UI:
+- Nodes, layouts, bezier curve connectors
+- Grid-alignments?
+- 2d node-colliders
+- basic 2d springs in layout manager
 - .flr projects
 
 graph editor
