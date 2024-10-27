@@ -25,7 +25,7 @@ public:
   glm::vec2 getOutputSlotPos(uint32_t slotIdx) const;
 
 private:
-  float m_slotRadius = 0.05f;
+  float m_slotRadius = 0.025f;
   float m_padding = 0.05f;
 
   glm::vec2 m_pos = glm::vec2(50.0f);
