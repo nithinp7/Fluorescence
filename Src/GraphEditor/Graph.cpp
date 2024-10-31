@@ -3,6 +3,12 @@
 namespace flr {
 namespace GraphEditor {
 namespace {
+
+#define SHOW_INVISIBLE_BUTTONS 0
+#if SHOW_INVISIBLE_BUTTONS
+#define InvisibleButton Button
+#endif
+
 struct SlotDrag {
   Node* m_srcNode = nullptr;
   uint32_t m_srcSlot = 0;
@@ -60,7 +66,7 @@ void Node::draw(ImDrawList* drawList) {
         m_scale.x * m_slotRadius,
         ImColor(188, 24, 24, 255));
 
-    float r = m_slotRadius * m_scale.x * 2.0f;
+    float r = m_slotRadius * m_scale.x * 4.0f;
     ImGui::SetCursorPos(ImVec2(
         m_pos.x + slot.m_pos.x * m_scale.x - r,
         m_pos.y + slot.m_pos.y * m_scale.y - r));
@@ -76,8 +82,11 @@ void Node::draw(ImDrawList* drawList) {
       s_slotDrag.m_pos = slotPos;
     }
 
-    bool bHovering = ImGui::IsMouseHoveringRect(ImVec2(start.x, start.y), ImVec2(end.x, end.y));
-    if (bHovering && io.MouseReleased[0] && s_slotDrag.m_bActive && s_slotDrag.m_srcNode) {
+    bool bHovering = ImGui::IsMouseHoveringRect(
+        ImGui::GetItemRectMin(),
+        ImGui::GetItemRectMax());
+    if (bHovering && io.MouseReleased[0] && s_slotDrag.m_bActive &&
+        s_slotDrag.m_srcNode) {
       // finalize drag connection
       s_slotDrag.m_dstNode = this;
       s_slotDrag.m_dstSlot = i;
@@ -102,7 +111,7 @@ void Node::draw(ImDrawList* drawList) {
         m_scale.x * m_slotRadius,
         ImColor(25, 188, 24, 255));
 
-    float r = m_slotRadius * m_scale.x * 2.0f;
+    float r = m_slotRadius * m_scale.x * 4.0f;
     ImGui::SetCursorPos(ImVec2(
         m_pos.x + slot.m_pos.x * m_scale.x - r,
         m_pos.y + slot.m_pos.y * m_scale.y - r));
@@ -118,8 +127,11 @@ void Node::draw(ImDrawList* drawList) {
       s_slotDrag.m_pos = slotPos;
     }
 
-    bool bHovering = ImGui::IsMouseHoveringRect(ImVec2(start.x, start.y), ImVec2(end.x, end.y));
-    if (bHovering && io.MouseReleased[0] && s_slotDrag.m_bActive && s_slotDrag.m_dstNode) {
+    bool bHovering = ImGui::IsMouseHoveringRect(
+        ImGui::GetItemRectMin(),
+        ImGui::GetItemRectMax());
+    if (bHovering && io.MouseReleased[0] && s_slotDrag.m_bActive &&
+        s_slotDrag.m_dstNode) {
       // finalize drag connection
       s_slotDrag.m_srcNode = this;
       s_slotDrag.m_srcSlot = i;
@@ -139,10 +151,37 @@ void Node::draw(ImDrawList* drawList) {
   ImGui::EndGroup();
 }
 
+void Node::clearInput(uint32_t slotIdx) {
+  NodeConnectionSlot& slot = m_inputSlots[slotIdx];
+  if (slot.m_otherNode) {
+    slot.m_otherNode->m_outputSlots[slot.m_otherNodeSlotIdx].m_otherNode =
+        nullptr;
+    slot.m_otherNode->m_outputSlots[slot.m_otherNodeSlotIdx]
+        .m_otherNodeSlotIdx = 0;
+  }
+
+  slot.m_otherNode = nullptr;
+  slot.m_otherNodeSlotIdx = 0;
+}
+
+void Node::clearOutput(uint32_t slotIdx) {
+  NodeConnectionSlot& slot = m_outputSlots[slotIdx];
+  if (slot.m_otherNode) {
+    slot.m_otherNode->m_inputSlots[slot.m_otherNodeSlotIdx].m_otherNode =
+        nullptr;
+    slot.m_otherNode->m_inputSlots[slot.m_otherNodeSlotIdx].m_otherNodeSlotIdx =
+        0;
+  }
+
+  slot.m_otherNode = nullptr;
+  slot.m_otherNodeSlotIdx = 0;
+}
+
 void Node::addInputSlot() {
   {
     NodeConnectionSlot& slot = m_inputSlots.emplace_back();
-    slot.m_connector = nullptr;
+    slot.m_otherNode = nullptr;
+    slot.m_otherNodeSlotIdx = 0;
   }
 
   float spacing = (1.0f - 2.0f * m_padding) / m_inputSlots.size();
@@ -156,7 +195,8 @@ void Node::addInputSlot() {
 void Node::addOutputSlot() {
   {
     NodeConnectionSlot& slot = m_outputSlots.emplace_back();
-    slot.m_connector = nullptr;
+    slot.m_otherNode = nullptr;
+    slot.m_otherNodeSlotIdx = 0;
   }
 
   float spacing = (1.0f - 2.0f * m_padding) / m_outputSlots.size();
@@ -165,6 +205,14 @@ void Node::addOutputSlot() {
     slot.m_pos = pos;
     pos.y += spacing;
   }
+}
+
+/*static*/
+void Node::connect(Node* src, uint32_t srcSlot, Node* dst, uint32_t dstSlot) {
+  src->m_outputSlots[srcSlot].m_otherNode = dst;
+  src->m_outputSlots[srcSlot].m_otherNodeSlotIdx = dstSlot;
+  dst->m_inputSlots[dstSlot].m_otherNode = src;
+  dst->m_inputSlots[dstSlot].m_otherNodeSlotIdx = srcSlot;
 }
 
 glm::vec2 Node::getInputSlotPos(uint32_t slotIdx) const {
@@ -189,51 +237,58 @@ Graph::~Graph() {
 
 void Graph::draw() {
   if (ImGui::Begin("GraphEditor")) {
+    //ImGui::SetWindowFontScale(0.5f);
     ImGuiIO& io = ImGui::GetIO();
 
     ImDrawList* drawlist = ImGui::GetWindowDrawList();
-
     if (ImGui::Button("Add Node")) {
       m_nodes.push_back(new Node);
     }
-
 
     for (Node* node : m_nodes) {
       node->draw(drawlist);
     }
 
-    for (const NodeConnector& c : m_connectors)
-    {
-      glm::vec2 p0 = c.srcNode->getOutputSlotPos(c.srcSlot);
-      glm::vec2 p3 = c.dstNode->getInputSlotPos(c.dstSlot);
+    for (const Node* n : m_nodes) {
+      for (int i = 0; i < n->m_outputSlots.size(); i++) {
+        const NodeConnectionSlot& s = n->m_outputSlots[i];
+        if (!s.m_otherNode)
+          continue;
 
-      float offset = 250.0f;
-      uint32_t col = 0xff3355ff;
-      drawlist->AddBezierCubic(
-        ImVec2(p0.x, p0.y),
-        ImVec2(p0.x + offset, p0.y),
-        ImVec2(p3.x - offset, p3.y),
-        ImVec2(p3.x, p3.y),
-        ImColor(18, 18, 18, 255),
-        15.0f);
-      drawlist->AddBezierCubic(
-        ImVec2(p0.x, p0.y),
-        ImVec2(p0.x + offset, p0.y),
-        ImVec2(p3.x - offset, p3.y),
-        ImVec2(p3.x, p3.y),
-        col,
-        6.0f);
+        glm::vec2 p0 = n->getOutputSlotPos(i);
+        glm::vec2 p3 = s.m_otherNode->getInputSlotPos(s.m_otherNodeSlotIdx);
+
+        float offset = 250.0f;
+        uint32_t col = 0xff3355ff;
+        drawlist->AddBezierCubic(
+            ImVec2(p0.x, p0.y),
+            ImVec2(p0.x + offset, p0.y),
+            ImVec2(p3.x - offset, p3.y),
+            ImVec2(p3.x, p3.y),
+            ImColor(18, 18, 18, 255),
+            15.0f);
+        drawlist->AddBezierCubic(
+            ImVec2(p0.x, p0.y),
+            ImVec2(p0.x + offset, p0.y),
+            ImVec2(p3.x - offset, p3.y),
+            ImVec2(p3.x, p3.y),
+            col,
+            6.0f);
+      }
     }
 
     if (io.MouseReleased[0]) {
-      if (s_slotDrag.m_srcNode && s_slotDrag.m_dstNode)
-      {
-        NodeConnector& c = m_connectors.emplace_back();
-        c.srcNode = s_slotDrag.m_srcNode;
-        c.srcSlot = s_slotDrag.m_srcSlot;
-        c.dstNode = s_slotDrag.m_dstNode;
-        c.dstSlot = s_slotDrag.m_dstSlot;
+      if (s_slotDrag.m_srcNode && s_slotDrag.m_dstNode &&
+          s_slotDrag.m_srcNode != s_slotDrag.m_dstNode) {
+        s_slotDrag.m_srcNode->clearOutput(s_slotDrag.m_srcSlot);
+        s_slotDrag.m_dstNode->clearInput(s_slotDrag.m_dstSlot);
+        Node::connect(
+            s_slotDrag.m_srcNode,
+            s_slotDrag.m_srcSlot,
+            s_slotDrag.m_dstNode,
+            s_slotDrag.m_dstSlot);
       }
+
       s_slotDrag = {};
     }
     if (s_slotDrag.m_bActive) {
@@ -241,28 +296,27 @@ void Graph::draw() {
       s_slotDrag.m_pos.y += io.MouseDelta.y;
 
       glm::vec2 slotPos =
-        s_slotDrag.m_srcNode
-        ? s_slotDrag.m_srcNode->getOutputSlotPos(s_slotDrag.m_srcSlot)
-        : s_slotDrag.m_dstNode->getInputSlotPos(s_slotDrag.m_dstSlot);
+          s_slotDrag.m_srcNode
+              ? s_slotDrag.m_srcNode->getOutputSlotPos(s_slotDrag.m_srcSlot)
+              : s_slotDrag.m_dstNode->getInputSlotPos(s_slotDrag.m_dstSlot);
 
       float offset = s_slotDrag.m_srcNode ? 250.0f : -250.0f;
       uint32_t col = s_slotDrag.m_srcNode ? 0xff3355ff : 0x55ff33ff;
       drawlist->AddBezierCubic(
-        ImVec2(slotPos.x, slotPos.y),
-        ImVec2(slotPos.x + offset, slotPos.y),
-        ImVec2(s_slotDrag.m_pos.x - offset, s_slotDrag.m_pos.y),
-        ImVec2(s_slotDrag.m_pos.x, s_slotDrag.m_pos.y),
-        ImColor(18, 18, 18, 255),
-        15.0f);
+          ImVec2(slotPos.x, slotPos.y),
+          ImVec2(slotPos.x + offset, slotPos.y),
+          ImVec2(s_slotDrag.m_pos.x - offset, s_slotDrag.m_pos.y),
+          ImVec2(s_slotDrag.m_pos.x, s_slotDrag.m_pos.y),
+          ImColor(18, 18, 18, 255),
+          15.0f);
       drawlist->AddBezierCubic(
-        ImVec2(slotPos.x, slotPos.y),
-        ImVec2(slotPos.x + offset, slotPos.y),
-        ImVec2(s_slotDrag.m_pos.x - offset, s_slotDrag.m_pos.y),
-        ImVec2(s_slotDrag.m_pos.x, s_slotDrag.m_pos.y),
-        col,
-        6.0f);
+          ImVec2(slotPos.x, slotPos.y),
+          ImVec2(slotPos.x + offset, slotPos.y),
+          ImVec2(s_slotDrag.m_pos.x - offset, s_slotDrag.m_pos.y),
+          ImVec2(s_slotDrag.m_pos.x, s_slotDrag.m_pos.y),
+          col,
+          6.0f);
     }
-
   }
 
   ImGui::End();

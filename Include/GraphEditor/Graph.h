@@ -8,18 +8,26 @@
 namespace flr {
 namespace GraphEditor {
 
+class Node;
 struct NodeConnector;
 
 struct NodeConnectionSlot {
-  NodeConnector* m_connector;
+  Node* m_otherNode;
+  uint32_t m_otherNodeSlotIdx;
   glm::vec2 m_pos;
 };
 
 class Node {
+  friend class Graph;
+
 public:
   void draw(ImDrawList* drawList);
+  void clearInput(uint32_t slotIdx);
+  void clearOutput(uint32_t slotIdx);
   void addInputSlot();
   void addOutputSlot();
+
+  static void connect(Node* src, uint32_t srcSlot, Node* dst, uint32_t dstSlot);
 
   glm::vec2 getInputSlotPos(uint32_t slotIdx) const;
   glm::vec2 getOutputSlotPos(uint32_t slotIdx) const;
@@ -35,13 +43,6 @@ private:
   std::vector<NodeConnectionSlot> m_outputSlots;
 };
 
-struct NodeConnector {
-  Node* srcNode;
-  uint32_t srcSlot;
-  Node* dstNode;
-  uint32_t dstSlot;
-};
-
 class Graph {
 public:
   Graph();
@@ -51,7 +52,6 @@ public:
 
 private:
   std::vector<Node*> m_nodes;
-  std::vector<NodeConnector> m_connectors;
 };
 } // namespace GraphEditor
 } // namespace flr
