@@ -1,0 +1,9 @@
+uint agentCount: 256
+structured_buffer agentBuffer: 16 agentCount
+
+compute_stage CS_MoveAgents: agentCount 1 1
+
+barrier: agentBuffer
+
+display_pass 0: VS_FullScreen PS_UvTest
+display_pass 1: VS_FullScreen PS_Agents

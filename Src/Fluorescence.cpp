@@ -77,8 +77,8 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
 
     ImGui::EndMainMenuBar();
 
-    static GraphEditor::Graph graph;
-    graph.draw();
+    // static GraphEditor::Graph graph;
+    // graph.draw();
 
     Gui::finishRecordingImgui();
   }
