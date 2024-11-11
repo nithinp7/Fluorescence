@@ -1,5 +1,6 @@
 #include "Fluorescence.h"
 
+#include "Project.h"
 #include "GraphEditor/Graph.h"
 
 #include <Althea/Application.h>
@@ -77,6 +78,17 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
 
     ImGui::EndMainMenuBar();
 
+    if (ImGui::Begin("Test Parser")) {
+      static char s_filename[256] = "C:/Users/nithi/Documents/Code/Fluorescence/Projects/AgentSim/AgentSim.flr";
+      ImGui::Text("Project Name");
+      ImGui::InputText("##flr_file", s_filename, 256);
+      if (ImGui::Button("Open Project")) {
+        Project p((const char*)s_filename);
+      }
+
+    }
+    ImGui::End();
+    
     // static GraphEditor::Graph graph;
     // graph.draw();
 

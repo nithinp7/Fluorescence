@@ -13,14 +13,69 @@
 using namespace AltheaEngine;
 
 namespace flr {
-class Project {
-public:
-  Project(const char* projectPath);
+struct ParsedFlr {
+  ParsedFlr(const char* projectPath);
 
-private:
+  struct ConstUint {
+    std::string name;
+    uint32_t value;
+  };
+  std::vector<ConstUint> m_constUints;
+
+  struct ConstInt {
+    std::string name;
+    int value;
+  };
+  std::vector<ConstInt> m_constInts;
+
+  struct ConstFloat {
+    std::string name;
+    float value;
+  };
+  std::vector<ConstFloat> m_constFloats;
+
+  struct BufferDesc {
+    std::string name;
+    uint32_t elemSize;
+    uint32_t elemCount;
+  };
+  std::vector<BufferDesc> m_buffers;
+
+  std::vector<std::string> m_computeShaders;
+
+  struct ComputeDispatch {
+    uint32_t computeShaderIndex;
+    uint32_t dispatchSizeX;
+    uint32_t dispatchSizeY;
+    uint32_t dispatchSizeZ;
+  };
+  std::vector<ComputeDispatch> m_computeDispatches;
+
+  struct Barrier {
+    uint32_t bufferIdx;
+  };
+  std::vector<Barrier> m_barriers;
+
+  struct DisplayPass {
+    std::string vertexShader;
+    std::string pixelShader;
+  };
+  std::vector<DisplayPass> m_displayPasses;
+
+  enum TaskType : uint8_t {
+    TT_COMPUTE = 0,
+    TT_BARRIER,
+    TT_DISPLAY,
+  };
+  struct Task {
+    uint32_t idx;
+    TaskType type;
+  };
+  std::vector<Task> m_taskList;
 
   enum Instr : uint8_t {
     I_CONST_UINT = 0,
+    I_CONST_INT,
     I_CONST_FLOAT,
     I_STRUCTURED_BUFFER,
     I_COMPUTE_STAGE,
@@ -31,6 +86,7 @@ private:
 
   static constexpr char* INSTR_NAMES[I_COUNT] = {
     "uint",
+    "int",
     "float",
     "structured_buffer",
     "compute_stage",
@@ -38,15 +94,16 @@ private:
     "display_pass"
   };
 
-  void parseFlrFile(const char* filename);
-
-  enum TaskType : uint8_t {
-    CT_COMPUTE = 0,
-    CT_BARRIER,
-    CT_DISPLAY,
-  };
-  
   std::vector<std::string> m_extraDefines;
+};
+
+class Project {
+public:
+  Project(const char* projectPath);
+
+private:
+  ParsedFlr m_parsed;
+
   std::vector<BufferAllocation> m_buffers;
 
   struct ComputeStage {
