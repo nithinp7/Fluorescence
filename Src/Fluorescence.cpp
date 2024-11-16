@@ -83,7 +83,9 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
       ImGui::Text("Project Name");
       ImGui::InputText("##flr_file", s_filename, 256);
       if (ImGui::Button("Open Project")) {
-        Project p((const char*)s_filename);
+        static Project* p = nullptr;
+        if (!p) delete p;
+        p = new Project(app, m_heap, (const char*)s_filename);
       }
 
     }

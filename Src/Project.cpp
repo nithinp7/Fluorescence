@@ -1,5 +1,9 @@
 #include "Project.h"
 
+#include <Althea/BufferUtilities.h>
+#include <Althea/DescriptorSet.h>
+#include <Althea/ResourcesAssignment.h>
+#include <Althea/SingleTimeCommandBuffer.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -12,13 +16,88 @@
 using namespace AltheaEngine;
 
 namespace flr {
-Project::Project(const char* projPath) : m_parsed(projPath) {
+Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
+    : m_parsed(projPath) {
+  // TODO: split out resource creation vs code generation
+
   std::filesystem::path projPath_(projPath);
   std::filesystem::path projName = projPath_.stem();
   std::filesystem::path folder = projPath_.parent_path();
 
-  char shaderPath[256];
-  sprintf(shaderPath, "%ls/%ls.glsl", folder.c_str(), projName.c_str());
+  SingleTimeCommandBuffer commandBuffer(app);
+
+  m_buffers.reserve(m_parsed.m_buffers.size());
+  for (const ParsedFlr::BufferDesc& desc : m_parsed.m_buffers) {
+    const ParsedFlr::StructDef& structdef = m_parsed.m_structDefs[desc.structIdx];
+
+    VmaAllocationCreateInfo allocInfo{};
+    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+
+    m_buffers.push_back(BufferUtilities::createBuffer(
+        app,
+        structdef.size * desc.elemCount,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        allocInfo));
+  }
+
+  ShaderDefines defs{};
+
+  DescriptorSetLayoutBuilder dsBuilder{};
+  for (const BufferAllocation& b : m_buffers) {
+    dsBuilder.addStorageBufferBinding();
+  }
+
+  m_descriptorSets = PerFrameResources(app, dsBuilder);
+
+  const uint32_t GEN_CODE_BUF_SIZE = 10000;
+  char* autoGenCode = new char[GEN_CODE_BUF_SIZE];
+  size_t autoGenCodeSize = 0;
+  memset(autoGenCode, 0, GEN_CODE_BUF_SIZE);
+
+  uint32_t slot = 0;
+  {
+    ResourcesAssignment assign = m_descriptorSets.assign();
+    for (int i = 0; i < m_buffers.size(); ++i) {
+      const auto& parsedBuf = m_parsed.m_buffers[i];
+      const auto& structdef = m_parsed.m_structDefs[parsedBuf.structIdx];
+      const auto& buf = m_buffers[i];
+      
+      assign.bindStorageBuffer(
+          buf,
+          structdef.size * parsedBuf.elemCount,
+          false);
+      char str[1024];
+      autoGenCodeSize += sprintf(
+          autoGenCode + autoGenCodeSize,
+          "layout(set=1,binding=%u) buffer BUFFER_%s {  %s %s[] };\n",
+          slot,
+          parsedBuf.name.c_str(),
+          structdef.name.c_str(),
+          parsedBuf.name.c_str());
+
+      slot++;
+    }
+  }
+
+  std::filesystem::path autoGenFileName = projPath_;
+  autoGenFileName.replace_extension(".gen.glsl");
+
+  std::ofstream autoGenFile(autoGenFileName);
+  if (autoGenFile.is_open())
+  {
+    autoGenFile.write(autoGenCode, autoGenCodeSize);
+    autoGenFile.close();
+  }
+
+  delete[] autoGenCode;
+
+  m_computePipelines.reserve(m_parsed.m_computeShaders.size());
+  for (const std::string& s : m_parsed.m_computeShaders) {
+    ComputePipelineBuilder builder{};
+    builder.setComputeShader(s, defs);
+    // m_computePipelines.emplace_back(app, )
+  }
+
 }
 
 ParsedFlr::ParsedFlr(const char* filename) {
@@ -145,6 +224,20 @@ ParsedFlr::ParsedFlr(const char* filename) {
       return std::nullopt;
     };
 
+    auto parseStructRef = [&]() -> std::optional<uint32_t> {
+      if (auto name = parseName()) {
+        for (uint32_t i = 0; i < m_structDefs.size(); ++i) {
+          const auto& s = m_structDefs[i];
+          if (name->size() == s.name.size() &&
+              !strncmp(name->data(), s.name.data(), s.name.size())) {
+            return i;
+          }
+        }
+      }
+
+      return std::nullopt;
+    };
+
     auto parseInstruction = [&]() -> std::optional<Instr> {
       char* c0 = c;
       if (parseName()) {
@@ -244,19 +337,31 @@ ParsedFlr::ParsedFlr(const char* filename) {
 
       break;
     }
+    case I_STRUCT: {
+      if (!name)
+        continue;
+
+      auto arg0 = parseUintOrVar();
+      if (!arg0)
+        continue;
+
+      m_structDefs.push_back({std::string(*name), *arg0});
+
+      break;
+    }
     case I_STRUCTURED_BUFFER: {
       if (!name)
         continue;
 
-      auto elemSize = parseUintOrVar();
-      if (!elemSize)
+      auto structIdx = parseStructRef();
+      if (!structIdx)
         continue;
       parseWhitespace();
       auto elemCount = parseUintOrVar();
       if (!elemCount)
         continue;
 
-      m_buffers.push_back({std::string(*name), *elemSize, *elemCount});
+      m_buffers.push_back({std::string(*name), *structIdx, *elemCount});
       break;
     }
     case I_COMPUTE_STAGE: {
@@ -317,7 +422,7 @@ ParsedFlr::ParsedFlr(const char* filename) {
       if (!pixelShader)
         continue;
 
-      m_taskList.push_back({ (uint32_t)m_displayPasses.size(), TT_DISPLAY });
+      m_taskList.push_back({(uint32_t)m_displayPasses.size(), TT_DISPLAY});
       m_displayPasses.push_back(
           {std::string(*vertShader), std::string(*pixelShader)});
       break;

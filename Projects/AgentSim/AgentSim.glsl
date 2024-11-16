@@ -6,6 +6,8 @@ struct Agent {
   float radius;
 };
 
+#include "AgenSim.gen.glsl"
+
 //layout(push_constant) PushConstants {
 //  uint agentBuffer
 //}

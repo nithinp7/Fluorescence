@@ -1,10 +1,13 @@
 #pragma once
 
+#include <Althea/Application.h>
 #include <Althea/ComputePipeline.h>
 #include <Althea/RenderPass.h>
 #include <Althea/StructuredBuffer.h>
 #include <Althea/BufferUtilities.h>
 #include <Althea/Framebuffer.h>
+#include <Althea/GlobalHeap.h>
+#include <Althea/PerFrameResources.h>
 
 #include <cstdint>
 #include <vector>
@@ -34,9 +37,15 @@ struct ParsedFlr {
   };
   std::vector<ConstFloat> m_constFloats;
 
+  struct StructDef {
+    std::string name;
+    uint32_t size;
+  };
+  std::vector<StructDef> m_structDefs;
+
   struct BufferDesc {
     std::string name;
-    uint32_t elemSize;
+    uint32_t structIdx;
     uint32_t elemCount;
   };
   std::vector<BufferDesc> m_buffers;
@@ -77,6 +86,7 @@ struct ParsedFlr {
     I_CONST_UINT = 0,
     I_CONST_INT,
     I_CONST_FLOAT,
+    I_STRUCT,
     I_STRUCTURED_BUFFER,
     I_COMPUTE_STAGE,
     I_BARRIER,
@@ -88,6 +98,7 @@ struct ParsedFlr {
     "uint",
     "int",
     "float",
+    "struct",
     "structured_buffer",
     "compute_stage",
     "barrier",
@@ -99,18 +110,17 @@ struct ParsedFlr {
 
 class Project {
 public:
-  Project(const char* projectPath);
+  Project(Application& app, GlobalHeap& heap, const char* projectPath);
 
 private:
   ParsedFlr m_parsed;
 
   std::vector<BufferAllocation> m_buffers;
-
-  struct ComputeStage {
-    std::vector<ComputePipeline> m_computeTasks;
-  };
+  std::vector<ComputePipeline> m_computePipelines;
 
   RenderPass m_renderPass;
   FrameBuffer m_frameBuffer;
+
+  PerFrameResources m_descriptorSets;
 };
 } // namespace flr
