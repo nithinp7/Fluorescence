@@ -1,7 +1,5 @@
-#version 450
-
 #define IS_SHADER
-#include "../Include/Shared/CommonStructures.h"
+#include <../Include/Shared/CommonStructures.h>
 
 #include <Bindless/GlobalHeap.glsl>
 

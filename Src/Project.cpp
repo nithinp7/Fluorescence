@@ -28,7 +28,8 @@ Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
 
   m_buffers.reserve(m_parsed.m_buffers.size());
   for (const ParsedFlr::BufferDesc& desc : m_parsed.m_buffers) {
-    const ParsedFlr::StructDef& structdef = m_parsed.m_structDefs[desc.structIdx];
+    const ParsedFlr::StructDef& structdef =
+        m_parsed.m_structDefs[desc.structIdx];
 
     VmaAllocationCreateInfo allocInfo{};
     allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
@@ -39,8 +40,6 @@ Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         allocInfo));
   }
-
-  ShaderDefines defs{};
 
   DescriptorSetLayoutBuilder dsBuilder{};
   for (const BufferAllocation& b : m_buffers) {
@@ -61,7 +60,7 @@ Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
       const auto& parsedBuf = m_parsed.m_buffers[i];
       const auto& structdef = m_parsed.m_structDefs[parsedBuf.structIdx];
       const auto& buf = m_buffers[i];
-      
+
       assign.bindStorageBuffer(
           buf,
           structdef.size * parsedBuf.elemCount,
@@ -69,7 +68,7 @@ Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
       char str[1024];
       autoGenCodeSize += sprintf(
           autoGenCode + autoGenCodeSize,
-          "layout(set=1,binding=%u) buffer BUFFER_%s {  %s %s[] };\n",
+          "layout(set=1,binding=%u) buffer BUFFER_%s {  %s %s[]; };\n",
           slot,
           parsedBuf.name.c_str(),
           structdef.name.c_str(),
@@ -79,25 +78,116 @@ Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
     }
   }
 
+  for (const auto& c : m_parsed.m_constInts)
+    autoGenCodeSize += sprintf(
+        autoGenCode + autoGenCodeSize,
+        "#define %s %d",
+        c.name.c_str(),
+        c.value);
+  for (const auto& c : m_parsed.m_constUints)
+    autoGenCodeSize += sprintf(
+        autoGenCode + autoGenCodeSize,
+        "#define %s %u",
+        c.name.c_str(),
+        c.value);
+  for (const auto& c : m_parsed.m_constFloats)
+    autoGenCodeSize += sprintf(
+        autoGenCode + autoGenCodeSize,
+        "#define %s %f",
+        c.name.c_str(),
+        c.value);
+
   std::filesystem::path autoGenFileName = projPath_;
   autoGenFileName.replace_extension(".gen.glsl");
 
   std::ofstream autoGenFile(autoGenFileName);
-  if (autoGenFile.is_open())
-  {
+  if (autoGenFile.is_open()) {
     autoGenFile.write(autoGenCode, autoGenCodeSize);
     autoGenFile.close();
   }
 
   delete[] autoGenCode;
 
+  std::filesystem::path shaderFileName = projPath_;
+  shaderFileName.replace_extension(".glsl");
+
   m_computePipelines.reserve(m_parsed.m_computeShaders.size());
   for (const std::string& s : m_parsed.m_computeShaders) {
+    ShaderDefines defs{};
+    defs.emplace(s.c_str(), "main");
+    defs.emplace("IS_COMP_SHADER", "");
+
     ComputePipelineBuilder builder{};
-    builder.setComputeShader(s, defs);
-    // m_computePipelines.emplace_back(app, )
+    builder.setComputeShader(shaderFileName.string(), defs);
+    builder.layoutBuilder
+      .addDescriptorSet(heap.getDescriptorSetLayout())
+      .addDescriptorSet(m_descriptorSets.getLayout());
+
+    m_computePipelines.emplace_back(app, std::move(builder));
   }
 
+  m_displayPasses.reserve(m_parsed.m_displayPasses.size());
+  for (const auto& pass : m_parsed.m_displayPasses) {
+    std::vector<SubpassBuilder> subpassBuilders;
+    SubpassBuilder& subpass = subpassBuilders.emplace_back();
+    subpass.colorAttachments = {0};
+
+    GraphicsPipelineBuilder& builder = subpass.pipelineBuilder;
+    {
+      ShaderDefines defs{};
+      defs.emplace(pass.vertexShader, "main");
+      defs.emplace("IS_VERTEX_SHADER", "");
+      builder.addVertexShader(shaderFileName.string(), defs);
+    }
+    {
+      ShaderDefines defs{};
+      defs.emplace(pass.pixelShader, "main");
+      defs.emplace("IS_PIXEL_SHADER", "");
+      builder.addFragmentShader(shaderFileName.string(), defs);
+    }
+
+    builder.layoutBuilder
+      .addDescriptorSet(heap.getDescriptorSetLayout())
+      .addDescriptorSet(m_descriptorSets.getLayout());
+    VkClearValue colorClear;
+    colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    VkClearValue depthClear;
+    depthClear.depthStencil = {1.0f, 0};
+
+    std::vector<Attachment> attachments = {Attachment{
+        ATTACHMENT_FLAG_COLOR,
+        app.getSwapChainImageFormat(),
+        colorClear,
+        false,
+        false,
+        true}};
+
+    DisplayPass& pass = m_displayPasses.emplace_back();
+    pass.m_renderPass = RenderPass(
+        app,
+        app.getSwapChainExtent(),
+        std::move(attachments),
+        std::move(subpassBuilders));
+
+    ImageOptions imageOptions{};
+    imageOptions.format = app.getSwapChainImageFormat();
+    imageOptions.width = app.getSwapChainExtent().width;
+    imageOptions.height = app.getSwapChainExtent().height;
+    imageOptions.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    pass.m_target.image = Image(app, imageOptions);
+
+    ImageViewOptions viewOptions{};
+    viewOptions.format = imageOptions.format;
+    pass.m_target.view = ImageView(app, pass.m_target.image, viewOptions);
+
+    pass.m_target.sampler = Sampler(app, {});
+
+    pass.m_frameBuffer = FrameBuffer(
+        app,
+        pass.m_renderPass,
+        app.getSwapChainExtent(),
+        {pass.m_target.view});
+  }
 }
 
 ParsedFlr::ParsedFlr(const char* filename) {
@@ -284,15 +374,6 @@ ParsedFlr::ParsedFlr(const char* filename) {
 
       m_constUints.push_back({std::string(*name), *arg0});
 
-      char buf[1024];
-      sprintf(
-          buf,
-          "#define %.*s %u",
-          (uint32_t)name->size(),
-          name->data(),
-          *arg0);
-      m_extraDefines.push_back(buf);
-
       break;
     }
     case I_CONST_INT: {
@@ -305,15 +386,6 @@ ParsedFlr::ParsedFlr(const char* filename) {
 
       m_constInts.push_back({std::string(*name), *arg0});
 
-      char buf[1024];
-      sprintf(
-          buf,
-          "#define %.*s %d",
-          (uint32_t)name->size(),
-          name->data(),
-          *arg0);
-      m_extraDefines.push_back(buf);
-
       break;
     }
     case I_CONST_FLOAT: {
@@ -325,15 +397,6 @@ ParsedFlr::ParsedFlr(const char* filename) {
         continue;
 
       m_constFloats.push_back({std::string(*name), *arg0});
-
-      char buf[1024];
-      sprintf(
-          buf,
-          "#define %.*s %f",
-          (uint32_t)name->size(),
-          name->data(),
-          *arg0);
-      m_extraDefines.push_back(buf);
 
       break;
     }

@@ -7,5 +7,5 @@ compute_stage CS_MoveAgents: agentCount 1 1
 
 barrier: agentBuffer
 
-display_pass: VS_FullScreen PS_UvTest
-display_pass: VS_FullScreen PS_Agents
+display_pass: VS_AgentSimDisplay PS_UvTest
+# display_pass: VS_AgentSimDisplay PS_Agents

@@ -104,8 +104,6 @@ struct ParsedFlr {
     "barrier",
     "display_pass"
   };
-
-  std::vector<std::string> m_extraDefines;
 };
 
 class Project {
@@ -118,8 +116,12 @@ private:
   std::vector<BufferAllocation> m_buffers;
   std::vector<ComputePipeline> m_computePipelines;
 
-  RenderPass m_renderPass;
-  FrameBuffer m_frameBuffer;
+  struct DisplayPass {
+    ImageResource m_target;
+    RenderPass m_renderPass;
+    FrameBuffer m_frameBuffer;
+  };
+  std::vector<DisplayPass> m_displayPasses;
 
   PerFrameResources m_descriptorSets;
 };

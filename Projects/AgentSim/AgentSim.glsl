@@ -1,3 +1,5 @@
+#version 460 core
+
 #include <Fluorescence.glsl>
 
 ////////////////////////// COMMON SECTION //////////////////////////
@@ -6,7 +8,7 @@ struct Agent {
   float radius;
 };
 
-#include "AgenSim.gen.glsl"
+#include "AgentSim.gen.glsl"
 
 //layout(push_constant) PushConstants {
 //  uint agentBuffer
@@ -14,11 +16,9 @@ struct Agent {
 ////////////////////////// COMPUTE SHADERS //////////////////////////
 
 #ifdef IS_COMP_SHADER
-
-DECL_BUFFER(RW, Agent, agentBuffer);
-
+layout(local_size_x = 32) in;
 void CS_MoveAgents() {
-  //BINDLESS(agentBuffer, )
+  
 }
 
 #endif // IS_COMP_SHADER
@@ -28,9 +28,7 @@ void CS_MoveAgents() {
 #ifdef IS_VERTEX_SHADER
 layout(location = 0) out vec2 outScreenUv;
 
-DECL_BUFFER(R, Agent, agentBuffer);
-
-void main() {
+void VS_AgentSimDisplay() {
   outScreenUv = VS_FullScreen();
 }
 #endif // IS_VERTEX_SHADER
@@ -41,10 +39,8 @@ void main() {
 layout(location = 0) in vec2 inScreenUv;
 layout(location = 0) out vec4 outColor;
 
-DECL_BUFFER(R, Agent, agentBuffer);
-
-void main() {
-  outColor = vec4(inScreenUv, fract(time), 1.0);
+void PS_UvTest() {
+  outColor = vec4(inScreenUv, fract(uniforms.time), 1.0);
 }
 #endif // IS_PIXEL_SHADER
 
