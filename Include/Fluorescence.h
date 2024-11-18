@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Shared/CommonStructures.h"
+#include "Project.h"
 
 #include <Althea/Allocator.h>
 #include <Althea/CameraController.h>
@@ -64,5 +65,7 @@ private:
   void _createDisplayPass(Application& app);
   RenderPass m_displayPass;
   SwapChainFrameBufferCollection m_swapChainFrameBuffers;
+
+  Project* m_pProject = nullptr;
 };
 } // namespace flr

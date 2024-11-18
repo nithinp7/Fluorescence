@@ -77,6 +77,7 @@ Project::Project(
   {
     ResourcesAssignment assign = m_descriptorSets.assign();
     assign.bindTransientUniforms(flrUniforms);
+    slot++;
 
     for (int i = 0; i < m_buffers.size(); ++i) {
       const auto& parsedBuf = m_parsed.m_buffers[i];
@@ -182,6 +183,7 @@ Project::Project(
     subpass.colorAttachments = {0};
 
     GraphicsPipelineBuilder& builder = subpass.pipelineBuilder;
+    builder.setCullMode(VK_CULL_MODE_FRONT_BIT).setDepthTesting(false);
     {
       ShaderDefines defs{};
       defs.emplace("IS_VERTEX_SHADER", "");
@@ -221,7 +223,8 @@ Project::Project(
     imageOptions.format = app.getSwapChainImageFormat();
     imageOptions.width = app.getSwapChainExtent().width;
     imageOptions.height = app.getSwapChainExtent().height;
-    imageOptions.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    imageOptions.usage =
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     pass.m_target.image = Image(app, imageOptions);
 
     ImageViewOptions viewOptions{};
@@ -235,6 +238,8 @@ Project::Project(
         pass.m_renderPass,
         app.getSwapChainExtent(),
         {pass.m_target.view});
+
+    pass.m_target.registerToTextureHeap(heap);
   }
 }
 
@@ -252,24 +257,71 @@ void Project::draw(
     switch (task.type) {
     case ParsedFlr::TT_COMPUTE: {
       const auto& dispatch = m_parsed.m_computeDispatches[task.idx];
+      const auto& compute =
+          m_parsed.m_computeShaders[dispatch.computeShaderIndex];
       ComputePipeline& c = m_computePipelines[dispatch.computeShaderIndex];
       c.bindPipeline(commandBuffer);
       c.bindDescriptorSets(commandBuffer, sets, 2);
-      // vkCmdDispatch(commandBuffer, );
+
+      uint32_t groupCountX = (dispatch.dispatchSizeX + compute.groupSizeX - 1) /
+                             compute.groupSizeX;
+      uint32_t groupCountY = (dispatch.dispatchSizeY + compute.groupSizeY - 1) /
+                             compute.groupSizeY;
+      uint32_t groupCountZ = (dispatch.dispatchSizeZ + compute.groupSizeZ - 1) /
+                             compute.groupSizeZ;
+      vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
       break;
     }
 
     case ParsedFlr::TT_BARRIER: {
+      const auto& parsedBuf = m_parsed.m_buffers[task.idx];
+      const auto& parsedStruct = m_parsed.m_structDefs[parsedBuf.structIdx];
+      const auto& buf = m_buffers[task.idx];
+      BufferUtilities::rwBarrier(
+          commandBuffer,
+          buf.getBuffer(),
+          0,
+          parsedBuf.elemCount * parsedStruct.size);
 
       break;
     }
 
     case ParsedFlr::TT_DISPLAY: {
+      auto& displayPass = m_displayPasses[task.idx];
 
+      displayPass.m_target.image.transitionLayout(
+          commandBuffer,
+          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+
+      {
+        ActiveRenderPass pass = displayPass.m_renderPass.begin(
+            app,
+            commandBuffer,
+            frame,
+            displayPass.m_frameBuffer);
+        pass.setGlobalDescriptorSets(gsl::span(sets, 2));
+        pass.getDrawContext().bindDescriptorSets();
+        pass.getDrawContext().draw(3);
+      }
+
+      displayPass.m_target.image.transitionLayout(
+          commandBuffer,
+          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          VK_ACCESS_SHADER_READ_BIT,
+          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
       break;
     }
     };
   }
+}
+
+void Project::tryRecompile(Application& app) {
+  for (auto& c : m_computePipelines)
+    c.tryRecompile(app);
+  for (auto& p : m_displayPasses)
+    p.m_renderPass.tryRecompile(app);
 }
 
 ParsedFlr::ParsedFlr(const char* filename) {
@@ -511,7 +563,7 @@ ParsedFlr::ParsedFlr(const char* filename) {
         c = lineBuf;
       }
 
-      m_structDefs.push_back({ nameStr, std::string(body), 0});
+      m_structDefs.push_back({nameStr, std::string(body), 0});
 
       break;
     }

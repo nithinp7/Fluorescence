@@ -1,7 +1,7 @@
 #include "Fluorescence.h"
 
-#include "Project.h"
 #include "GraphEditor/Graph.h"
+#include "Project.h"
 
 #include <Althea/Application.h>
 #include <Althea/Camera.h>
@@ -42,7 +42,11 @@ void Fluorescence::initGame(Application& app) {
   // Recreate any stale pipelines (shader hot-reload)
   input.addKeyBinding(
       {GLFW_KEY_R, GLFW_PRESS, GLFW_MOD_CONTROL},
-      [&app, this]() { m_displayPass.tryRecompile(app); });
+      [&app, this]() {
+        m_displayPass.tryRecompile(app);
+        if (m_pProject)
+          m_pProject->tryRecompile(app);
+      });
 }
 
 void Fluorescence::shutdownGame(Application& app) {}
@@ -57,6 +61,9 @@ void Fluorescence::createRenderState(Application& app) {
 
 void Fluorescence::destroyRenderState(Application& app) {
   Gui::destroyRenderState(app);
+
+  delete m_pProject;
+  m_pProject = nullptr;
 
   m_displayPass = {};
   m_swapChainFrameBuffers = {};
@@ -79,18 +86,23 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
     ImGui::EndMainMenuBar();
 
     if (ImGui::Begin("Test Parser")) {
-      static char s_filename[256] = "C:/Users/nithi/Documents/Code/Fluorescence/Projects/AgentSim/AgentSim.flr";
+      static char s_filename[256] =
+          "C:/Users/nithi/Documents/Code/Fluorescence/Projects/AgentSim/"
+          "AgentSim.flr";
       ImGui::Text("Project Name");
       ImGui::InputText("##flr_file", s_filename, 256);
       if (ImGui::Button("Open Project")) {
-        static Project* p = nullptr;
-        if (!p) delete p;
-        p = new Project(app, m_heap, m_uniforms, (const char*)s_filename);
-      }
+        if (m_pProject)
+          app.addDeletiontask(DeletionTask{
+              [pProject = m_pProject]() { delete pProject; },
+              app.getCurrentFrameRingBufferIndex()});
 
+        m_pProject =
+            new Project(app, m_heap, m_uniforms, (const char*)s_filename);
+      }
     }
     ImGui::End();
-    
+
     // static GraphEditor::Graph graph;
     // graph.draw();
 
@@ -153,7 +165,7 @@ void Fluorescence::_createDisplayPass(Application& app) {
       defs.emplace("IS_VERTEX_SHADER", "");
       defs.emplace("VS_FullScreen", "main");
       subpassBuilder.pipelineBuilder.addVertexShader(
-          GProjectDirectory + "/Shaders/SpiralWave.glsl",
+          GProjectDirectory + "/Shaders/Display.glsl",
           defs);
     }
 
@@ -162,7 +174,7 @@ void Fluorescence::_createDisplayPass(Application& app) {
       defs.emplace("IS_PIXEL_SHADER", "");
       defs.emplace("PS_Default", "main");
       subpassBuilder.pipelineBuilder.addFragmentShader(
-          GProjectDirectory + "/Shaders/SpiralWave.glsl",
+          GProjectDirectory + "/Shaders/Display.glsl",
           defs);
     }
 
@@ -187,9 +199,17 @@ void Fluorescence::draw(
     const FrameContext& frame) {
 
   VkDescriptorSet heapDescriptorSet = m_heap.getDescriptorSet();
+  if (m_pProject) {
+    m_pProject->draw(app, commandBuffer, m_heap, frame);
+  }
 
   {
     FlrPush push{};
+    if (m_pProject) {
+      push.push0 = m_pProject->getOutputTexture().index;
+    } else {
+      push.push0 = INVALID_BINDLESS_HANDLE;
+    }
 
     ActiveRenderPass pass = m_displayPass.begin(
         app,

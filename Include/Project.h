@@ -3,21 +3,21 @@
 #include "Shared/CommonStructures.h"
 
 #include <Althea/Application.h>
-#include <Althea/ComputePipeline.h>
-#include <Althea/RenderPass.h>
-#include <Althea/StructuredBuffer.h>
+#include <Althea/BindlessHandle.h>
 #include <Althea/BufferUtilities.h>
-#include <Althea/Framebuffer.h>
+#include <Althea/ComputePipeline.h>
 #include <Althea/FrameContext.h>
+#include <Althea/Framebuffer.h>
 #include <Althea/GlobalHeap.h>
 #include <Althea/PerFrameResources.h>
+#include <Althea/RenderPass.h>
+#include <Althea/StructuredBuffer.h>
 #include <Althea/TransientUniforms.h>
-
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
-#include <vector>
 #include <string>
+#include <vector>
 
 using namespace AltheaEngine;
 
@@ -110,32 +110,37 @@ struct ParsedFlr {
   };
 
   static constexpr char* INSTR_NAMES[I_COUNT] = {
-    "uint",
-    "int",
-    "float",
-    "struct",
-    "struct_size",
-    "structured_buffer",
-    "compute_shader",
-    "compute_dispatch",
-    "barrier",
-    "display_pass"
-  };
+      "uint",
+      "int",
+      "float",
+      "struct",
+      "struct_size",
+      "structured_buffer",
+      "compute_shader",
+      "compute_dispatch",
+      "barrier",
+      "display_pass"};
 };
 
 class Project {
 public:
   Project(
-    Application& app, 
-    GlobalHeap& heap, 
-    const TransientUniforms<FlrUniforms>& flrUniforms, 
-    const char* projectPath);
+      Application& app,
+      GlobalHeap& heap,
+      const TransientUniforms<FlrUniforms>& flrUniforms,
+      const char* projectPath);
 
   void draw(
-    Application& app,
-    VkCommandBuffer commandBuffer,
-    const GlobalHeap& heap,
-    const FrameContext& frame);
+      Application& app,
+      VkCommandBuffer commandBuffer,
+      const GlobalHeap& heap,
+      const FrameContext& frame);
+
+  TextureHandle getOutputTexture() const {
+    return m_displayPasses[m_displayPassIdx].m_target.textureHandle;
+  }
+
+  void tryRecompile(Application& app);
 
 private:
   ParsedFlr m_parsed;
