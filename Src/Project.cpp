@@ -16,13 +16,20 @@
 using namespace AltheaEngine;
 
 namespace flr {
-Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
-    : m_parsed(projPath) {
+Project::Project(
+    Application& app,
+    GlobalHeap& heap,
+    const TransientUniforms<FlrUniforms>& flrUniforms,
+    const char* projPath)
+    : m_parsed(projPath), m_displayPassIdx(0) {
   // TODO: split out resource creation vs code generation
 
   std::filesystem::path projPath_(projPath);
   std::filesystem::path projName = projPath_.stem();
   std::filesystem::path folder = projPath_.parent_path();
+
+  std::filesystem::path shaderFileName = projPath_;
+  shaderFileName.replace_extension(".glsl");
 
   SingleTimeCommandBuffer commandBuffer(app);
 
@@ -42,6 +49,7 @@ Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
   }
 
   DescriptorSetLayoutBuilder dsBuilder{};
+  dsBuilder.addUniformBufferBinding();
   for (const BufferAllocation& b : m_buffers) {
     dsBuilder.addStorageBufferBinding();
   }
@@ -53,9 +61,23 @@ Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
   size_t autoGenCodeSize = 0;
   memset(autoGenCode, 0, GEN_CODE_BUF_SIZE);
 
+#define CODE_APPEND(...)                                                       \
+  autoGenCodeSize += sprintf(autoGenCode + autoGenCodeSize, __VA_ARGS__)
+
+  // glsl version / common includes
+  CODE_APPEND("#version 460 core\n\n");
+
+  // struct declarations
+  for (const auto& s : m_parsed.m_structDefs) {
+    CODE_APPEND("%s;\n\n", s.body.c_str());
+  }
+
+  // resource declarations
   uint32_t slot = 0;
   {
     ResourcesAssignment assign = m_descriptorSets.assign();
+    assign.bindTransientUniforms(flrUniforms);
+
     for (int i = 0; i < m_buffers.size(); ++i) {
       const auto& parsedBuf = m_parsed.m_buffers[i];
       const auto& structdef = m_parsed.m_structDefs[parsedBuf.structIdx];
@@ -65,37 +87,68 @@ Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
           buf,
           structdef.size * parsedBuf.elemCount,
           false);
-      char str[1024];
-      autoGenCodeSize += sprintf(
-          autoGenCode + autoGenCodeSize,
+      CODE_APPEND(
           "layout(set=1,binding=%u) buffer BUFFER_%s {  %s %s[]; };\n",
-          slot,
+          slot++,
           parsedBuf.name.c_str(),
           structdef.name.c_str(),
           parsedBuf.name.c_str());
-
-      slot++;
     }
   }
 
+  // constant declarations
   for (const auto& c : m_parsed.m_constInts)
-    autoGenCodeSize += sprintf(
-        autoGenCode + autoGenCodeSize,
-        "#define %s %d",
-        c.name.c_str(),
-        c.value);
+    CODE_APPEND("#define %s %d\n", c.name.c_str(), c.value);
   for (const auto& c : m_parsed.m_constUints)
-    autoGenCodeSize += sprintf(
-        autoGenCode + autoGenCodeSize,
-        "#define %s %u",
-        c.name.c_str(),
-        c.value);
+    CODE_APPEND("#define %s %u\n", c.name.c_str(), c.value);
   for (const auto& c : m_parsed.m_constFloats)
-    autoGenCodeSize += sprintf(
-        autoGenCode + autoGenCodeSize,
-        "#define %s %f",
-        c.name.c_str(),
-        c.value);
+    CODE_APPEND("#define %s %f\n", c.name.c_str(), c.value);
+  CODE_APPEND("\n");
+
+  // includes
+  CODE_APPEND("#include <Fluorescence.glsl>\n");
+  std::string userShaderName = shaderFileName.filename().string();
+  CODE_APPEND("#include \"%s\"\n\n", userShaderName.c_str());
+
+  // auto-gen compute shader block
+  {
+    CODE_APPEND("#ifdef IS_COMP_SHADER\n");
+    for (const auto& c : m_parsed.m_computeShaders) {
+      CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", c.name.c_str());
+      CODE_APPEND(
+          "layout(local_size_x = %u, local_size_y = %u, local_size_z = %u) "
+          "in;\n",
+          c.groupSizeX,
+          c.groupSizeY,
+          c.groupSizeZ);
+      CODE_APPEND("void main() { %s(); }\n", c.name.c_str());
+      CODE_APPEND("#endif // _ENTRY_POINT_%s\n", c.name.c_str());
+    }
+    CODE_APPEND("#endif // IS_COMP_SHADER\n");
+  }
+
+  // auto-gen vertex shader block
+  {
+    CODE_APPEND("\n\n#ifdef IS_VERTEX_SHADER\n");
+    for (const auto& pass : m_parsed.m_displayPasses) {
+      CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", pass.vertexShader.c_str());
+      CODE_APPEND("void main() { %s(); }\n", pass.vertexShader.c_str());
+      CODE_APPEND("#endif // _ENTRY_POINT_%s\n", pass.vertexShader.c_str());
+    }
+    CODE_APPEND("#endif // IS_VERTEX_SHADER\n");
+  }
+
+  // auto-gen pixel shader block
+  {
+    CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
+    for (const auto& pass : m_parsed.m_displayPasses) {
+      CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", pass.pixelShader.c_str());
+      CODE_APPEND("void main() { %s(); }\n", pass.pixelShader.c_str());
+      CODE_APPEND("#endif // _ENTRY_POINT_%s\n", pass.pixelShader.c_str());
+    }
+    CODE_APPEND("#endif // IS_PIXEL_SHADER\n");
+  }
+#undef CODE_APPEND
 
   std::filesystem::path autoGenFileName = projPath_;
   autoGenFileName.replace_extension(".gen.glsl");
@@ -108,20 +161,16 @@ Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
 
   delete[] autoGenCode;
 
-  std::filesystem::path shaderFileName = projPath_;
-  shaderFileName.replace_extension(".glsl");
-
   m_computePipelines.reserve(m_parsed.m_computeShaders.size());
-  for (const std::string& s : m_parsed.m_computeShaders) {
+  for (const auto& c : m_parsed.m_computeShaders) {
     ShaderDefines defs{};
-    defs.emplace(s.c_str(), "main");
     defs.emplace("IS_COMP_SHADER", "");
+    defs.emplace(std::string("_ENTRY_POINT_") + c.name, "");
 
     ComputePipelineBuilder builder{};
-    builder.setComputeShader(shaderFileName.string(), defs);
-    builder.layoutBuilder
-      .addDescriptorSet(heap.getDescriptorSetLayout())
-      .addDescriptorSet(m_descriptorSets.getLayout());
+    builder.setComputeShader(autoGenFileName.string(), defs);
+    builder.layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
+        .addDescriptorSet(m_descriptorSets.getLayout());
 
     m_computePipelines.emplace_back(app, std::move(builder));
   }
@@ -135,20 +184,19 @@ Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
     GraphicsPipelineBuilder& builder = subpass.pipelineBuilder;
     {
       ShaderDefines defs{};
-      defs.emplace(pass.vertexShader, "main");
       defs.emplace("IS_VERTEX_SHADER", "");
-      builder.addVertexShader(shaderFileName.string(), defs);
+      defs.emplace(std::string("_ENTRY_POINT_") + pass.vertexShader, "");
+      builder.addVertexShader(autoGenFileName.string(), defs);
     }
     {
       ShaderDefines defs{};
-      defs.emplace(pass.pixelShader, "main");
       defs.emplace("IS_PIXEL_SHADER", "");
-      builder.addFragmentShader(shaderFileName.string(), defs);
+      defs.emplace(std::string("_ENTRY_POINT_") + pass.pixelShader, "");
+      builder.addFragmentShader(autoGenFileName.string(), defs);
     }
 
-    builder.layoutBuilder
-      .addDescriptorSet(heap.getDescriptorSetLayout())
-      .addDescriptorSet(m_descriptorSets.getLayout());
+    builder.layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
+        .addDescriptorSet(m_descriptorSets.getLayout());
     VkClearValue colorClear;
     colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
     VkClearValue depthClear;
@@ -187,6 +235,40 @@ Project::Project(Application& app, GlobalHeap& heap, const char* projPath)
         pass.m_renderPass,
         app.getSwapChainExtent(),
         {pass.m_target.view});
+  }
+}
+
+void Project::draw(
+    Application& app,
+    VkCommandBuffer commandBuffer,
+    const GlobalHeap& heap,
+    const FrameContext& frame) {
+
+  VkDescriptorSet sets[] = {
+      heap.getDescriptorSet(),
+      m_descriptorSets.getCurrentDescriptorSet(frame)};
+
+  for (const auto& task : m_parsed.m_taskList) {
+    switch (task.type) {
+    case ParsedFlr::TT_COMPUTE: {
+      const auto& dispatch = m_parsed.m_computeDispatches[task.idx];
+      ComputePipeline& c = m_computePipelines[dispatch.computeShaderIndex];
+      c.bindPipeline(commandBuffer);
+      c.bindDescriptorSets(commandBuffer, sets, 2);
+      // vkCmdDispatch(commandBuffer, );
+      break;
+    }
+
+    case ParsedFlr::TT_BARRIER: {
+
+      break;
+    }
+
+    case ParsedFlr::TT_DISPLAY: {
+
+      break;
+    }
+    };
   }
 }
 
@@ -358,9 +440,7 @@ ParsedFlr::ParsedFlr(const char* filename) {
     auto name = parseName();
 
     parseWhitespace();
-    if (!parseChar(':'))
-      continue;
-
+    parseChar(':');
     parseWhitespace();
 
     switch (*instr) {
@@ -404,12 +484,43 @@ ParsedFlr::ParsedFlr(const char* filename) {
       if (!name)
         continue;
 
-      auto arg0 = parseUintOrVar();
-      if (!arg0)
+      std::string nameStr(*name);
+
+      char body[1024] = {0};
+      uint32_t offs = 0;
+      while (true) {
+        bool breakOuter = false;
+        while (*c) {
+          if (*c == '}') {
+            ++c;
+            breakOuter = true;
+            break;
+          }
+          ++c;
+        }
+
+        offs += sprintf(body + offs, "%s", lineBuf);
+
+        if (breakOuter)
+          break;
+
+        *(body + offs) = '\n';
+        offs++;
+
+        flrFile.getline(lineBuf, 1024);
+        c = lineBuf;
+      }
+
+      m_structDefs.push_back({ nameStr, std::string(body), 0});
+
+      break;
+    }
+    case I_STRUCT_SIZE: {
+      auto structSize = parseUintOrVar();
+      if (!structSize)
         continue;
 
-      m_structDefs.push_back({std::string(*name), *arg0});
-
+      m_structDefs.back().size = *structSize;
       break;
     }
     case I_STRUCTURED_BUFFER: {
@@ -427,7 +538,28 @@ ParsedFlr::ParsedFlr(const char* filename) {
       m_buffers.push_back({std::string(*name), *structIdx, *elemCount});
       break;
     }
-    case I_COMPUTE_STAGE: {
+    case I_COMPUTE_SHADER: {
+      if (!name)
+        continue;
+
+      auto groupSizeX = parseUintOrVar();
+      if (!groupSizeX)
+        continue;
+      parseWhitespace();
+      auto groupSizeY = parseUintOrVar();
+      if (!groupSizeY)
+        continue;
+      parseWhitespace();
+      auto groupSizeZ = parseUintOrVar();
+      if (!groupSizeZ)
+        continue;
+
+      m_computeShaders.push_back(
+          {std::string(*name), *groupSizeX, *groupSizeY, *groupSizeZ});
+
+      break;
+    }
+    case I_COMPUTE_DISPATCH: {
       if (!name)
         continue;
 
@@ -444,14 +576,14 @@ ParsedFlr::ParsedFlr(const char* filename) {
         continue;
 
       uint32_t computeShaderIdx = 0;
-      for (const std::string& s : m_computeShaders) {
-        if (s.size() == name->size() &&
-            !strncmp(s.data(), name->data(), s.size()))
+      for (const auto& c : m_computeShaders) {
+        if (c.name.size() == name->size() &&
+            !strncmp(c.name.data(), name->data(), c.name.size()))
           break;
         ++computeShaderIdx;
       }
       if (computeShaderIdx == m_computeShaders.size())
-        m_computeShaders.push_back(std::string(*name));
+        break;
 
       m_taskList.push_back({(uint32_t)m_computeDispatches.size(), TT_COMPUTE});
       m_computeDispatches.push_back(

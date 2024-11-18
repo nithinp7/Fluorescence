@@ -85,7 +85,7 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
       if (ImGui::Button("Open Project")) {
         static Project* p = nullptr;
         if (!p) delete p;
-        p = new Project(app, m_heap, (const char*)s_filename);
+        p = new Project(app, m_heap, m_uniforms, (const char*)s_filename);
       }
 
     }
@@ -153,7 +153,7 @@ void Fluorescence::_createDisplayPass(Application& app) {
       defs.emplace("IS_VERTEX_SHADER", "");
       defs.emplace("VS_FullScreen", "main");
       subpassBuilder.pipelineBuilder.addVertexShader(
-          GProjectDirectory + "/Shaders/Display.glsl",
+          GProjectDirectory + "/Shaders/SpiralWave.glsl",
           defs);
     }
 
@@ -162,7 +162,7 @@ void Fluorescence::_createDisplayPass(Application& app) {
       defs.emplace("IS_PIXEL_SHADER", "");
       defs.emplace("PS_Default", "main");
       subpassBuilder.pipelineBuilder.addFragmentShader(
-          GProjectDirectory + "/Shaders/Display.glsl",
+          GProjectDirectory + "/Shaders/SpiralWave.glsl",
           defs);
     }
 

@@ -1,13 +1,19 @@
 #pragma once
 
+#include "Shared/CommonStructures.h"
+
 #include <Althea/Application.h>
 #include <Althea/ComputePipeline.h>
 #include <Althea/RenderPass.h>
 #include <Althea/StructuredBuffer.h>
 #include <Althea/BufferUtilities.h>
 #include <Althea/Framebuffer.h>
+#include <Althea/FrameContext.h>
 #include <Althea/GlobalHeap.h>
 #include <Althea/PerFrameResources.h>
+#include <Althea/TransientUniforms.h>
+
+#include <vulkan/vulkan.h>
 
 #include <cstdint>
 #include <vector>
@@ -39,6 +45,7 @@ struct ParsedFlr {
 
   struct StructDef {
     std::string name;
+    std::string body;
     uint32_t size;
   };
   std::vector<StructDef> m_structDefs;
@@ -50,7 +57,13 @@ struct ParsedFlr {
   };
   std::vector<BufferDesc> m_buffers;
 
-  std::vector<std::string> m_computeShaders;
+  struct ComputeShader {
+    std::string name;
+    uint32_t groupSizeX;
+    uint32_t groupSizeY;
+    uint32_t groupSizeZ;
+  };
+  std::vector<ComputeShader> m_computeShaders;
 
   struct ComputeDispatch {
     uint32_t computeShaderIndex;
@@ -87,8 +100,10 @@ struct ParsedFlr {
     I_CONST_INT,
     I_CONST_FLOAT,
     I_STRUCT,
+    I_STRUCT_SIZE,
     I_STRUCTURED_BUFFER,
-    I_COMPUTE_STAGE,
+    I_COMPUTE_SHADER,
+    I_COMPUTE_DISPATCH,
     I_BARRIER,
     I_DISPLAY_PASS,
     I_COUNT
@@ -99,8 +114,10 @@ struct ParsedFlr {
     "int",
     "float",
     "struct",
+    "struct_size",
     "structured_buffer",
-    "compute_stage",
+    "compute_shader",
+    "compute_dispatch",
     "barrier",
     "display_pass"
   };
@@ -108,7 +125,17 @@ struct ParsedFlr {
 
 class Project {
 public:
-  Project(Application& app, GlobalHeap& heap, const char* projectPath);
+  Project(
+    Application& app, 
+    GlobalHeap& heap, 
+    const TransientUniforms<FlrUniforms>& flrUniforms, 
+    const char* projectPath);
+
+  void draw(
+    Application& app,
+    VkCommandBuffer commandBuffer,
+    const GlobalHeap& heap,
+    const FrameContext& frame);
 
 private:
   ParsedFlr m_parsed;
@@ -124,5 +151,7 @@ private:
   std::vector<DisplayPass> m_displayPasses;
 
   PerFrameResources m_descriptorSets;
+
+  uint32_t m_displayPassIdx;
 };
 } // namespace flr

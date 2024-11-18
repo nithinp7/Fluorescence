@@ -3,10 +3,9 @@
 
 #include <Bindless/GlobalHeap.glsl>
 
-UNIFORM_BUFFER(_uniformsBuffer, _FlrUniforms{
-  FlrUniforms u;
-});
-#define uniforms _uniformsBuffer[0].u
+layout(set = 1, binding = 0) uniform _FlrUniforms{
+  FlrUniforms uniforms;
+};
 
 #ifdef IS_VERTEX_SHADER
 
