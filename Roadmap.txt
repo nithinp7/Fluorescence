@@ -1,6 +1,28 @@
 FLUORESCENCE ROADMAP:
+
+Current State:
+- Simple .flr file format
+- Can specify struct defs, resource declarations, constants
+- Can declare compute shaders, organize dispatches, issue barriers
+- Can specify display passes, that uses the same resources 
+
+Upcoming:
+- CTRL + O: better open-project / create new project dialogue
+- Need portfolio of simple practice / demo projects!
+- Ideas: mandelbrot set, simple uniform grid particle collision system, flocking sim 
+- Fluid sim, SPH, diffusion-reaction sim, etc!
+
+Other TODOs:
+- Improved generated file caching
+- Allow for reload of flr file? CTRL+SHIFT+R ??
+
+
 - compute / shading graphs
 - focus on 2d for now
+
+
+Backlog:
+- integration with vscode??
 
 graph concept:
 - define resources

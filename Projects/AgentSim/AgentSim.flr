@@ -1,4 +1,3 @@
-# DECLARATIONS
 
 struct Agent {
   vec3 position;

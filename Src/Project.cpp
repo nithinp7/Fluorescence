@@ -51,7 +51,7 @@ Project::Project(
   DescriptorSetLayoutBuilder dsBuilder{};
   dsBuilder.addUniformBufferBinding();
   for (const BufferAllocation& b : m_buffers) {
-    dsBuilder.addStorageBufferBinding();
+    dsBuilder.addStorageBufferBinding(VK_SHADER_STAGE_ALL);
   }
 
   m_descriptorSets = PerFrameResources(app, dsBuilder);
@@ -612,9 +612,11 @@ ParsedFlr::ParsedFlr(const char* filename) {
       break;
     }
     case I_COMPUTE_DISPATCH: {
-      if (!name)
+      auto compShader = parseName();
+      if (!compShader)
         continue;
 
+      parseWhitespace();
       auto dispatchSizeX = parseUintOrVar();
       if (!dispatchSizeX)
         continue;
@@ -629,8 +631,8 @@ ParsedFlr::ParsedFlr(const char* filename) {
 
       uint32_t computeShaderIdx = 0;
       for (const auto& c : m_computeShaders) {
-        if (c.name.size() == name->size() &&
-            !strncmp(c.name.data(), name->data(), c.name.size()))
+        if (c.name.size() == compShader->size() &&
+            !strncmp(c.name.data(), compShader->data(), c.name.size()))
           break;
         ++computeShaderIdx;
       }
