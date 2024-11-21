@@ -1,6 +1,6 @@
 #define IS_SHADER
 #include <../Include/Shared/CommonStructures.h>
-
+#include <Misc/Input.glsl>
 #include <Bindless/GlobalHeap.glsl>
 
 layout(set = 1, binding = 0) uniform _FlrUniforms{

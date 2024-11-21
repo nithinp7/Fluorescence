@@ -9,6 +9,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <optional>
 #include <utility>
 #include <xstring>
@@ -23,6 +24,8 @@ Project::Project(
     const char* projPath)
     : m_parsed(projPath), m_displayPassIdx(0) {
   // TODO: split out resource creation vs code generation
+  if (m_parsed.m_failed)
+    return;
 
   std::filesystem::path projPath_(projPath);
   std::filesystem::path projName = projPath_.stem();
@@ -173,6 +176,15 @@ Project::Project(
     builder.layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
         .addDescriptorSet(m_descriptorSets.getLayout());
 
+    {
+      std::string errors = builder.compileShadersGetErrors();
+      if (errors.size()) {
+        m_parsed.m_failed = true;
+        strncpy(m_parsed.m_errMsg, errors.c_str(), errors.size());
+        return;
+      }
+    }
+
     m_computePipelines.emplace_back(app, std::move(builder));
   }
 
@@ -195,6 +207,15 @@ Project::Project(
       defs.emplace("IS_PIXEL_SHADER", "");
       defs.emplace(std::string("_ENTRY_POINT_") + pass.pixelShader, "");
       builder.addFragmentShader(autoGenFileName.string(), defs);
+    }
+
+    {
+      std::string errors = builder.compileShadersGetErrors();
+      if (errors.size()) {
+        m_parsed.m_failed = true;
+        strncpy(m_parsed.m_errMsg, errors.c_str(), errors.size());
+        return;
+      }
     }
 
     builder.layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
@@ -274,9 +295,10 @@ void Project::draw(
     }
 
     case ParsedFlr::TT_BARRIER: {
-      const auto& parsedBuf = m_parsed.m_buffers[task.idx];
+      const auto& parsedBarrier = m_parsed.m_barriers[task.idx];
+      const auto& parsedBuf = m_parsed.m_buffers[parsedBarrier.bufferIdx];
       const auto& parsedStruct = m_parsed.m_structDefs[parsedBuf.structIdx];
-      const auto& buf = m_buffers[task.idx];
+      const auto& buf = m_buffers[parsedBarrier.bufferIdx];
       BufferUtilities::rwBarrier(
           commandBuffer,
           buf.getBuffer(),
@@ -324,11 +346,28 @@ void Project::tryRecompile(Application& app) {
     p.m_renderPass.tryRecompile(app);
 }
 
-ParsedFlr::ParsedFlr(const char* filename) {
+ParsedFlr::ParsedFlr(const char* filename) : m_failed(true) {
 
   std::ifstream flrFile(filename);
   char lineBuf[1024];
+
+  uint32_t lineNumber = 0;
+
+#define PARSER_VERIFY(X, MSG)                                                  \
+  if (!(X)) {                                                                  \
+    sprintf(                                                                   \
+        m_errMsg,                                                              \
+        "ERROR: " MSG " ON LINE: %u IN FILE: %s\n",                            \
+        lineNumber,                                                            \
+        filename);                                                             \
+    std::cerr << m_errMsg << std::endl;                                        \
+    flrFile.close();                                                           \
+    return;                                                                    \
+  }
+
   while (flrFile.getline(lineBuf, 1024)) {
+    lineNumber++;
+
     char* c = lineBuf;
 
     auto parseChar = [&](char ref) -> std::optional<char> {
@@ -480,12 +519,11 @@ ParsedFlr::ParsedFlr(const char* filename) {
     parseWhitespace();
 
     // TODO: support comment within line
-    if (parseChar('#'))
+    if (parseChar('#') || parseChar(0))
       continue;
 
     auto instr = parseInstruction();
-    if (!instr)
-      continue;
+    PARSER_VERIFY(instr, "Could not parse instruction!");
 
     parseWhitespace();
 
@@ -497,49 +535,43 @@ ParsedFlr::ParsedFlr(const char* filename) {
 
     switch (*instr) {
     case I_CONST_UINT: {
-      if (!name)
-        continue;
+      PARSER_VERIFY(name, "Could not parse name for const uint.");
 
       auto arg0 = parseUint();
-      if (!arg0)
-        continue;
+      PARSER_VERIFY(arg0, "Could not parse const uint.");
 
       m_constUints.push_back({std::string(*name), *arg0});
 
       break;
     }
     case I_CONST_INT: {
-      if (!name)
-        continue;
+      PARSER_VERIFY(name, "Could not parse name for const int.");
 
       auto arg0 = parseInt();
-      if (!arg0)
-        continue;
+      PARSER_VERIFY(arg0, "Could not parse const int.");
 
       m_constInts.push_back({std::string(*name), *arg0});
 
       break;
     }
     case I_CONST_FLOAT: {
-      if (!name)
-        continue;
+      PARSER_VERIFY(name, "Could not parse name for const float.");
 
       auto arg0 = parseFloat();
-      if (!arg0)
-        continue;
+      PARSER_VERIFY(arg0, "Could not parse const float.");
 
       m_constFloats.push_back({std::string(*name), *arg0});
 
       break;
     }
     case I_STRUCT: {
-      if (!name)
-        continue;
+      PARSER_VERIFY(name, "Could not parse struct name.");
 
       std::string nameStr(*name);
 
       char body[1024] = {0};
       uint32_t offs = 0;
+      uint32_t structStartLine = lineNumber;
       while (true) {
         bool breakOuter = false;
         while (*c) {
@@ -559,7 +591,13 @@ ParsedFlr::ParsedFlr(const char* filename) {
         *(body + offs) = '\n';
         offs++;
 
-        flrFile.getline(lineBuf, 1024);
+        if (!flrFile.getline(lineBuf, 1024)) {
+          lineNumber = structStartLine; // reset line to start of struct
+          PARSER_VERIFY(
+              false,
+              "Found unterminated struct declaration, expected \'}\'.");
+        }
+        lineNumber++;
         c = lineBuf;
       }
 
@@ -569,42 +607,50 @@ ParsedFlr::ParsedFlr(const char* filename) {
     }
     case I_STRUCT_SIZE: {
       auto structSize = parseUintOrVar();
-      if (!structSize)
-        continue;
+      PARSER_VERIFY(structSize, "Could not parse struct-size, expecting uint.");
 
+      PARSER_VERIFY(
+          m_structDefs.size() > 0,
+          "Found struct-size without preceding struct declaration.");
       m_structDefs.back().size = *structSize;
       break;
     }
     case I_STRUCTURED_BUFFER: {
-      if (!name)
-        continue;
+      PARSER_VERIFY(name, "Could not parse structured-buffer name.");
 
       auto structIdx = parseStructRef();
-      if (!structIdx)
-        continue;
+      PARSER_VERIFY(
+          structIdx,
+          "Could not find struct referenced in structured-buffer declaration.");
+
       parseWhitespace();
       auto elemCount = parseUintOrVar();
-      if (!elemCount)
-        continue;
+      PARSER_VERIFY(
+          elemCount,
+          "Could not parse element count in structured-buffer declaration.");
 
       m_buffers.push_back({std::string(*name), *structIdx, *elemCount});
       break;
     }
     case I_COMPUTE_SHADER: {
-      if (!name)
-        continue;
+      PARSER_VERIFY(name, "Could not parse compute-shader name.");
 
       auto groupSizeX = parseUintOrVar();
-      if (!groupSizeX)
-        continue;
+      PARSER_VERIFY(
+          groupSizeX,
+          "Could not parse groupSizeX in compute-shader declaration.");
+
       parseWhitespace();
       auto groupSizeY = parseUintOrVar();
-      if (!groupSizeY)
-        continue;
+      PARSER_VERIFY(
+          groupSizeY,
+          "Could not parse groupSizeY in compute-shader declaration.");
+
       parseWhitespace();
       auto groupSizeZ = parseUintOrVar();
-      if (!groupSizeZ)
-        continue;
+      PARSER_VERIFY(
+          groupSizeZ,
+          "Could not parse groupSizeZ in compute-shader declaration.");
 
       m_computeShaders.push_back(
           {std::string(*name), *groupSizeX, *groupSizeY, *groupSizeZ});
@@ -613,21 +659,26 @@ ParsedFlr::ParsedFlr(const char* filename) {
     }
     case I_COMPUTE_DISPATCH: {
       auto compShader = parseName();
-      if (!compShader)
-        continue;
+      PARSER_VERIFY(
+          compShader,
+          "Could not parse compute-shader name in compute-dispatch "
+          "declaration.");
 
       parseWhitespace();
       auto dispatchSizeX = parseUintOrVar();
-      if (!dispatchSizeX)
-        continue;
+      PARSER_VERIFY(
+          dispatchSizeX,
+          "Could not parse dispatchSizeX in compute-dispatch declaration.");
       parseWhitespace();
       auto dispatchSizeY = parseUintOrVar();
-      if (!dispatchSizeY)
-        continue;
+      PARSER_VERIFY(
+          dispatchSizeY,
+          "Could not parse dispatchSizeY in compute-dispatch declaration.");
       parseWhitespace();
       auto dispatchSizeZ = parseUintOrVar();
-      if (!dispatchSizeZ)
-        continue;
+      PARSER_VERIFY(
+          dispatchSizeZ,
+          "Could not parse dispatchSizeZ in compute-dispatch declaration.");
 
       uint32_t computeShaderIdx = 0;
       for (const auto& c : m_computeShaders) {
@@ -636,8 +687,10 @@ ParsedFlr::ParsedFlr(const char* filename) {
           break;
         ++computeShaderIdx;
       }
-      if (computeShaderIdx == m_computeShaders.size())
-        break;
+      PARSER_VERIFY(
+          computeShaderIdx < m_computeShaders.size(),
+          "Could not find referenced compute-shader referenced in "
+          "compute-dispatch declaration.");
 
       m_taskList.push_back({(uint32_t)m_computeDispatches.size(), TT_COMPUTE});
       m_computeDispatches.push_back(
@@ -647,8 +700,7 @@ ParsedFlr::ParsedFlr(const char* filename) {
     }
     case I_BARRIER: {
       auto bn = parseName();
-      if (!bn)
-        continue;
+      PARSER_VERIFY(bn, "Could not parse buffer-name in barrier declaration.");
 
       uint32_t bufferIdx = 0;
       for (const BufferDesc& b : m_buffers) {
@@ -660,16 +712,23 @@ ParsedFlr::ParsedFlr(const char* filename) {
         }
         ++bufferIdx;
       }
+
+      PARSER_VERIFY(
+          bufferIdx < m_buffers.size(),
+          "Could not find referenced buffer in barrier declaration.");
       break;
     }
     case I_DISPLAY_PASS: {
       auto vertShader = parseName();
-      if (!vertShader)
-        continue;
+      PARSER_VERIFY(
+          vertShader,
+          "Could not parse vertex shader name in display-pass declaration.");
+
       parseWhitespace();
       auto pixelShader = parseName();
-      if (!pixelShader)
-        continue;
+      PARSER_VERIFY(
+          pixelShader,
+          "Could not parse pixel shader name in display-pass declaration.");
 
       m_taskList.push_back({(uint32_t)m_displayPasses.size(), TT_DISPLAY});
       m_displayPasses.push_back(
@@ -680,5 +739,10 @@ ParsedFlr::ParsedFlr(const char* filename) {
       continue;
     }
   }
+
+#undef PARSER_VERIFY
+
+  flrFile.close();
+  m_failed = false;
 }
 } // namespace flr

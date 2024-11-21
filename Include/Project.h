@@ -95,6 +95,9 @@ struct ParsedFlr {
   };
   std::vector<Task> m_taskList;
 
+  bool m_failed;
+  char m_errMsg[2048];
+
   enum Instr : uint8_t {
     I_CONST_UINT = 0,
     I_CONST_INT,
@@ -140,6 +143,8 @@ public:
     return m_displayPasses[m_displayPassIdx].m_target.textureHandle;
   }
 
+  bool hasFailed() const { return m_parsed.m_failed; }
+  const char* getErrorMessage() const { return m_parsed.m_errMsg; }
   void tryRecompile(Application& app);
 
 private:

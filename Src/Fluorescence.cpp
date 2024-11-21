@@ -85,12 +85,17 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
 
     ImGui::EndMainMenuBar();
 
-    if (ImGui::Begin("Test Parser")) {
+    ImGui::SetNextWindowSize(ImVec2(1280, 1024));
+
+    if (ImGui::Begin("Open Flr File")) {
       static char s_filename[256] =
           "C:/Users/nithi/Documents/Code/Fluorescence/Projects/AgentSim/"
           "AgentSim.flr";
       ImGui::Text("Project Name");
       ImGui::InputText("##flr_file", s_filename, 256);
+
+      static char s_errorLog[2048] = {0};
+
       if (ImGui::Button("Open Project")) {
         if (m_pProject)
           app.addDeletiontask(DeletionTask{
@@ -99,6 +104,36 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
 
         m_pProject =
             new Project(app, m_heap, m_uniforms, (const char*)s_filename);
+
+        if (m_pProject->hasFailed()) {
+          strncpy(s_errorLog, m_pProject->getErrorMessage(), 2048);
+          delete m_pProject;
+          m_pProject = nullptr;
+        } else {
+          memset(s_errorLog, 0, 2048);
+        }
+      }
+
+      ImGui::Separator();
+      ImGui::Text("Log:");
+      if (*s_errorLog != 0) {
+        ImGui::PushStyleColor(0, ImVec4(0.9f, 0.1f, 0.1f, 1.0f));
+        ImGui::InputTextMultiline(
+            "##logoutput",
+            s_errorLog,
+            2048,
+            ImVec2(0, 0),
+            ImGuiInputTextFlags_ReadOnly);
+        ImGui::PopStyleColor();
+      } else {
+        ImGui::PushStyleColor(0, ImVec4(0.1f, 0.9f, 0.1f, 1.0f));
+        ImGui::InputTextMultiline(
+            "##logoutput",
+            "Loaded project successfully!",
+            2048,
+            ImVec2(0, 0),
+            ImGuiInputTextFlags_ReadOnly);
+        ImGui::PopStyleColor();
       }
     }
     ImGui::End();
@@ -116,8 +151,10 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
   static uint32_t prevInputMask = inputMask;
 
   FlrUniforms uniforms;
-  uniforms.mouseUv.x = static_cast<float>(mpos.x);
-  uniforms.mouseUv.y = static_cast<float>(mpos.y);
+  uniforms.mouseUv.x =
+      static_cast<float>(mpos.x / app.getSwapChainExtent().width);
+  uniforms.mouseUv.y =
+      static_cast<float>(mpos.y / app.getSwapChainExtent().height);
   uniforms.time = static_cast<float>(frame.currentTime);
   uniforms.frameCount = frameCount++;
   uniforms.prevInputMask = prevInputMask;
