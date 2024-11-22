@@ -34,6 +34,11 @@ namespace flr {
 
 Fluorescence::Fluorescence() {}
 
+static char s_filename[256] =
+    "C:/Users/nithi/Documents/Code/Fluorescence/Projects/AgentSim/"
+    "AgentSim.flr";
+static bool s_bProjectWindowOpen = true;
+
 void Fluorescence::initGame(Application& app) {
   // TODO: need to unbind these at shutdown
   InputManager& input = app.getInputManager();
@@ -44,9 +49,21 @@ void Fluorescence::initGame(Application& app) {
       {GLFW_KEY_R, GLFW_PRESS, GLFW_MOD_CONTROL},
       [&app, this]() {
         m_displayPass.tryRecompile(app);
-        if (m_pProject)
+        if (m_pProject && !m_pProject->hasFailed())
           m_pProject->tryRecompile(app);
       });
+  input.addKeyBinding(
+      {GLFW_KEY_R, GLFW_PRESS, GLFW_MOD_CONTROL | GLFW_MOD_SHIFT},
+      [&app, this]() {
+        app.addDeletiontask(DeletionTask{
+            [pProject = m_pProject]() { delete pProject; },
+            app.getCurrentFrameRingBufferIndex()});
+        m_pProject =
+            new Project(app, m_heap, m_uniforms, (const char*)s_filename);
+      });
+  input.addKeyBinding(
+      {GLFW_KEY_O, GLFW_PRESS, GLFW_MOD_CONTROL},
+      [&app, this]() { s_bProjectWindowOpen = true; });
 }
 
 void Fluorescence::shutdownGame(Application& app) {}
@@ -87,10 +104,8 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
 
     ImGui::SetNextWindowSize(ImVec2(1280, 1024));
 
-    if (ImGui::Begin("Open Flr File")) {
-      static char s_filename[256] =
-          "C:/Users/nithi/Documents/Code/Fluorescence/Projects/AgentSim/"
-          "AgentSim.flr";
+    if (ImGui::Begin("Open Flr File", &s_bProjectWindowOpen)) {
+
       ImGui::Text("Project Name");
       ImGui::InputText("##flr_file", s_filename, 256);
 
@@ -104,32 +119,41 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
 
         m_pProject =
             new Project(app, m_heap, m_uniforms, (const char*)s_filename);
-
-        if (m_pProject->hasFailed()) {
-          strncpy(s_errorLog, m_pProject->getErrorMessage(), 2048);
-          delete m_pProject;
-          m_pProject = nullptr;
-        } else {
-          memset(s_errorLog, 0, 2048);
-        }
       }
 
       ImGui::Separator();
       ImGui::Text("Log:");
-      if (*s_errorLog != 0) {
-        ImGui::PushStyleColor(0, ImVec4(0.9f, 0.1f, 0.1f, 1.0f));
-        ImGui::InputTextMultiline(
-            "##logoutput",
-            s_errorLog,
-            2048,
-            ImVec2(0, 0),
-            ImGuiInputTextFlags_ReadOnly);
-        ImGui::PopStyleColor();
+      if (m_pProject) {
+        if (m_pProject->hasFailed() || m_pProject->hasRecompileFailed()) {
+          char buf[2048];
+          sprintf(
+              buf,
+              "%s",
+              m_pProject->hasFailed() ? m_pProject->getErrorMessage()
+                                      : m_pProject->getShaderCompileErrors());
+          ImGui::PushStyleColor(0, ImVec4(0.9f, 0.1f, 0.1f, 1.0f));
+          ImGui::InputTextMultiline(
+              "##logoutput",
+              buf,
+              2048,
+              ImVec2(0, 0),
+              ImGuiInputTextFlags_ReadOnly);
+          ImGui::PopStyleColor();
+        } else {
+          ImGui::PushStyleColor(0, ImVec4(0.1f, 0.9f, 0.1f, 1.0f));
+          ImGui::InputTextMultiline(
+              "##logoutput",
+              "Loaded project successfully!",
+              2048,
+              ImVec2(0, 0),
+              ImGuiInputTextFlags_ReadOnly);
+          ImGui::PopStyleColor();
+        }
       } else {
-        ImGui::PushStyleColor(0, ImVec4(0.1f, 0.9f, 0.1f, 1.0f));
+        ImGui::PushStyleColor(0, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
         ImGui::InputTextMultiline(
             "##logoutput",
-            "Loaded project successfully!",
+            "No Project Loaded",
             2048,
             ImVec2(0, 0),
             ImGuiInputTextFlags_ReadOnly);
@@ -236,13 +260,13 @@ void Fluorescence::draw(
     const FrameContext& frame) {
 
   VkDescriptorSet heapDescriptorSet = m_heap.getDescriptorSet();
-  if (m_pProject) {
+  if (m_pProject && m_pProject->isReady()) {
     m_pProject->draw(app, commandBuffer, m_heap, frame);
   }
 
   {
     FlrPush push{};
-    if (m_pProject) {
+    if (m_pProject && m_pProject->isReady()) {
       push.push0 = m_pProject->getOutputTexture().index;
     } else {
       push.push0 = INVALID_BINDLESS_HANDLE;

@@ -1,3 +1,8 @@
+struct GlobalState {
+  uint initialized;
+}
+struct_size: 4
+
 struct Agent {
   vec2 position;
   vec2 prevPosition;
@@ -8,25 +13,41 @@ struct_size: 24
 
 struct Tile {
   uint head;
+  uint count;
 }
-struct_size: 4
+struct_size: 8
 
-uint agentCount: 256
+uint agentCount: 128
 float DELTA_TIME: 0.01
 float RADIUS: 0.01
 float GRAVITY: 0.1
+uint TILE_COUNT_X: 16
+uint TILE_COUNT_Y: 16
+uint TILE_COUNT: 256
 
+structured_buffer globalStateBuffer: GlobalState 1
+structured_buffer tilesBuffer: Tile TILE_COUNT
 structured_buffer agentBuffer: Agent agentCount
 
+compute_shader CS_ClearTiles: TILE_COUNT_X TILE_COUNT_Y 1
+compute_shader CS_WriteAgentsToTiles: 32 1 1
+compute_shader CS_Init: 1 1 1
 compute_shader CS_TimeStepAgents: 32 1 1
 compute_shader CS_MoveAgents: 32 1 1
 
 # TASKS
 
+compute_dispatch: CS_ClearTiles TILE_COUNT_X TILE_COUNT_Y 1
+compute_dispatch: CS_Init 1 1 1
+barrier: globalStateBuffer
+barrier: agentBuffer
 compute_dispatch: CS_TimeStepAgents agentCount 1 1
 barrier: agentBuffer
 compute_dispatch: CS_MoveAgents agentCount 1 1
 barrier: agentBuffer
+barrier: tilesBuffer
+compute_dispatch: CS_WriteAgentsToTiles agentCount 1 1
+barrier: tilesBuffer
 
 display_pass: VS_AgentSimDisplay PS_UvTest
 # display_pass: VS_AgentSimDisplay PS_Agents

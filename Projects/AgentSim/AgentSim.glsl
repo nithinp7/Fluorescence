@@ -1,6 +1,38 @@
 
+uint getTileIdx(uvec2 coord) {
+  return coord.y * TILE_COUNT_X + coord.x;
+}
+
+uint getTileIdx(vec2 uv) {
+  uvec2 coord = uvec2(round(uv * vec2(TILE_COUNT_X, TILE_COUNT_Y)));
+  coord.x = clamp(coord.x, 0, TILE_COUNT_X - 1);
+  coord.y = clamp(coord.y, 0, TILE_COUNT_Y - 1);
+  return getTileIdx(coord);
+} 
+
 #ifdef IS_COMP_SHADER
 
+void CS_ClearTiles() {
+  uvec2 coord = uvec2(gl_GlobalInvocationID.xy);
+  Tile tile;
+  tile.head = ~0;
+  tile.count = 0;
+  tilesBuffer[getTileIdx(coord)] = tile;  
+}
+
+void CS_Init() {
+  if (globalStateBuffer[0].initialized != 0)
+    return;
+  
+  for (uint i = 0; i < agentCount; ++i) {
+    Agent agent;
+    agent.position = vec2(wave(1.0, i), wave(2.0, i + 2));
+    agent.prevPosition = agent.position;
+    agentBuffer[i] = agent;
+  }
+
+  globalStateBuffer[0].initialized = 1;
+}
 
 void CS_TimeStepAgents() {
   uint threadId = uint(gl_GlobalInvocationID.x);
@@ -9,17 +41,12 @@ void CS_TimeStepAgents() {
 
   Agent agent = agentBuffer[threadId];
 
-  vec2 velocityDt = agent.position - agent.prevPosition;
-  velocityDt.y += 0.001 * GRAVITY * DELTA_TIME;
-
-  agent.position += velocityDt;
-
-#if 0
-  // reset
-  agent.position = vec2(wave(1.0, threadId), wave(2.0, threadId + 2));
+  float damping = 0.5;
+  vec2 velocityDt = damping * (agent.position - agent.prevPosition);
+  velocityDt.y += GRAVITY * DELTA_TIME;
   agent.prevPosition = agent.position;
-#endif
-
+  agent.position += velocityDt;
+  agent.next = ~0;
   agentBuffer[threadId] = agent;
 }
 
@@ -36,11 +63,11 @@ void CS_MoveAgents() {
 #if 1
   for (int i = 0; i < agentCount; i++) {
     if (i != threadId) {
-      vec2 diff = agent.position - agentBuffer[threadId].prevPosition;
+      vec2 diff = agent.position - agentBuffer[i].prevPosition;
       float dist = length(diff);
       if (dist < RADIUS && dist > 0.0001)
       {
-        float k = 0.5;
+        float k = 0.9;
         agent.position -= k * (RADIUS - dist) / dist * diff;
       }
     }
@@ -60,6 +87,20 @@ void CS_MoveAgents() {
   
   agentBuffer[threadId] = agent;
 }
+
+
+void CS_WriteAgentsToTiles() {
+  uint threadId = uint(gl_GlobalInvocationID.x);
+  if (threadId >= agentCount)
+    return;
+
+  vec2 pos = agentBuffer[threadId].position;
+  uint tileIdx = getTileIdx(pos);
+  uint prevElem = atomicExchange(tilesBuffer[tileIdx].head, threadId);
+  atomicAdd(tilesBuffer[tileIdx].count, 1);
+  agentBuffer[threadId].next = prevElem;
+}
+
 
 #endif // IS_COMP_SHADER
 
@@ -84,7 +125,7 @@ void PS_UvTest() {
 
   float minDist = 1.0;
 
-  for (uint i = 0; i < 25; ++i)
+  for (uint i = 0; i < agentCount; ++i)
   {
     Agent agent = agentBuffer[i];
     float dist = length(agent.position.xy - inScreenUv);
@@ -102,6 +143,18 @@ void PS_UvTest() {
 
   if (minDist < RADIUS)
     outColor = vec4(minDist, minDist * 0.2, 0.8, 1.0);
+
+    
+  uint tileIdx = getTileIdx(inScreenUv);
+  Tile tile = tilesBuffer[tileIdx];
+  if (tile.count > 0)
+    outColor.x += 0.5;
+}
+
+void PS_Tiles() {
+  uint tileIdx = getTileIdx(inScreenUv);
+  Tile tile = tilesBuffer[tileIdx];
+  outColor = vec4(tile.count > 0 ? 1.0 : 0.0, 0.0, 0.0, 1.0);
 }
 #endif // IS_PIXEL_SHADER
 

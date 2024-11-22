@@ -143,8 +143,20 @@ public:
     return m_displayPasses[m_displayPassIdx].m_target.textureHandle;
   }
 
+  bool isReady() const { return !hasFailed() && !hasRecompileFailed(); }
+
   bool hasFailed() const { return m_parsed.m_failed; }
-  const char* getErrorMessage() const { return m_parsed.m_errMsg; }
+
+  const char* getErrorMessage() const {
+    return m_parsed.m_errMsg;
+  }
+
+  bool hasRecompileFailed() const { return m_failedShaderCompile; }
+
+  const char* getShaderCompileErrors() const {
+    return m_shaderCompileErrMsg;
+  }
+
   void tryRecompile(Application& app);
 
 private:
@@ -163,5 +175,8 @@ private:
   PerFrameResources m_descriptorSets;
 
   uint32_t m_displayPassIdx;
+
+  bool m_failedShaderCompile;
+  char m_shaderCompileErrMsg[2048];
 };
 } // namespace flr

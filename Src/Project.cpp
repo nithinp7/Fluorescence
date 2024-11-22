@@ -22,7 +22,10 @@ Project::Project(
     GlobalHeap& heap,
     const TransientUniforms<FlrUniforms>& flrUniforms,
     const char* projPath)
-    : m_parsed(projPath), m_displayPassIdx(0) {
+    : m_parsed(projPath),
+      m_displayPassIdx(0),
+      m_failedShaderCompile(false),
+      m_shaderCompileErrMsg() {
   // TODO: split out resource creation vs code generation
   if (m_parsed.m_failed)
     return;
@@ -47,8 +50,14 @@ Project::Project(
     m_buffers.push_back(BufferUtilities::createBuffer(
         app,
         structdef.size * desc.elemCount,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         allocInfo));
+    vkCmdFillBuffer(
+        commandBuffer,
+        m_buffers.back().getBuffer(),
+        0,
+        structdef.size * desc.elemCount,
+        0);
   }
 
   DescriptorSetLayoutBuilder dsBuilder{};
@@ -179,8 +188,8 @@ Project::Project(
     {
       std::string errors = builder.compileShadersGetErrors();
       if (errors.size()) {
-        m_parsed.m_failed = true;
-        strncpy(m_parsed.m_errMsg, errors.c_str(), errors.size());
+        m_failedShaderCompile = true;
+        strncpy(m_shaderCompileErrMsg, errors.c_str(), errors.size());
         return;
       }
     }
@@ -212,8 +221,8 @@ Project::Project(
     {
       std::string errors = builder.compileShadersGetErrors();
       if (errors.size()) {
-        m_parsed.m_failed = true;
-        strncpy(m_parsed.m_errMsg, errors.c_str(), errors.size());
+        m_failedShaderCompile = true;
+        strncpy(m_shaderCompileErrMsg, errors.c_str(), errors.size());
         return;
       }
     }
@@ -340,13 +349,34 @@ void Project::draw(
 }
 
 void Project::tryRecompile(Application& app) {
-  for (auto& c : m_computePipelines)
+  m_failedShaderCompile = false;
+  *m_shaderCompileErrMsg = 0;
+
+  std::string error;
+  for (auto& c : m_computePipelines) {
     c.tryRecompile(app);
-  for (auto& p : m_displayPasses)
+    if (c.hasShaderRecompileErrors()) {
+      error += c.getShaderRecompileErrors() + "\n";
+    }
+  }
+
+  for (auto& p : m_displayPasses) {
     p.m_renderPass.tryRecompile(app);
+    for (auto& s : p.m_renderPass.getSubpasses()) {
+      GraphicsPipeline& g = s.getPipeline();
+      if (g.hasShaderRecompileErrors()) {
+        error += g.getShaderRecompileErrors() + "\n";
+      }
+    }
+  }
+
+  if (error.size() > 0) {
+    strncpy(m_shaderCompileErrMsg, error.c_str(), error.size());
+    m_failedShaderCompile = true;
+  }
 }
 
-ParsedFlr::ParsedFlr(const char* filename) : m_failed(true) {
+ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
 
   std::ifstream flrFile(filename);
   char lineBuf[1024];
