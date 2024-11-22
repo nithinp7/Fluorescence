@@ -78,16 +78,26 @@ struct ParsedFlr {
   };
   std::vector<Barrier> m_barriers;
 
-  struct DisplayPass {
+  struct Draw {
+    // TODO: re-usable subpasses that can be used multiple times...
     std::string vertexShader;
     std::string pixelShader;
+    uint32_t vertexCount;
+    uint32_t instanceCount;
   };
-  std::vector<DisplayPass> m_displayPasses;
+
+  struct RenderPass {
+    std::vector<Draw> draws;
+    uint32_t width;
+    uint32_t height;
+    bool bIsDisplayPass;
+  };
+  std::vector<RenderPass> m_renderPasses;
 
   enum TaskType : uint8_t {
     TT_COMPUTE = 0,
     TT_BARRIER,
-    TT_DISPLAY,
+    TT_RENDER
   };
   struct Task {
     uint32_t idx;
@@ -109,6 +119,8 @@ struct ParsedFlr {
     I_COMPUTE_DISPATCH,
     I_BARRIER,
     I_DISPLAY_PASS,
+    I_RENDER_PASS,
+    I_DRAW,
     I_COUNT
   };
 
@@ -122,7 +134,9 @@ struct ParsedFlr {
       "compute_shader",
       "compute_dispatch",
       "barrier",
-      "display_pass"};
+      "display_pass",
+      "render_pass",
+      "draw"};
 };
 
 class Project {
@@ -140,7 +154,7 @@ public:
       const FrameContext& frame);
 
   TextureHandle getOutputTexture() const {
-    return m_displayPasses[m_displayPassIdx].m_target.textureHandle;
+    return m_drawPasses[m_displayPassIdx].m_target.textureHandle;
   }
 
   bool isReady() const { return !hasFailed() && !hasRecompileFailed(); }
@@ -165,12 +179,19 @@ private:
   std::vector<BufferAllocation> m_buffers;
   std::vector<ComputePipeline> m_computePipelines;
 
-  struct DisplayPass {
+  struct DrawTask {
+    uint32_t renderpassIdx;
+    uint32_t subpassIdx;
+    uint32_t vertexCount;
+    uint32_t instanceCount;
+  };
+
+  struct DrawPass {
     ImageResource m_target;
     RenderPass m_renderPass;
     FrameBuffer m_frameBuffer;
   };
-  std::vector<DisplayPass> m_displayPasses;
+  std::vector<DrawPass> m_drawPasses;
 
   PerFrameResources m_descriptorSets;
 

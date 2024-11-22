@@ -24,6 +24,7 @@ float GRAVITY: 0.1
 uint TILE_COUNT_X: 16
 uint TILE_COUNT_Y: 16
 uint TILE_COUNT: 256
+uint CIRCLE_VERTS: 48
 
 structured_buffer globalStateBuffer: GlobalState 1
 structured_buffer tilesBuffer: Tile TILE_COUNT
@@ -49,5 +50,8 @@ barrier: tilesBuffer
 compute_dispatch: CS_WriteAgentsToTiles agentCount 1 1
 barrier: tilesBuffer
 
-display_pass: VS_AgentSimDisplay PS_UvTest
+display_pass:
+  draw: VS_AgentSimDisplay PS_UvTest 3 1
+  draw: VS_Circle PS_Circle CIRCLE_VERTS agentCount
+
 # display_pass: VS_AgentSimDisplay PS_Agents

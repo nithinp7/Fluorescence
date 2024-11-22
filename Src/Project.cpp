@@ -143,10 +143,12 @@ Project::Project(
   // auto-gen vertex shader block
   {
     CODE_APPEND("\n\n#ifdef IS_VERTEX_SHADER\n");
-    for (const auto& pass : m_parsed.m_displayPasses) {
-      CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", pass.vertexShader.c_str());
-      CODE_APPEND("void main() { %s(); }\n", pass.vertexShader.c_str());
-      CODE_APPEND("#endif // _ENTRY_POINT_%s\n", pass.vertexShader.c_str());
+    for (const auto& pass : m_parsed.m_renderPasses) {
+      for (const auto& draw : pass.draws) {
+        CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", draw.vertexShader.c_str());
+        CODE_APPEND("void main() { %s(); }\n", draw.vertexShader.c_str());
+        CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.vertexShader.c_str());
+      }
     }
     CODE_APPEND("#endif // IS_VERTEX_SHADER\n");
   }
@@ -154,10 +156,12 @@ Project::Project(
   // auto-gen pixel shader block
   {
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
-    for (const auto& pass : m_parsed.m_displayPasses) {
-      CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", pass.pixelShader.c_str());
-      CODE_APPEND("void main() { %s(); }\n", pass.pixelShader.c_str());
-      CODE_APPEND("#endif // _ENTRY_POINT_%s\n", pass.pixelShader.c_str());
+    for (const auto& pass : m_parsed.m_renderPasses) {
+      for (const auto& draw : pass.draws) {
+        CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
+        CODE_APPEND("void main() { %s(); }\n", draw.pixelShader.c_str());
+        CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
+      }
     }
     CODE_APPEND("#endif // IS_PIXEL_SHADER\n");
   }
@@ -197,43 +201,57 @@ Project::Project(
     m_computePipelines.emplace_back(app, std::move(builder));
   }
 
-  m_displayPasses.reserve(m_parsed.m_displayPasses.size());
-  for (const auto& pass : m_parsed.m_displayPasses) {
+  m_drawPasses.reserve(m_parsed.m_renderPasses.size());
+  for (const auto& pass : m_parsed.m_renderPasses) {
     std::vector<SubpassBuilder> subpassBuilders;
-    SubpassBuilder& subpass = subpassBuilders.emplace_back();
-    subpass.colorAttachments = {0};
+    subpassBuilders.reserve(pass.draws.size());
 
-    GraphicsPipelineBuilder& builder = subpass.pipelineBuilder;
-    builder.setCullMode(VK_CULL_MODE_FRONT_BIT).setDepthTesting(false);
-    {
-      ShaderDefines defs{};
-      defs.emplace("IS_VERTEX_SHADER", "");
-      defs.emplace(std::string("_ENTRY_POINT_") + pass.vertexShader, "");
-      builder.addVertexShader(autoGenFileName.string(), defs);
-    }
-    {
-      ShaderDefines defs{};
-      defs.emplace("IS_PIXEL_SHADER", "");
-      defs.emplace(std::string("_ENTRY_POINT_") + pass.pixelShader, "");
-      builder.addFragmentShader(autoGenFileName.string(), defs);
-    }
+    for (const auto& draw : pass.draws) {
+      SubpassBuilder& subpass = subpassBuilders.emplace_back();
+      subpass.colorAttachments = {0};
 
-    {
-      std::string errors = builder.compileShadersGetErrors();
-      if (errors.size()) {
-        m_failedShaderCompile = true;
-        strncpy(m_shaderCompileErrMsg, errors.c_str(), errors.size());
-        return;
+      GraphicsPipelineBuilder& builder = subpass.pipelineBuilder;
+      builder.setCullMode(VK_CULL_MODE_FRONT_BIT).setDepthTesting(false);
+      {
+        ShaderDefines defs{};
+        defs.emplace("IS_VERTEX_SHADER", "");
+        defs.emplace(std::string("_ENTRY_POINT_") + draw.vertexShader, "");
+        builder.addVertexShader(autoGenFileName.string(), defs);
       }
+      {
+        ShaderDefines defs{};
+        defs.emplace("IS_PIXEL_SHADER", "");
+        defs.emplace(std::string("_ENTRY_POINT_") + draw.pixelShader, "");
+        builder.addFragmentShader(autoGenFileName.string(), defs);
+      }
+
+      {
+        std::string errors = builder.compileShadersGetErrors();
+        if (errors.size()) {
+          m_failedShaderCompile = true;
+          strncpy(m_shaderCompileErrMsg, errors.c_str(), errors.size());
+          return;
+        }
+      }
+
+      builder.layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
+          .addDescriptorSet(m_descriptorSets.getLayout());
     }
 
-    builder.layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
-        .addDescriptorSet(m_descriptorSets.getLayout());
     VkClearValue colorClear;
     colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
     VkClearValue depthClear;
     depthClear.depthStencil = {1.0f, 0};
 
+    VkExtent2D extent{};
+    if (pass.bIsDisplayPass) {
+      extent = app.getSwapChainExtent();
+    } else {
+      extent.width = pass.width;
+      extent.height = pass.height;
+    }
+
+    // TODO: custom attachment format?
     std::vector<Attachment> attachments = {Attachment{
         ATTACHMENT_FLAG_COLOR,
         app.getSwapChainImageFormat(),
@@ -242,17 +260,17 @@ Project::Project(
         false,
         true}};
 
-    DisplayPass& pass = m_displayPasses.emplace_back();
+    DrawPass& pass = m_drawPasses.emplace_back();
     pass.m_renderPass = RenderPass(
         app,
-        app.getSwapChainExtent(),
+        extent,
         std::move(attachments),
         std::move(subpassBuilders));
 
     ImageOptions imageOptions{};
     imageOptions.format = app.getSwapChainImageFormat();
-    imageOptions.width = app.getSwapChainExtent().width;
-    imageOptions.height = app.getSwapChainExtent().height;
+    imageOptions.width = extent.width;
+    imageOptions.height = extent.height;
     imageOptions.usage =
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     pass.m_target.image = Image(app, imageOptions);
@@ -263,11 +281,8 @@ Project::Project(
 
     pass.m_target.sampler = Sampler(app, {});
 
-    pass.m_frameBuffer = FrameBuffer(
-        app,
-        pass.m_renderPass,
-        app.getSwapChainExtent(),
-        {pass.m_target.view});
+    pass.m_frameBuffer =
+        FrameBuffer(app, pass.m_renderPass, extent, {pass.m_target.view});
 
     pass.m_target.registerToTextureHeap(heap);
   }
@@ -317,27 +332,31 @@ void Project::draw(
       break;
     }
 
-    case ParsedFlr::TT_DISPLAY: {
-      auto& displayPass = m_displayPasses[task.idx];
+    case ParsedFlr::TT_RENDER: {
+      auto& drawPass = m_drawPasses[task.idx];
 
-      displayPass.m_target.image.transitionLayout(
+      drawPass.m_target.image.transitionLayout(
           commandBuffer,
           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
       {
-        ActiveRenderPass pass = displayPass.m_renderPass.begin(
+        ActiveRenderPass pass = drawPass.m_renderPass.begin(
             app,
             commandBuffer,
             frame,
-            displayPass.m_frameBuffer);
+            drawPass.m_frameBuffer);
         pass.setGlobalDescriptorSets(gsl::span(sets, 2));
         pass.getDrawContext().bindDescriptorSets();
-        pass.getDrawContext().draw(3);
+        for (const auto& draw : m_parsed.m_renderPasses[task.idx].draws) {
+          pass.getDrawContext().draw(draw.vertexCount, draw.instanceCount);
+          if (!pass.isLastSubpass())
+            pass.nextSubpass();
+        }
       }
 
-      displayPass.m_target.image.transitionLayout(
+      drawPass.m_target.image.transitionLayout(
           commandBuffer,
           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
           VK_ACCESS_SHADER_READ_BIT,
@@ -360,7 +379,7 @@ void Project::tryRecompile(Application& app) {
     }
   }
 
-  for (auto& p : m_displayPasses) {
+  for (auto& p : m_drawPasses) {
     p.m_renderPass.tryRecompile(app);
     for (auto& s : p.m_renderPass.getSubpasses()) {
       GraphicsPipeline& g = s.getPipeline();
@@ -536,7 +555,8 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
       if (parseName()) {
         for (uint8_t i = 0; i < I_COUNT; ++i) {
           const char* instr = INSTR_NAMES[i];
-          if (strlen(instr) == c - c0 && strcmp(instr, c0)) {
+          size_t len = strlen(instr);
+          if (len == (c - c0) && !strncmp(instr, c0, len)) {
             return (Instr)i;
           }
         }
@@ -749,20 +769,58 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
       break;
     }
     case I_DISPLAY_PASS: {
+      // PARSER_VERIFY(name, "Could not parse display-pass name.");
+
+      m_taskList.push_back({(uint32_t)m_renderPasses.size(), TT_RENDER});
+      m_renderPasses.push_back({{}, 0, 0, true});
+      break;
+    }
+    case I_RENDER_PASS: {
+      // PARSER_VERIFY(name, "Could not parse render-pass name.");
+
+      auto width = parseUintOrVar();
+      PARSER_VERIFY(width, "Could not parse render-pass target width.");
+      parseWhitespace();
+      auto height = parseUintOrVar();
+      PARSER_VERIFY(height, "Could not parse render-pass target height.");
+
+      m_taskList.push_back({(uint32_t)m_renderPasses.size(), TT_RENDER});
+      m_renderPasses.push_back({{}, *width, *height, false});
+      break;
+    }
+    case I_DRAW: {
+      // TODO: have re-usable subpasses that can be drawn multiple times?
+      PARSER_VERIFY(
+          m_renderPasses.size(),
+          "Expected render-pass or display-pass declaration to precede "
+          "draw-call.");
+
       auto vertShader = parseName();
       PARSER_VERIFY(
           vertShader,
-          "Could not parse vertex shader name in display-pass declaration.");
-
+          "Could not parse vertex shader name in draw-call declaration.");
       parseWhitespace();
       auto pixelShader = parseName();
       PARSER_VERIFY(
           pixelShader,
-          "Could not parse pixel shader name in display-pass declaration.");
+          "Could not parse pixel shader name in draw-call declaration.");
+      parseWhitespace();
+      auto vertexCount = parseUintOrVar();
+      PARSER_VERIFY(
+          vertexCount,
+          "Could not parse vertexCount in draw-call declaration.");
+      parseWhitespace();
+      auto instanceCount = parseUintOrVar();
+      PARSER_VERIFY(
+          instanceCount,
+          "Could not parse instanceCount in draw-call declaration.");
 
-      m_taskList.push_back({(uint32_t)m_displayPasses.size(), TT_DISPLAY});
-      m_displayPasses.push_back(
-          {std::string(*vertShader), std::string(*pixelShader)});
+      uint32_t renderPassIdx = m_renderPasses.size() - 1;
+      m_renderPasses.back().draws.push_back(
+          {std::string(*vertShader),
+           std::string(*pixelShader),
+           *vertexCount,
+           *instanceCount});
       break;
     }
     default:

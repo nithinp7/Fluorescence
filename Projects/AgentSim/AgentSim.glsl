@@ -112,6 +112,29 @@ layout(location = 0) out vec2 outScreenUv;
 void VS_AgentSimDisplay() {
   outScreenUv = VS_FullScreen();
 }
+
+#include <Misc/Constants.glsl>
+
+void VS_Circle() {
+  uint agentIdx = uint(gl_InstanceIndex);
+  Agent agent = agentBuffer[agentIdx];
+
+  uint i = gl_VertexIndex;
+  float dtheta = 2.0 * PI * 3.0 / CIRCLE_VERTS;
+
+  vec2 pos = agent.position;
+
+  if ((i % 3) < 2) {
+    uint tidx = i / 3;
+    float theta = (tidx + (i % 3)) * dtheta;
+    float c = cos(theta);
+    float s = sin(theta);
+    pos += RADIUS * vec2(c, s);
+  }
+
+  outScreenUv = pos;
+  gl_Position = vec4(pos * 2.0f - 1.0f, 0.0f, 1.0f);
+}
 #endif // IS_VERTEX_SHADER
 
 ////////////////////////// PIXEL SHADER //////////////////////////
@@ -120,18 +143,27 @@ void VS_AgentSimDisplay() {
 layout(location = 0) in vec2 inScreenUv;
 layout(location = 0) out vec4 outColor;
 
+void PS_Circle() {
+  outColor = vec4(1.0, 0.0, 0.0, 1.0);
+}
+
 void PS_UvTest() {
   outColor = vec4(inScreenUv, wave(0.1, 0.0), 1.0);
 
   float minDist = 1.0;
 
-  for (uint i = 0; i < agentCount; ++i)
-  {
-    Agent agent = agentBuffer[i];
+
+  uint tileIdx = getTileIdx(inScreenUv);
+  Tile tile = tilesBuffer[tileIdx];
+  uint agentIdx = tile.head;
+  for (int i = 0; i < tile.count; ++i) {
+    Agent agent = agentBuffer[agentIdx];
     float dist = length(agent.position.xy - inScreenUv);
     minDist = min(dist, minDist);
+    agentIdx = agent.next;
   }
 
+#if 0
   {
     float dist = length(uniforms.mouseUv - inScreenUv);
     if (dist < 2.0 * RADIUS)
@@ -140,15 +172,10 @@ void PS_UvTest() {
       return;
     }
   }
+#endif 
 
-  if (minDist < RADIUS)
-    outColor = vec4(minDist, minDist * 0.2, 0.8, 1.0);
-
-    
-  uint tileIdx = getTileIdx(inScreenUv);
-  Tile tile = tilesBuffer[tileIdx];
-  if (tile.count > 0)
-    outColor.x += 0.5;
+  float f = 1.0 - minDist;
+  outColor.x += 0.5 * pow(f, 5);
 }
 
 void PS_Tiles() {

@@ -94,16 +94,16 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
     Gui::startRecordingImgui();
 
     const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-    if (ImGui::BeginMainMenuBar()) {
+   /* if (ImGui::BeginMainMenuBar()) {
       static bool s_bSelectedFileTab = false;
       if (ImGui::MenuItem("File", "TEST", &s_bSelectedFileTab)) {
       }
-    }
+    }*/
 
-    ImGui::EndMainMenuBar();
+    // ImGui::EndMainMenuBar();
 
-    ImGui::SetNextWindowSize(ImVec2(1280, 1024));
-
+    // ImGui::SetNextWindowSize(ImVec2(1280, 1024));
+    
     if (ImGui::Begin("Open Flr File", &s_bProjectWindowOpen)) {
 
       ImGui::Text("Project Name");
@@ -131,7 +131,7 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
               "%s",
               m_pProject->hasFailed() ? m_pProject->getErrorMessage()
                                       : m_pProject->getShaderCompileErrors());
-          ImGui::PushStyleColor(0, ImVec4(0.9f, 0.1f, 0.1f, 1.0f));
+          ImGui::PushStyleColor(0, ImVec4(0.9f, 0.2f, 0.4f, 1.0f));
           ImGui::InputTextMultiline(
               "##logoutput",
               buf,
