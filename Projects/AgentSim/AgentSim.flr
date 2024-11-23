@@ -1,15 +1,13 @@
 struct GlobalState {
   uint initialized;
+  uint shapeCount;
 }
-struct_size: 4
+struct_size: 8
 
 struct Agent {
-  vec2 position;
-  vec2 prevPosition;
-  float radius;
   uint next;
 }
-struct_size: 24
+struct_size: 4
 
 struct Tile {
   uint head;
@@ -17,41 +15,69 @@ struct Tile {
 }
 struct_size: 8
 
-uint agentCount: 128
+struct Position {
+  vec2 pos;
+}
+struct_size: 8
+
+uint MAX_AGENTS_PER_SHAPE: 32
+
+struct Shape {
+  uint agents[MAX_AGENTS_PER_SHAPE]; 
+  uint count;
+}
+struct_size: 132
+
+uint agentCount: 1024
 float DELTA_TIME: 0.01
 float RADIUS: 0.01
-float GRAVITY: 0.1
+float GRAVITY: 0.01
 uint TILE_COUNT_X: 16
 uint TILE_COUNT_Y: 16
 uint TILE_COUNT: 256
 uint CIRCLE_VERTS: 48
+float PADDING: 0.025
+uint MAX_SHAPE_COUNT: 128
+
+structured_buffer shapeBuffer: Shape MAX_SHAPE_COUNT
+structured_buffer posBuffer: Position agentCount;
+structured_buffer prevPosBuffer: Position agentCount;
 
 structured_buffer globalStateBuffer: GlobalState 1
 structured_buffer tilesBuffer: Tile TILE_COUNT
 structured_buffer agentBuffer: Agent agentCount
 
-compute_shader CS_ClearTiles: TILE_COUNT_X TILE_COUNT_Y 1
+compute_shader CS_ClearTiles: 16 16 1
 compute_shader CS_WriteAgentsToTiles: 32 1 1
 compute_shader CS_Init: 1 1 1
 compute_shader CS_TimeStepAgents: 32 1 1
 compute_shader CS_MoveAgents: 32 1 1
-
+compute_shader CS_CreateShapes: 16 16 1
+compute_shader CS_SolveShapes: 32 1 1
 # TASKS
 
 compute_dispatch: CS_ClearTiles TILE_COUNT_X TILE_COUNT_Y 1
 compute_dispatch: CS_Init 1 1 1
-barrier: globalStateBuffer
-barrier: agentBuffer
+
+barrier: globalStateBuffer agentBuffer
+
 compute_dispatch: CS_TimeStepAgents agentCount 1 1
-barrier: agentBuffer
-compute_dispatch: CS_MoveAgents agentCount 1 1
-barrier: agentBuffer
-barrier: tilesBuffer
+
+barrier: agentBuffer tilesBuffer posBuffer prevPosBuffer
+
 compute_dispatch: CS_WriteAgentsToTiles agentCount 1 1
-barrier: tilesBuffer
+
+barrier: tilesBuffer agentBuffer
+
+compute_dispatch: CS_MoveAgents agentCount 1 1
+compute_dispatch: CS_CreateShapes TILE_COUNT_X TILE_COUNT_Y 1
+
+barrier: posBuffer shapeBuffer globalStateBuffer
+
+compute_dispatch: CS_SolveShapes MAX_SHAPE_COUNT 1 1
+
+barrier: posBuffer 
 
 display_pass:
   draw: VS_AgentSimDisplay PS_UvTest 3 1
   draw: VS_Circle PS_Circle CIRCLE_VERTS agentCount
-
-# display_pass: VS_AgentSimDisplay PS_Agents

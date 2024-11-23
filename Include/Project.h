@@ -74,7 +74,7 @@ struct ParsedFlr {
   std::vector<ComputeDispatch> m_computeDispatches;
 
   struct Barrier {
-    uint32_t bufferIdx;
+    std::vector<uint32_t> buffers;
   };
   std::vector<Barrier> m_barriers;
 

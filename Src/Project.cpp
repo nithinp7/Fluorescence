@@ -79,6 +79,15 @@ Project::Project(
   // glsl version / common includes
   CODE_APPEND("#version 460 core\n\n");
 
+  // constant declarations
+  for (const auto& c : m_parsed.m_constInts)
+    CODE_APPEND("#define %s %d\n", c.name.c_str(), c.value);
+  for (const auto& c : m_parsed.m_constUints)
+    CODE_APPEND("#define %s %u\n", c.name.c_str(), c.value);
+  for (const auto& c : m_parsed.m_constFloats)
+    CODE_APPEND("#define %s %f\n", c.name.c_str(), c.value);
+  CODE_APPEND("\n");
+
   // struct declarations
   for (const auto& s : m_parsed.m_structDefs) {
     CODE_APPEND("%s;\n\n", s.body.c_str());
@@ -108,15 +117,6 @@ Project::Project(
           parsedBuf.name.c_str());
     }
   }
-
-  // constant declarations
-  for (const auto& c : m_parsed.m_constInts)
-    CODE_APPEND("#define %s %d\n", c.name.c_str(), c.value);
-  for (const auto& c : m_parsed.m_constUints)
-    CODE_APPEND("#define %s %u\n", c.name.c_str(), c.value);
-  for (const auto& c : m_parsed.m_constFloats)
-    CODE_APPEND("#define %s %f\n", c.name.c_str(), c.value);
-  CODE_APPEND("\n");
 
   // includes
   CODE_APPEND("#include <Fluorescence.glsl>\n");
@@ -320,15 +320,16 @@ void Project::draw(
 
     case ParsedFlr::TT_BARRIER: {
       const auto& parsedBarrier = m_parsed.m_barriers[task.idx];
-      const auto& parsedBuf = m_parsed.m_buffers[parsedBarrier.bufferIdx];
-      const auto& parsedStruct = m_parsed.m_structDefs[parsedBuf.structIdx];
-      const auto& buf = m_buffers[parsedBarrier.bufferIdx];
-      BufferUtilities::rwBarrier(
-          commandBuffer,
-          buf.getBuffer(),
-          0,
-          parsedBuf.elemCount * parsedStruct.size);
-
+      for (uint32_t bufferIdx : parsedBarrier.buffers) {
+        const auto& parsedBuf = m_parsed.m_buffers[bufferIdx];
+        const auto& parsedStruct = m_parsed.m_structDefs[parsedBuf.structIdx];
+        const auto& buf = m_buffers[bufferIdx];
+        BufferUtilities::rwBarrier(
+            commandBuffer,
+            buf.getBuffer(),
+            0,
+            parsedBuf.elemCount * parsedStruct.size);
+      }
       break;
     }
 
@@ -750,22 +751,33 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
     }
     case I_BARRIER: {
       auto bn = parseName();
-      PARSER_VERIFY(bn, "Could not parse buffer-name in barrier declaration.");
+      PARSER_VERIFY(bn, "Expected at lesat one buffer in barrier declaration.");
 
-      uint32_t bufferIdx = 0;
-      for (const BufferDesc& b : m_buffers) {
-        if (bn->size() == b.name.size() &&
-            !strncmp(bn->data(), b.name.data(), b.name.size())) {
-          m_taskList.push_back({(uint32_t)m_barriers.size(), TT_BARRIER});
-          m_barriers.push_back({bufferIdx});
-          break;
+      std::vector<uint32_t> buffers;
+
+      while (bn) {
+        uint32_t bufferIdx = 0;
+        for (const BufferDesc& b : m_buffers) {
+          if (bn->size() == b.name.size() &&
+              !strncmp(bn->data(), b.name.data(), b.name.size())) {
+            break;
+          }
+          ++bufferIdx;
         }
-        ++bufferIdx;
+
+        PARSER_VERIFY(
+            bufferIdx < m_buffers.size(),
+            "Could not find referenced buffer in barrier declaration.");
+
+        buffers.push_back(bufferIdx);
+
+        parseWhitespace();
+        bn = parseName();
       }
 
-      PARSER_VERIFY(
-          bufferIdx < m_buffers.size(),
-          "Could not find referenced buffer in barrier declaration.");
+      m_taskList.push_back({(uint32_t)m_barriers.size(), TT_BARRIER});
+      m_barriers.emplace_back().buffers = std::move(buffers);
+
       break;
     }
     case I_DISPLAY_PASS: {
