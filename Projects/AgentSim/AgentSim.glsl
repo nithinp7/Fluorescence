@@ -1,5 +1,6 @@
 
 #include <Misc/Constants.glsl>
+#include <Misc/Sampling.glsl>
 
 // IDEAS
 /*
@@ -30,8 +31,6 @@ void CS_ClearTiles() {
 }
 
 void CS_Init() {
-  globalStateBuffer[0].shapeCount = 
-      globalStateBuffer[0].shapeCount % MAX_SHAPE_COUNT;
   if (globalStateBuffer[0].initialized != 0)
     return;
   
@@ -39,6 +38,8 @@ void CS_Init() {
     vec2 pos = vec2(wave(1.0, i), wave(2.0, i + 2));
     setPos(i, pos);
     setPrevPos(i,pos);
+    agentBuffer[i].next = ~0;
+    agentBuffer[i].shape = ~0;
   }
 
   globalStateBuffer[0].initialized = 1;
@@ -52,7 +53,7 @@ void CS_TimeStepAgents() {
   vec2 pos = getPos(threadId);
   vec2 prevPos = getPrevPos(threadId);
 
-  float damping = 0.9;
+  float damping = 0.5;
   vec2 velocityDt = damping * (pos - prevPos);
   velocityDt.y += GRAVITY * DELTA_TIME;
   prevPos = pos;
@@ -74,7 +75,7 @@ void CS_MoveAgents() {
   vec2 tileCoord = pos * vec2(TILE_COUNT_X, TILE_COUNT_Y);
   ivec2 ucoord = ivec2(round(tileCoord - vec2(1.0)));
 
-  float k = 0.0;
+  float k = 0.9;
   
   for (uint i = 0; i < 4; ++i) {
     ivec2 coord = ucoord + ivec2(i & 1, i >> 1);
@@ -100,15 +101,15 @@ void CS_MoveAgents() {
     }
   }
 
-  pos.x += k * (clamp(pos.x, 0.0, 1.0) - pos.x);
-  pos.y += k * (clamp(pos.y, 0.0, 1.0) - pos.y);
+  pos.x += 1. * (clamp(pos.x, 0.0, 1.0) - pos.x);
+  pos.y += 1. * (clamp(pos.y, 0.0, 1.0) - pos.y);
 
   {
     vec2 diff = pos - uniforms.mouseUv;
     float dist = length(diff);
-    if (dist < 4.0 * RADIUS && dist > 0.0001)
+    if (dist < 0.1 && dist > 0.0001)
     {
-      pos += k * (4.0 *  RADIUS - dist) / dist * diff;
+      pos += k * (0.1 - dist) / dist * diff;
     }
   }
 
@@ -116,18 +117,28 @@ void CS_MoveAgents() {
 }
 
 void CS_CreateShapes() {
+  if ((uniforms.inputMask & INPUT_BIT_LEFT_MOUSE) == 0)
+    return;
   ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
   Tile tile = tilesBuffer[getTileIdx(coord)];
-  if (tile.count < 10)
+  if (tile.count < 24)
    return;
 
   uint shapeSlot = atomicAdd(globalStateBuffer[0].shapeCount, 1);
   shapeSlot = shapeSlot % MAX_SHAPE_COUNT;
-  shapeBuffer[shapeSlot].count = 0;
+  uint count = shapeBuffer[shapeSlot].count;
+  for (uint i = 0; i < count; i++) {
+    uint agentIdx = shapeBuffer[shapeSlot].agents[i];
+    agentBuffer[agentIdx].shape = ~0;
+  }
+
+  count = 0;
   uint agentIdx = tile.head;
-  uint count = 0;
-  for (; count < MAX_AGENTS_PER_SHAPE && agentIdx != ~0; count++) {
-    shapeBuffer[shapeSlot].agents[count] = agentIdx; 
+  for (uint i = 0; i < MAX_AGENTS_PER_SHAPE && agentIdx != ~0; i++) {
+    if (agentBuffer[agentIdx].shape == ~0) {
+      agentBuffer[agentIdx].shape = shapeSlot;
+      shapeBuffer[shapeSlot].agents[count++] = agentIdx; 
+    }
     agentIdx = agentBuffer[agentIdx].next;
   }
 
@@ -148,10 +159,10 @@ void CS_WriteAgentsToTiles() {
 
 void CS_SolveShapes() {
   uint shapeIdx = uint(gl_GlobalInvocationID.x);
-  if (shapeIdx >= globalStateBuffer[0].shapeCount)
+  uint count = shapeBuffer[shapeIdx].count;
+  if (count == 0)
     return;
 
-  uint count = shapeBuffer[shapeIdx].count;
   vec2 avgPos = vec2(0.0);
   for (uint i = 0; i < count; i++) {
     uint agentIdx = shapeBuffer[shapeIdx].agents[i];
@@ -167,10 +178,14 @@ void CS_SolveShapes() {
     float c = cos(theta);
     float s = sin(theta);
     
-    float k = 0.8 * wave(1.0, 3.);
+    float k = 0.1 + 0.7 * wave(1.3, 3. * shapeIdx);
     vec2 curPos = getPos(agentIdx);
-    vec2 targetPos = avgPos + 0.05 * vec2(c, s);
-    setPos(agentIdx, mix(curPos, targetPos, k));
+    // vec2 targetPos = avgPos + 0.025 * vec2(c, s) * (0.5 * wave(0.25, i * shapeIdx) + wave(0.1, shapeIdx));
+    vec2 targetPos = avgPos + 0.025 * vec2(c, s) * (0.5 * sin(i * shapeIdx) + cos(shapeIdx));
+    // vec2 targetPos = avgPos + 0.02 * vec2(c, s);
+    // targetPos += vec2(0.0001 * sin(1.0 * uniforms.time), -0.001 * wave(3., 2.));
+    vec2 pos = mix(curPos, targetPos, k);
+    setPos(agentIdx, pos);
   }
 }
 
@@ -180,13 +195,17 @@ void CS_SolveShapes() {
 
 #ifdef IS_VERTEX_SHADER
 layout(location = 0) out vec2 outScreenUv;
+layout(location = 1) out vec4 outColor;
 
 void VS_AgentSimDisplay() {
   outScreenUv = VS_FullScreen();
+  outColor = vec4(1.0);
 }
 
 void VS_Circle() {
   uint agentIdx = uint(gl_InstanceIndex);
+
+  uint shapeIdx = agentBuffer[agentIdx].shape;
 
   uint i = gl_VertexIndex;
   float dtheta = 2.0 * PI * 3.0 / CIRCLE_VERTS;
@@ -200,10 +219,19 @@ void VS_Circle() {
     float theta = (tidx + (i % 3)) * dtheta;
     float c = cos(theta);
     float s = sin(theta);
-    pos += RADIUS * vec2(c, s);
+    pos += 0.5 * RADIUS * vec2(c, s);
   }
 
   outScreenUv = pos;
+
+  uvec2 seed = uvec2(shapeIdx, shapeIdx + 1);
+  if (shapeIdx == ~0) {
+    outColor = vec4(0.0);//vec4(1.0, 0.0, 0.0, 1.0);
+    outColor = vec4(0.01, 0.0, 0.0, 1.0);
+  } else { 
+    outColor = vec4(randVec3(seed), 1.0);
+  }
+
   gl_Position = vec4(pos * 2.0f - 1.0f, 0.0f, 1.0f);
 }
 
@@ -213,17 +241,56 @@ void VS_Circle() {
 
 #ifdef IS_PIXEL_SHADER
 layout(location = 0) in vec2 inScreenUv;
+layout(location = 1) in vec4 inColor;
+
 layout(location = 0) out vec4 outColor;
 
 void PS_Circle() {
-  outColor = vec4(1.0, 0.0, 0.0, 1.0);
+  outColor = inColor;//vec4(1.0, 0.0, 0.0, 1.0);
 }
 
 void PS_UvTest() {
-  outColor = vec4(inScreenUv, wave(0.1, 0.0), 1.0);
-  int tileIdx = getTileIdx(ivec2(inScreenUv * vec2(TILE_COUNT_X, TILE_COUNT_Y)));
-  if (tileIdx >= 0 && tilesBuffer[tileIdx].count > 0) {
-//    outColor = vec4(1.0, 0.0, 0.0, 1.0);
+  outColor = vec4(0.0, 0.0, 0.0, 1.0);  
+  // return;
+  // outColor = vec4(inScreenUv, wave(0.1, 0.0), 1.0);
+  
+  // int tileIdx = getTileIdx(ivec2(inScreenUv * vec2(TILE_COUNT_X, TILE_COUNT_Y)));
+  // uint count = tilesBuffer[tileIdx].count;
+
+  vec2 tileCoord = inScreenUv * vec2(TILE_COUNT_X, TILE_COUNT_Y);
+  ivec2 ucoord = ivec2(round(tileCoord - vec2(1.0)));
+
+  // if (count > 0) 
+  {
+    vec3 blend = vec3(0.0);
+    float wsum = 4.0;
+
+
+    for (uint i = 0; i < 4; ++i) {
+      ivec2 coord = ucoord + ivec2(i & 1, i >> 1);
+      int tileIdx = getTileIdx(coord);
+      if (tileIdx < 0)
+        continue;
+
+      uint count = tilesBuffer[tileIdx].count;
+      if (count == 0)
+        continue;
+
+      uint agentIdx = tilesBuffer[tileIdx].head;
+      for (int j = 0; j < count; j++) {
+        uint shapeIdx = agentBuffer[agentIdx].shape;
+        uvec2 seed = uvec2(shapeIdx, shapeIdx + 1);
+        vec2 diff = inScreenUv - getPos(agentIdx);
+        float emissive = 0.00001 * wave(1.5, rngu(seed));
+        float w = emissive / dot(diff, diff);
+        wsum += w;
+        // vec3 color = shapeIdx == ~0 ? vec3(1.0, 0.0, 0.0) : randVec3(seed);
+        vec3 color = shapeIdx == ~0 ? vec3(0.0) : randVec3(seed);
+        blend += w * color;
+        agentIdx = agentBuffer[agentIdx].next;
+      }
+      outColor = vec4(blend / wsum, 1.0);
+    }
   }
 }
 #endif // IS_PIXEL_SHADER

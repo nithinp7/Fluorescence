@@ -6,8 +6,9 @@ struct_size: 8
 
 struct Agent {
   uint next;
+  uint shape;
 }
-struct_size: 4
+struct_size: 8
 
 struct Tile {
   uint head;
@@ -25,19 +26,22 @@ uint MAX_AGENTS_PER_SHAPE: 32
 struct Shape {
   uint agents[MAX_AGENTS_PER_SHAPE]; 
   uint count;
+  uint padding;
 }
-struct_size: 132
+struct_size: 136
 
-uint agentCount: 1024
+uint agentCount: 12000 
+# 9192
 float DELTA_TIME: 0.01
-float RADIUS: 0.01
-float GRAVITY: 0.01
+float RADIUS: 0.0025
+float GRAVITY: 0.0
 uint TILE_COUNT_X: 16
 uint TILE_COUNT_Y: 16
 uint TILE_COUNT: 256
 uint CIRCLE_VERTS: 48
-float PADDING: 0.025
-uint MAX_SHAPE_COUNT: 128
+float PADDING: 0.0
+# 25
+uint MAX_SHAPE_COUNT: 4096
 
 structured_buffer shapeBuffer: Shape MAX_SHAPE_COUNT
 structured_buffer posBuffer: Position agentCount;
@@ -69,14 +73,17 @@ compute_dispatch: CS_WriteAgentsToTiles agentCount 1 1
 
 barrier: tilesBuffer agentBuffer
 
-compute_dispatch: CS_MoveAgents agentCount 1 1
 compute_dispatch: CS_CreateShapes TILE_COUNT_X TILE_COUNT_Y 1
+
+barrier: agentBuffer
+
+compute_dispatch: CS_MoveAgents agentCount 1 1
 
 barrier: posBuffer shapeBuffer globalStateBuffer
 
 compute_dispatch: CS_SolveShapes MAX_SHAPE_COUNT 1 1
 
-barrier: posBuffer 
+barrier: posBuffer prevPosBuffer
 
 display_pass:
   draw: VS_AgentSimDisplay PS_UvTest 3 1
