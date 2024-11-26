@@ -21,6 +21,13 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <vulkan/vulkan.h>
 
+#define GLFW_EXPOSE_NATIVE_WIN32
+// #define GLFW_EXPOSE_NATIVE_WGL
+// #define GLFW_NATIVE_INCLUDE_NONE
+#include <GLFW/glfw3native.h>
+#include <basetsd.h>
+#include <commdlg.h>
+
 #include <array>
 #include <cstdint>
 #include <iostream>
@@ -94,16 +101,16 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
     Gui::startRecordingImgui();
 
     const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-   /* if (ImGui::BeginMainMenuBar()) {
-      static bool s_bSelectedFileTab = false;
-      if (ImGui::MenuItem("File", "TEST", &s_bSelectedFileTab)) {
-      }
-    }*/
+    /* if (ImGui::BeginMainMenuBar()) {
+       static bool s_bSelectedFileTab = false;
+       if (ImGui::MenuItem("File", "TEST", &s_bSelectedFileTab)) {
+       }
+     }*/
 
     // ImGui::EndMainMenuBar();
 
     // ImGui::SetNextWindowSize(ImVec2(1280, 1024));
-    
+
     if (ImGui::Begin("Open Flr File", &s_bProjectWindowOpen)) {
 
       ImGui::Text("Project Name");
@@ -111,7 +118,44 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
 
       static char s_errorLog[2048] = {0};
 
-      if (ImGui::Button("Open Project")) {
+      ImGui::SameLine();
+
+      if (ImGui::Button("Choose File")) {
+        OPENFILENAME ofn{}; // common dialog box structure
+        char szFile[260];   // buffer for file name
+        // HWND hwnd = ;        // owner window
+        // HANDLE hf;              // file handle
+
+        // Initialize OPENFILENAME
+        ofn.lStructSize = sizeof(ofn);
+        ofn.hwndOwner = glfwGetWin32Window(app.getWindow());
+        ofn.lpstrFile = szFile;
+        // Set lpstrFile[0] to '\0' so that GetOpenFileName does not
+        // use the contents of szFile to initialize itself.
+        ofn.lpstrFile[0] = '\0';
+        ofn.nMaxFile = sizeof(szFile);
+        ofn.lpstrFilter = "*.flr\0";
+        ofn.nFilterIndex = 1;
+        ofn.lpstrFileTitle = NULL;
+        ofn.nMaxFileTitle = 0;
+        ofn.lpstrInitialDir = NULL;
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+        // Display the Open dialog box.
+
+        if (GetOpenFileName(&ofn)) {
+          memcpy(s_filename, szFile, strlen(szFile));
+          if (m_pProject)
+            app.addDeletiontask(DeletionTask{
+                [pProject = m_pProject]() { delete pProject; },
+                app.getCurrentFrameRingBufferIndex()});
+
+          m_pProject =
+              new Project(app, m_heap, m_uniforms, (const char*)s_filename);
+        }
+      }
+
+      if (ImGui::Button("Re-Open Project")) {
         if (m_pProject)
           app.addDeletiontask(DeletionTask{
               [pProject = m_pProject]() { delete pProject; },
