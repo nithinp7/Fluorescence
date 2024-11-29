@@ -67,5 +67,8 @@ private:
   SwapChainFrameBufferCollection m_swapChainFrameBuffers;
 
   Project* m_pProject = nullptr;
+  bool m_bOpenFileDialogue = false;
+  bool m_bReloadProject = false;
+  bool m_bPaused = false;
 };
 } // namespace flr

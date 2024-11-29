@@ -25,3 +25,11 @@ float wave(float a, float b, float bottom, float top) {
   float center = 0.5 * (bottom + top);
   return 0.5 * (top - bottom) * sin(a * uniforms.time + b) + center;
 }
+
+double wave(double a, double b) {
+  return wave(float(a), float(b));
+}
+
+double wave(double a, double b, double bottom, double top) {
+  return wave(float(a), float(b), float(bottom), float(top));
+}

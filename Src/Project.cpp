@@ -192,8 +192,8 @@ Project::Project(
     {
       std::string errors = builder.compileShadersGetErrors();
       if (errors.size()) {
-        m_failedShaderCompile = true;
-        strncpy(m_shaderCompileErrMsg, errors.c_str(), errors.size());
+        m_parsed.m_failed = true;
+        strncpy(m_parsed.m_errMsg, errors.c_str(), errors.size());
         return;
       }
     }
@@ -228,8 +228,8 @@ Project::Project(
       {
         std::string errors = builder.compileShadersGetErrors();
         if (errors.size()) {
-          m_failedShaderCompile = true;
-          strncpy(m_shaderCompileErrMsg, errors.c_str(), errors.size());
+          m_parsed.m_failed = true;
+          strncpy(m_parsed.m_errMsg, errors.c_str(), errors.size());
           return;
         }
       }

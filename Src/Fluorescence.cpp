@@ -41,11 +41,6 @@ namespace flr {
 
 Fluorescence::Fluorescence() {}
 
-static char s_filename[256] =
-    "C:/Users/nithi/Documents/Code/Fluorescence/Projects/AgentSim/"
-    "AgentSim.flr";
-static bool s_bProjectWindowOpen = true;
-
 void Fluorescence::initGame(Application& app) {
   // TODO: need to unbind these at shutdown
   InputManager& input = app.getInputManager();
@@ -56,21 +51,28 @@ void Fluorescence::initGame(Application& app) {
       {GLFW_KEY_R, GLFW_PRESS, GLFW_MOD_CONTROL},
       [&app, this]() {
         m_displayPass.tryRecompile(app);
-        if (m_pProject && !m_pProject->hasFailed())
-          m_pProject->tryRecompile(app);
+        if (m_pProject) {
+          if (m_pProject->hasFailed()) {
+            m_bReloadProject = true;
+          } else {
+            m_pProject->tryRecompile(app);
+          }
+        }
       });
+
   input.addKeyBinding(
       {GLFW_KEY_R, GLFW_PRESS, GLFW_MOD_CONTROL | GLFW_MOD_SHIFT},
       [&app, this]() {
-        app.addDeletiontask(DeletionTask{
-            [pProject = m_pProject]() { delete pProject; },
-            app.getCurrentFrameRingBufferIndex()});
-        m_pProject =
-            new Project(app, m_heap, m_uniforms, (const char*)s_filename);
+        m_displayPass.tryRecompile(app);
+        m_bReloadProject = true;
       });
+
   input.addKeyBinding(
       {GLFW_KEY_O, GLFW_PRESS, GLFW_MOD_CONTROL},
-      [&app, this]() { s_bProjectWindowOpen = true; });
+      [&app, this]() { m_bOpenFileDialogue = true; });
+  input.addKeyBinding({GLFW_KEY_P, GLFW_PRESS, 0}, [&app, this]() {
+    m_bPaused = !m_bPaused;
+  });
 }
 
 void Fluorescence::shutdownGame(Application& app) {}
@@ -88,6 +90,7 @@ void Fluorescence::destroyRenderState(Application& app) {
 
   delete m_pProject;
   m_pProject = nullptr;
+  m_bReloadProject = true;
 
   m_displayPass = {};
   m_swapChainFrameBuffers = {};
@@ -111,100 +114,68 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
 
     // ImGui::SetNextWindowSize(ImVec2(1280, 1024));
 
-    if (ImGui::Begin("Open Flr File", &s_bProjectWindowOpen)) {
+    static char s_filename[512] = {0};
 
-      ImGui::Text("Project Name");
-      ImGui::InputText("##flr_file", s_filename, 256);
+    if (m_bOpenFileDialogue) {
+      m_bOpenFileDialogue = false;
 
-      static char s_errorLog[2048] = {0};
+      OPENFILENAME ofn{};
+      memset(&ofn, 0, sizeof(OPENFILENAME));
 
-      ImGui::SameLine();
+      char filename[512] = {0};
 
-      if (ImGui::Button("Choose File")) {
-        OPENFILENAME ofn{}; // common dialog box structure
-        char szFile[260];   // buffer for file name
-        // HWND hwnd = ;        // owner window
-        // HANDLE hf;              // file handle
+      ofn.lStructSize = sizeof(ofn);
+      ofn.hwndOwner = glfwGetWin32Window(app.getWindow());
+      ofn.lpstrFile = filename;
+      ofn.lpstrFile[0] = '\0';
+      ofn.nMaxFile = sizeof(filename);
+      ofn.lpstrFilter = "FLR PROJECT\0*.flr\0\0";
+      ofn.nFilterIndex = 1;
+      ofn.lpstrFileTitle = NULL;
+      ofn.nMaxFileTitle = 0;
+      ofn.lpstrInitialDir = NULL;
+      ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
 
-        // Initialize OPENFILENAME
-        ofn.lStructSize = sizeof(ofn);
-        ofn.hwndOwner = glfwGetWin32Window(app.getWindow());
-        ofn.lpstrFile = szFile;
-        // Set lpstrFile[0] to '\0' so that GetOpenFileName does not
-        // use the contents of szFile to initialize itself.
-        ofn.lpstrFile[0] = '\0';
-        ofn.nMaxFile = sizeof(szFile);
-        ofn.lpstrFilter = "*.flr\0";
-        ofn.nFilterIndex = 1;
-        ofn.lpstrFileTitle = NULL;
-        ofn.nMaxFileTitle = 0;
-        ofn.lpstrInitialDir = NULL;
-        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+      // Display the Open dialog box.
 
-        // Display the Open dialog box.
-
-        if (GetOpenFileName(&ofn)) {
-          memcpy(s_filename, szFile, strlen(szFile));
-          if (m_pProject)
-            app.addDeletiontask(DeletionTask{
-                [pProject = m_pProject]() { delete pProject; },
-                app.getCurrentFrameRingBufferIndex()});
-
-          m_pProject =
-              new Project(app, m_heap, m_uniforms, (const char*)s_filename);
-        }
+      if (GetOpenFileName(&ofn)) {
+        strncpy(s_filename, filename, strlen(filename));
+        m_bReloadProject = true;
       }
+    }
 
-      if (ImGui::Button("Re-Open Project")) {
-        if (m_pProject)
-          app.addDeletiontask(DeletionTask{
-              [pProject = m_pProject]() { delete pProject; },
-              app.getCurrentFrameRingBufferIndex()});
+    if (m_bReloadProject) {
+      m_bReloadProject = false;
 
+      if (m_pProject)
+        app.addDeletiontask(DeletionTask{
+            [pProject = m_pProject]() { delete pProject; },
+            app.getCurrentFrameRingBufferIndex()});
+
+      m_pProject = nullptr;
+      if (Utilities::checkFileExists(std::string(s_filename))) {
         m_pProject =
             new Project(app, m_heap, m_uniforms, (const char*)s_filename);
       }
+    }
 
-      ImGui::Separator();
-      ImGui::Text("Log:");
-      if (m_pProject) {
-        if (m_pProject->hasFailed() || m_pProject->hasRecompileFailed()) {
-          char buf[2048];
-          sprintf(
-              buf,
-              "%s",
-              m_pProject->hasFailed() ? m_pProject->getErrorMessage()
-                                      : m_pProject->getShaderCompileErrors());
-          ImGui::PushStyleColor(0, ImVec4(0.9f, 0.2f, 0.4f, 1.0f));
-          ImGui::InputTextMultiline(
-              "##logoutput",
-              buf,
-              2048,
-              ImVec2(0, 0),
-              ImGuiInputTextFlags_ReadOnly);
-          ImGui::PopStyleColor();
-        } else {
-          ImGui::PushStyleColor(0, ImVec4(0.1f, 0.9f, 0.1f, 1.0f));
-          ImGui::InputTextMultiline(
-              "##logoutput",
-              "Loaded project successfully!",
-              2048,
-              ImVec2(0, 0),
-              ImGuiInputTextFlags_ReadOnly);
-          ImGui::PopStyleColor();
-        }
-      } else {
-        ImGui::PushStyleColor(0, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
-        ImGui::InputTextMultiline(
-            "##logoutput",
-            "No Project Loaded",
-            2048,
-            ImVec2(0, 0),
-            ImGuiInputTextFlags_ReadOnly);
+    if (m_pProject &&
+        (m_pProject->hasFailed() || m_pProject->hasRecompileFailed())) {
+      if (ImGui::Begin("Project Errors", false)) {
+        char buf[2048];
+        sprintf(
+            buf,
+            "%s",
+            m_pProject->hasFailed() ? m_pProject->getErrorMessage()
+                                    : m_pProject->getShaderCompileErrors());
+        ImGui::PushStyleColor(0, ImVec4(0.9f, 0.2f, 0.4f, 1.0f));
+
+        ImGui::TextUnformatted(buf, buf + strlen(buf));
+
         ImGui::PopStyleColor();
       }
+      ImGui::End();
     }
-    ImGui::End();
 
     // static GraphEditor::Graph graph;
     // graph.draw();
@@ -304,7 +275,7 @@ void Fluorescence::draw(
     const FrameContext& frame) {
 
   VkDescriptorSet heapDescriptorSet = m_heap.getDescriptorSet();
-  if (m_pProject && m_pProject->isReady()) {
+  if (m_pProject && m_pProject->isReady() && !m_bPaused) {
     m_pProject->draw(app, commandBuffer, m_heap, frame);
   }
 
