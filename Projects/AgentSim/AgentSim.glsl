@@ -227,10 +227,10 @@ void CS_SolveShapes() {
         localPos.x * conjRestPose.x - localPos.y * conjRestPose.y,
         localPos.x * conjRestPose.y + localPos.x * conjRestPose.y);
 
-    avgX += unrotated / count;
+    avgX += unrotated;// / count;
   }
 
-  float avgDTheta = atan(avgX.y, avgX.x);
+  float avgDTheta = 0.0;//atan(avgX.y, avgX.x);
   avgX = normalize(avgX);
 
   float dtheta = 2.0 * PI / count;
@@ -246,11 +246,11 @@ void CS_SolveShapes() {
     
     vec2 localPos = vec2(c, s) * r;//shapeBuffer[shapeIdx].agents[i].restPose;
     
-    localPos = 
+ /* localPos = 
       vec2(
         restPose.x * avgX.x - restPose.y * avgX.y,
         restPose.x * avgX.y + restPose.x * avgX.y);
-
+*/
     float k = 0.1 + 0.4;// * wave(1.3, 3. * shapeIdx);
     vec2 curPos = getPos(agentIdx);
     // vec2 targetPos = avgPos + 0.025 * vec2(c, s) * (0.5 * sin(i * shapeIdx) + cos(shapeIdx));

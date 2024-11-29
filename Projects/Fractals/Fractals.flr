@@ -1,0 +1,27 @@
+# TODO image resources
+uint IMAGE_SIZE_X: 1440
+uint IMAGE_SIZE_Y: 1280
+uint IMAGE_PIXEL_COUNT: 1843200
+
+struct GlobalState {
+  vec2 pan;
+  float zoom;
+  float padding;
+}
+struct_size: 16
+
+struct Pixel {
+  uint iterations;
+}
+struct_size: 4
+
+structured_buffer globalStateBuffer: GlobalState 1
+# structured_buffer pixelBuffer: Pixel IMAGE_PIXEL_COUNT 
+
+compute_shader CS_HandleInput: 1 1 1
+
+compute_dispatch: CS_HandleInput 1 1 1
+barrier: globalStateBuffer
+
+display_pass:
+  draw: VS_FractalDisplay PS_FractalDisplay 3 1
