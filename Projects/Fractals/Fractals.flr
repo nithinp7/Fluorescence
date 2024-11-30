@@ -2,6 +2,7 @@
 uint IMAGE_SIZE_X: 1440
 uint IMAGE_SIZE_Y: 1280
 uint IMAGE_PIXEL_COUNT: 1843200
+float MIN_ZOOM: 0.5
 
 struct GlobalState {
   vec2 pan;

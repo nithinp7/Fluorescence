@@ -30,6 +30,9 @@ Project::Project(
   if (m_parsed.m_failed)
     return;
 
+  m_parsed.m_constUints.push_back({ "SCREEN_WIDTH", app.getSwapChainExtent().width });
+  m_parsed.m_constUints.push_back({ "SCREEN_HEIGHT", app.getSwapChainExtent().height });
+
   std::filesystem::path projPath_(projPath);
   std::filesystem::path projName = projPath_.stem();
   std::filesystem::path folder = projPath_.parent_path();

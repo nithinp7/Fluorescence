@@ -104,5 +104,5 @@ compute_dispatch: CS_SolveShapes MAX_SHAPE_COUNT 1 1
 barrier: posBuffer prevPosBuffer
 
 display_pass:
-#  draw: VS_AgentSimDisplay PS_UvTest 3 1
+  draw: VS_AgentSimDisplay PS_UvTest 3 1
   draw: VS_Circle PS_Circle CIRCLE_VERTS agentCount
