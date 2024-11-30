@@ -1,8 +1,9 @@
-# AltheaDemo
+# Fluorescence
 
-This is a simple template project using the [Althea Rendering API](https://github.com/nithinp7/Althea). This project contains a simple demo scene with shadow-mapped point lights, PBR image-based ambient light, and a few glTFs that are contained in the engine
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Fractal.png"/>
 
-<p float="left">
-<img src="https://github.com/nithinp7/AltheaDemo/blob/main/Screenshots/PointLights.gif" height=450/>
-<img src="https://github.com/nithinp7/AltheaDemo/blob/main/Screenshots/PointLights2.gif" height=450/>
-</p>
+Fluorescence is an application for making generative shader art and GPU driven simulations. It uses a custom text-based project format (".flr") which declares structures, buffers, and shaders, along with the sequence of GPU tasks performed each frame. 
+
+The application is built on top of my rendering engine, [Althea](https://github.com/nithinp7/Althea).
+
+More demo projects, screenshots, and proper documentation for the ".flr" format to come.
