@@ -139,7 +139,7 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
       // Display the Open dialog box.
 
       if (GetOpenFileName(&ofn)) {
-        strncpy(s_filename, filename, strlen(filename));
+        strncpy(s_filename, filename, 512);
         m_bReloadProject = true;
       }
     }

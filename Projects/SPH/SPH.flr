@@ -1,0 +1,58 @@
+# Smoothed Particle Hydrodynamics - 2D implementation in Fluorescence
+
+uint PARTICLE_COUNT: 500
+
+uint TILE_COUNT_X: 25
+uint TILE_COUNT_Y: 25
+uint TILE_COUNT: 1250
+
+uint PARTICLE_CIRCLE_VERTS: 48
+
+float GRAVITY: 0.01
+float DELTA_TIME: 0.01667
+
+# half of tile-width
+float PARTICLE_RADIUS: 0.01
+
+uint PACKED_POS_ENTRIES_PER_TILE: 20
+struct Tile {
+  uint packedPositions[PACKED_POS_ENTRIES_PER_TILE/2];
+  uint count;
+  uint padding;
+}
+struct_size: 48
+structured_buffer tilesBuffer: Tile TILE_COUNT 
+
+struct GlobalState {
+  bool bInitialized;
+  bool bPadding1;
+  bool bPadding2;
+  bool bPadding3;
+}
+struct_size: 4
+structured_buffer globalStateBuffer: GlobalState 1
+
+struct Vec2 {
+  vec2 v;
+}
+struct_size: 8
+structured_buffer positionBuffer: Vec2 PARTICLE_COUNT
+structured_buffer prevPositionBuffer: Vec2 PARTICLE_COUNT
+structured_buffer velocityBuffer: Vec2 PARTICLE_COUNT
+
+compute_shader CS_Initialize: 1 1 1
+compute_shader CS_UpdateParticles: 32 1 1
+compute_shader CS_ClearTiles: 32 1 1
+
+# TASKS
+compute_dispatch: CS_Initialize 1 1 1
+barrier: globalStateBuffer
+compute_dispatch: CS_ClearTiles TILE_COUNT 1 1
+barrier: tilesBuffer
+compute_dispatch: CS_UpdateParticles PARTICLE_COUNT 1 1
+barrier: positionBuffer prevPositionBuffer tilesBuffer 
+
+display_pass:
+#  draw: VS_Tiles PS_Tiles 3 1
+  draw: VS_Tiles PS_TilesDensity 3 1
+  draw: VS_Particles PS_Particles PARTICLE_CIRCLE_VERTS PARTICLE_COUNT

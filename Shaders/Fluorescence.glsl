@@ -2,6 +2,7 @@
 #include <../Include/Shared/CommonStructures.h>
 #include <Misc/Input.glsl>
 #include <Bindless/GlobalHeap.glsl>
+#include <Misc/Constants.glsl>
 
 layout(set = 1, binding = 0) uniform _FlrUniforms{
   FlrUniforms uniforms;
@@ -13,6 +14,20 @@ vec2 VS_FullScreen() {
   vec2 screenPos = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
   gl_Position = vec4(screenPos * 2.0f - 1.0f, 0.0f, 1.0f);
   return screenPos;
+}
+
+vec2 VS_Circle(uint vertexIdx, vec2 pos, float radius, uint circleVerts) {
+  float dtheta = 2.0 * PI * 3.0 / circleVerts;
+
+  if ((vertexIdx % 3) < 2) {
+    uint tidx = vertexIdx / 3;
+    float theta = (tidx + (vertexIdx % 3)) * dtheta;
+    float c = cos(theta);
+    float s = sin(theta);
+    pos += radius * vec2(c, s);
+  }
+
+  return pos;
 }
 
 #endif // IS_VERTEX_SHADER
