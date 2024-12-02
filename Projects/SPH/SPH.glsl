@@ -14,6 +14,7 @@ int getTileIdxFromUv(vec2 uv) {
   return getTileIdxFromCoord(coord);
 }
 
+// reference: Monaghan 1992
 float W(float r) {
   const float h = PARTICLE_RADIUS;
   const float o = 1.0 / PI / h / h / h;
@@ -34,6 +35,7 @@ float W(float r) {
   }
 }
 
+// reference: Monaghan 1992
 float W_2D(float r) {
   const float h = PARTICLE_RADIUS;
   const float o = 10.0 / 7.0 / PI / h / h;
@@ -54,6 +56,81 @@ float W_2D(float r) {
   }
 }
 
+vec2 unpackPosFromTile(ivec2 tileCoord, uint slot) {
+  vec2 tileCoordf = vec2(tileCoord);
+  uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
+  
+  uint packed = tilesBuffer[tileIdx].packedPositions[slot/2];
+  packed = (packed >> ((slot & 1) << 4)) & 0xFFFF;
+  uvec2 qpos = uvec2(packed >> 8, packed & 0xFF);
+  vec2 particlePos = (tileCoordf + qpos / 256.0) / vec2(TILE_COUNT_X, TILE_COUNT_Y);
+  
+  return particlePos;
+}
+
+vec2 unpackVelocityFromTile(ivec2 tileCoord, uint slot) {
+  uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
+  return unpackHalf2x16(tilesBuffer[tileIdx].packedVelocities[slot]);
+}
+
+float sampleDensity(vec2 pos) {
+  float density = 0.0;
+
+  // choose four adjacent tiles, based on which quadrant within the 
+  // current tile the pixel resides
+  vec2 pixelTileCoord = vec2(pos * vec2(TILE_COUNT_X, TILE_COUNT_Y));
+  ivec2 tileCoordStart = 
+    ivec2(pixelTileCoord) - ivec2(1) + ivec2(round(fract(pixelTileCoord)));
+  for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) {
+    ivec2 tileCoord = tileCoordStart + ivec2(i, j);
+    if (tileCoord.x < 0 || tileCoord.y < 0 ||
+        tileCoord.x >= TILE_COUNT_X || tileCoord.y >= TILE_COUNT_Y) {
+      continue;
+    }
+  
+    uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
+    uint count = tilesBuffer[tileIdx].count;
+    for (uint k = 0; k < count; k++) {
+      vec2 particlePos = unpackPosFromTile(tileCoord, k);
+      vec2 diff = particlePos - pos;
+      float r = sqrt(dot(diff, diff));
+      float w = W_2D(r);
+      density += PARTICLE_MASS * w;
+    }
+  }
+
+  return density;
+}
+
+vec2 sampleVelocity(vec2 pos) {
+  vec2 velocity = vec2(0.0);
+
+  // choose four adjacent tiles, based on which quadrant within the 
+  // current tile the pixel resides
+  vec2 pixelTileCoord = vec2(pos * vec2(TILE_COUNT_X, TILE_COUNT_Y));
+  ivec2 tileCoordStart = 
+    ivec2(pixelTileCoord) - ivec2(1) + ivec2(round(fract(pixelTileCoord)));
+  for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) {
+    ivec2 tileCoord = tileCoordStart + ivec2(i, j);
+    if (tileCoord.x < 0 || tileCoord.y < 0 ||
+        tileCoord.x >= TILE_COUNT_X || tileCoord.y >= TILE_COUNT_Y) {
+      continue;
+    }
+  
+    uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
+    uint count = tilesBuffer[tileIdx].count;
+    for (uint k = 0; k < count; k++) {
+      vec2 particlePos = unpackPosFromTile(tileCoord, k);
+      vec2 diff = particlePos - pos;
+      float r = sqrt(dot(diff, diff));
+      float w = W_2D(r);
+      velocity += w * unpackVelocityFromTile(tileCoord, k);
+    }
+  }
+
+  return velocity;
+}
+
 ////////////////////////// COMPUTE SHADERS //////////////////////////
 
 #ifdef IS_COMP_SHADER
@@ -68,7 +145,7 @@ void CS_Initialize() {
     vec2 pos = randVec2(seed);
     positionBuffer[i].v = pos;
     prevPositionBuffer[i].v = pos;
-    velocityBuffer[i].v = vec2(0.0);
+    velocityBuffer[i].v = 0.05 * randVec2(seed);
   }
   
   state.bInitialized = true;
@@ -82,7 +159,7 @@ void CS_ClearTiles() {
   
   tilesBuffer[tileIdx].count = 0;
 
-  for (uint i = 0; i < PACKED_POS_ENTRIES_PER_TILE/2; i++) {
+  for (uint i = 0; i < PACKED_PARTICLES_PER_TILE/2; i++) {
     tilesBuffer[tileIdx].packedPositions[i] = 0;
   }
 }
@@ -123,6 +200,8 @@ void CS_UpdateParticles() {
   packed = packed << ((slot & 1) << 4);
 
   atomicOr(tilesBuffer[tileIdx].packedPositions[slot / 2], packed);
+
+  tilesBuffer[tileIdx].packedVelocities[slot] = packHalf2x16(vel);
 }
 
 #endif // IS_COMP_SHADER
@@ -168,39 +247,9 @@ void PS_Tiles() {
 }
 
 void PS_TilesDensity() {
-  float density = 0.0;
-
-  // choose four adjacent tiles, based on which quadrant within the 
-  // current tile the pixel resides
-  vec2 pixelTileCoord = vec2(inScreenUv * vec2(TILE_COUNT_X, TILE_COUNT_Y));
-  ivec2 tileCoordStart = 
-    ivec2(pixelTileCoord) - ivec2(1) + ivec2(round(fract(pixelTileCoord)));
-  for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) {
-    ivec2 tileCoord = tileCoordStart + ivec2(i, j);
-    if (tileCoord.x < 0 || tileCoord.y < 0 ||
-        tileCoord.x >= TILE_COUNT_X || tileCoord.y >= TILE_COUNT_Y) {
-      continue;
-    }
-
-    vec2 tileCoordf = vec2(tileCoord);
-
-    uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
-    uint count = tilesBuffer[tileIdx].count;
-    for (uint k = 0; k < count; k++) {
-      uint packed = tilesBuffer[tileIdx].packedPositions[k/2];
-      packed = (packed >> ((k & 1) << 4)) & 0xFFFF;
-      uvec2 qpos = uvec2(packed >> 8, packed & 0xFF);
-      vec2 particlePos = (tileCoordf + qpos / 256.0) / vec2(TILE_COUNT_X, TILE_COUNT_Y);
-      vec2 diff = pos - inScreenUv;
-      float r2 = dot(diff, diff);
-
-      float w = W_2D(sqrt(r2));
-      density += w;
-    }
-  }
-
-  float d = 0.001 * density;
-  outColor = vec4(vec3(d), 1.0);
+  float density = sampleDensity(inScreenUv);
+  vec2 velocity = 0.1 * normalize(sampleVelocity(inScreenUv));
+  outColor = vec4(velocity, density, 1.0);
 }
 
 void PS_Particles() {

@@ -1,6 +1,6 @@
 # Smoothed Particle Hydrodynamics - 2D implementation in Fluorescence
 
-uint PARTICLE_COUNT: 500
+uint PARTICLE_COUNT: 2000
 
 uint TILE_COUNT_X: 25
 uint TILE_COUNT_Y: 25
@@ -8,19 +8,21 @@ uint TILE_COUNT: 1250
 
 uint PARTICLE_CIRCLE_VERTS: 48
 
-float GRAVITY: 0.01
+float GRAVITY: 0.0
 float DELTA_TIME: 0.01667
 
 # half of tile-width
 float PARTICLE_RADIUS: 0.01
+float PARTICLE_MASS: 0.0001
 
-uint PACKED_POS_ENTRIES_PER_TILE: 20
+uint PACKED_PARTICLES_PER_TILE: 20
 struct Tile {
-  uint packedPositions[PACKED_POS_ENTRIES_PER_TILE/2];
+  uint packedPositions[PACKED_PARTICLES_PER_TILE/2];
+  uint packedVelocities[PACKED_PARTICLES_PER_TILE];
   uint count;
   uint padding;
 }
-struct_size: 48
+struct_size: 128
 structured_buffer tilesBuffer: Tile TILE_COUNT 
 
 struct GlobalState {
