@@ -11,13 +11,7 @@ struct GlobalState {
 }
 struct_size: 16
 
-struct Pixel {
-  uint iterations;
-}
-struct_size: 4
-
 structured_buffer globalStateBuffer: GlobalState 1
-# structured_buffer pixelBuffer: Pixel IMAGE_PIXEL_COUNT 
 
 compute_shader CS_HandleInput: 1 1 1
 

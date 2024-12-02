@@ -1,6 +1,6 @@
 # Smoothed Particle Hydrodynamics - 2D implementation in Fluorescence
 
-uint PARTICLE_COUNT: 2000
+uint PARTICLE_COUNT: 500
 
 uint TILE_COUNT_X: 25
 uint TILE_COUNT_Y: 25

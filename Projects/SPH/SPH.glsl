@@ -1,77 +1,10 @@
+// defines SPH kernels
+#include "Kernels.glsl"
+// defines tile packing / unpacking helpers
+// - fp16 velocities, R8G8 quantized positions
+#include "TileHelpers.glsl"
+
 #include <Misc/Sampling.glsl>
-
-#define TILE_WIDTH (1.0 / TILE_COUNT_X)
-#define TILE_HEIGHT (1.0 / TILE_COUNT_Y)
-
-int getTileIdxFromCoord(ivec2 coord) {
-  coord.x = clamp(coord.x, 0, TILE_COUNT_X - 1);
-  coord.y = clamp(coord.y, 0, TILE_COUNT_Y - 1);
-  return coord.y * TILE_COUNT_X + coord.x;
-}
-
-int getTileIdxFromUv(vec2 uv) {
-  ivec2 coord = ivec2(uv * vec2(TILE_COUNT_X, TILE_COUNT_Y));
-  return getTileIdxFromCoord(coord);
-}
-
-// reference: Monaghan 1992
-float W(float r) {
-  const float h = PARTICLE_RADIUS;
-  const float o = 1.0 / PI / h / h / h;
-  float r_h = r / h;
-
-  if (r_h > 2.0)
-    return 0.0;
-  
-  if (r_h <= 1.0) {
-    float r_h_2 = r_h * r_h;
-    float r_h_3 = r_h_2 * r_h;
-    return o * (1.0 - 1.5 * r_h_2 + 0.75 * r_h_3);
-  }
-  else 
-  {
-    float t = 2.0 - r_h;
-    return o * (0.25 * t * t * t);
-  }
-}
-
-// reference: Monaghan 1992
-float W_2D(float r) {
-  const float h = PARTICLE_RADIUS;
-  const float o = 10.0 / 7.0 / PI / h / h;
-  float r_h = r / h;
-
-  if (r_h > 2.0)
-    return 0.0;
-  
-  if (r_h <= 1.0) {
-    float r_h_2 = r_h * r_h;
-    float r_h_3 = r_h_2 * r_h;
-    return o * (1.0 - 1.5 * r_h_2 + 0.75 * r_h_3);
-  }
-  else 
-  {
-    float t = 2.0 - r_h;
-    return o * (0.25 * t * t * t);
-  }
-}
-
-vec2 unpackPosFromTile(ivec2 tileCoord, uint slot) {
-  vec2 tileCoordf = vec2(tileCoord);
-  uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
-  
-  uint packed = tilesBuffer[tileIdx].packedPositions[slot/2];
-  packed = (packed >> ((slot & 1) << 4)) & 0xFFFF;
-  uvec2 qpos = uvec2(packed >> 8, packed & 0xFF);
-  vec2 particlePos = (tileCoordf + qpos / 256.0) / vec2(TILE_COUNT_X, TILE_COUNT_Y);
-  
-  return particlePos;
-}
-
-vec2 unpackVelocityFromTile(ivec2 tileCoord, uint slot) {
-  uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
-  return unpackHalf2x16(tilesBuffer[tileIdx].packedVelocities[slot]);
-}
 
 float sampleDensity(vec2 pos) {
   float density = 0.0;
@@ -91,7 +24,8 @@ float sampleDensity(vec2 pos) {
     uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
     uint count = tilesBuffer[tileIdx].count;
     for (uint k = 0; k < count; k++) {
-      vec2 particlePos = unpackPosFromTile(tileCoord, k);
+      uint tileAddr = (tileIdx << 4) | k;
+      vec2 particlePos = unpackPosFromTileAddr(tileAddr);
       vec2 diff = particlePos - pos;
       float r = sqrt(dot(diff, diff));
       float w = W_2D(r);
@@ -120,11 +54,12 @@ vec2 sampleVelocity(vec2 pos) {
     uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
     uint count = tilesBuffer[tileIdx].count;
     for (uint k = 0; k < count; k++) {
-      vec2 particlePos = unpackPosFromTile(tileCoord, k);
+      uint tileAddr = (tileIdx << 4) | k;
+      vec2 particlePos = unpackPosFromTileAddr(tileAddr);
       vec2 diff = particlePos - pos;
       float r = sqrt(dot(diff, diff));
       float w = W_2D(r);
-      velocity += w * unpackVelocityFromTile(tileCoord, k);
+      velocity += w * unpackVelocityFromTileAddr(tileAddr);
     }
   }
 
@@ -184,24 +119,7 @@ void CS_UpdateParticles() {
   positionBuffer[particleIdx].v = nextPos;
   prevPositionBuffer[particleIdx].v = prevPos;
 
-  vec2 tileCoordf = nextPos * vec2(TILE_COUNT_X, TILE_COUNT_Y);
-  ivec2 tileCoord = ivec2(tileCoordf);
-  tileCoord.x = clamp(tileCoord.x, 0, TILE_COUNT_X - 1);
-  tileCoord.y = clamp(tileCoord.y, 0, TILE_COUNT_Y - 1);
-  uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
-  uint slot = atomicAdd(tilesBuffer[tileIdx].count, 1);
-
-  vec2 relPos = tileCoordf - vec2(tileCoord);
-  relPos *= 256.0;
-  uvec2 quantizedPos = uvec2(relPos);
-  quantizedPos.x = clamp(quantizedPos.x, 0, 255);
-  quantizedPos.y = clamp(quantizedPos.y, 0, 255);
-  uint packed = (quantizedPos.x << 8) | quantizedPos.y;
-  packed = packed << ((slot & 1) << 4);
-
-  atomicOr(tilesBuffer[tileIdx].packedPositions[slot / 2], packed);
-
-  tilesBuffer[tileIdx].packedVelocities[slot] = packHalf2x16(vel);
+  insertPosVelToTile(nextPos, vel);
 }
 
 #endif // IS_COMP_SHADER
@@ -248,6 +166,7 @@ void PS_Tiles() {
 
 void PS_TilesDensity() {
   float density = sampleDensity(inScreenUv);
+  density *= density;
   vec2 velocity = 0.1 * normalize(sampleVelocity(inScreenUv));
   outColor = vec4(velocity, density, 1.0);
 }
