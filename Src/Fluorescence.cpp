@@ -177,6 +177,10 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
       ImGui::End();
     }
 
+    if (m_pProject && m_pProject->isReady()) {
+      m_pProject->tick(app, frame);
+    }
+
     // static GraphEditor::Graph graph;
     // graph.draw();
 

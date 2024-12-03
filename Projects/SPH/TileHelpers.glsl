@@ -41,6 +41,9 @@ uint insertPosVelToTile(vec2 pos, vec2 vel) {
   uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
   uint slot = atomicAdd(tilesBuffer[tileIdx].count, 1);
 
+  if (slot >= PACKED_PARTICLES_PER_TILE)
+    return ~0;
+
   vec2 relPos = tileCoordf - vec2(tileCoord);
   relPos *= 256.0;
   uvec2 qpos = uvec2(relPos);
@@ -55,4 +58,8 @@ uint insertPosVelToTile(vec2 pos, vec2 vel) {
 
   // TODO shader-assert here about tile size
   return (tileIdx << 4) | slot;
+}
+
+uint getParticleCountFromTile(uint tileIdx) {
+  return min(tilesBuffer[tileIdx].count, PACKED_PARTICLES_PER_TILE-1);
 }

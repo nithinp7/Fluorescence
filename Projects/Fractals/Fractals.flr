@@ -4,6 +4,8 @@ uint IMAGE_SIZE_Y: 1280
 uint IMAGE_PIXEL_COUNT: 1843200
 float MIN_ZOOM: 0.5
 
+slider_float TEST_SLIDER: 3.0 1.0 10.0
+
 struct GlobalState {
   vec2 pan;
   float zoom;

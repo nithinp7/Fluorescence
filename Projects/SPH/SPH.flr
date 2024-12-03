@@ -1,6 +1,6 @@
 # Smoothed Particle Hydrodynamics - 2D implementation in Fluorescence
 
-uint PARTICLE_COUNT: 500
+uint PARTICLE_COUNT: 5000
 
 uint TILE_COUNT_X: 25
 uint TILE_COUNT_Y: 25
@@ -13,7 +13,14 @@ float DELTA_TIME: 0.01667
 
 # half of tile-width
 float PARTICLE_RADIUS: 0.01
-float PARTICLE_MASS: 0.0001
+
+# TODO - dynamic mass per particle
+float PARTICLE_MASS: 0.001
+
+# TODO - tune these
+slider_float EOS_SOLVER_STIFFNESS: 0.5 0.0 1.0
+slider_float EOS_SOLVER_COMPRESSIBILITY: 5.0 1.0 6.0
+slider_float EOS_SOLVER_REST_DENSITY: 2.5 1.0 5.0
 
 uint PACKED_PARTICLES_PER_TILE: 20
 struct Tile {

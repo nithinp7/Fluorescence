@@ -2,6 +2,7 @@
 
 #include <Althea/BufferUtilities.h>
 #include <Althea/DescriptorSet.h>
+#include <Althea/Gui.h>
 #include <Althea/ResourcesAssignment.h>
 #include <Althea/SingleTimeCommandBuffer.h>
 #include <stdio.h>
@@ -24,14 +25,17 @@ Project::Project(
     const char* projPath)
     : m_parsed(projPath),
       m_displayPassIdx(0),
+      m_bHasDynamicData(false),
       m_failedShaderCompile(false),
       m_shaderCompileErrMsg() {
   // TODO: split out resource creation vs code generation
   if (m_parsed.m_failed)
     return;
 
-  m_parsed.m_constUints.push_back({ "SCREEN_WIDTH", app.getSwapChainExtent().width });
-  m_parsed.m_constUints.push_back({ "SCREEN_HEIGHT", app.getSwapChainExtent().height });
+  m_parsed.m_constUints.push_back(
+      {"SCREEN_WIDTH", app.getSwapChainExtent().width});
+  m_parsed.m_constUints.push_back(
+      {"SCREEN_HEIGHT", app.getSwapChainExtent().height});
 
   std::filesystem::path projPath_(projPath);
   std::filesystem::path projName = projPath_.stem();
@@ -63,10 +67,55 @@ Project::Project(
         0);
   }
 
+  m_bHasDynamicData =
+      !m_parsed.m_sliderUints.empty() || !m_parsed.m_sliderInts.empty() ||
+      !m_parsed.m_sliderFloats.empty() || !m_parsed.m_checkboxes.empty();
+  if (m_bHasDynamicData) {
+    size_t size = 0;
+    size += 4 * m_parsed.m_sliderUints.size();
+    size += 4 * m_parsed.m_sliderInts.size();
+    size += 4 * m_parsed.m_sliderFloats.size();
+    size += m_parsed.m_checkboxes.size();
+    if (size % 64) {
+      size += 64 - (size % 64);
+    }
+
+    size_t offset = 0;
+
+    m_dynamicDataBuffer.resize(size);
+    for (auto& uslider : m_parsed.m_sliderUints) {
+      uslider.pValue = reinterpret_cast<uint32_t*>(m_dynamicDataBuffer.data() + offset);
+      *uslider.pValue = uslider.defaultValue;
+      offset += 4;
+    }
+    for (auto& islider : m_parsed.m_sliderInts) {
+      islider.pValue = reinterpret_cast<int*>(m_dynamicDataBuffer.data() + offset);
+      *islider.pValue = islider.defaultValue;
+      offset += 4;
+    }
+    for (auto& fslider : m_parsed.m_sliderFloats) {
+      fslider.pValue = reinterpret_cast<float*>(m_dynamicDataBuffer.data() + offset);
+      *fslider.pValue = fslider.defaultValue;
+      offset += 4;
+    }
+    for (auto& checkbox : m_parsed.m_checkboxes) {
+      checkbox.pValue = reinterpret_cast<bool*>(m_dynamicDataBuffer.data() + offset);
+      *checkbox.pValue = checkbox.defaultValue;
+      offset++;
+    }
+
+    m_dynamicUniforms = DynamicBuffer(app, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, size);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+      m_dynamicUniforms.updateData(i, m_dynamicDataBuffer);
+  }
+
   DescriptorSetLayoutBuilder dsBuilder{};
   dsBuilder.addUniformBufferBinding();
   for (const BufferAllocation& b : m_buffers) {
     dsBuilder.addStorageBufferBinding(VK_SHADER_STAGE_ALL);
+  }
+  if (m_bHasDynamicData) {
+    dsBuilder.addUniformBufferBinding();
   }
 
   m_descriptorSets = PerFrameResources(app, dsBuilder);
@@ -118,6 +167,29 @@ Project::Project(
           parsedBuf.name.c_str(),
           structdef.name.c_str(),
           parsedBuf.name.c_str());
+    }
+
+    if (m_bHasDynamicData) {
+      assign.bindTransientUniforms(m_dynamicUniforms);
+      
+      CODE_APPEND(
+        "\nlayout(set=1, binding=%u) uniform _UserUniforms {\n",
+        slot++);
+
+      for (const auto& uslider : m_parsed.m_sliderUints) {
+        CODE_APPEND("\tuint %s;\n", uslider.name.c_str());
+      }
+      for (const auto& islider : m_parsed.m_sliderInts) {
+        CODE_APPEND("\tint %s;\n", islider.name.c_str());
+      }
+      for (const auto& fslider : m_parsed.m_sliderFloats) {
+        CODE_APPEND("\tfloat %s;\n", fslider.name.c_str());
+      }
+      for (const auto& checkbox : m_parsed.m_checkboxes) {
+        CODE_APPEND("\tbool %s;\n", checkbox.name.c_str());
+      }
+
+      CODE_APPEND("};\n\n");
     }
   }
 
@@ -291,6 +363,63 @@ Project::Project(
   }
 }
 
+void Project::tick(Application& app, const FrameContext& frame) {
+  if (m_bHasDynamicData && !app.getInputManager().getMouseCursorHidden()) {
+    if (ImGui::Begin("Options", false)) {
+      // TODO: cache UI order to avoid linear scans each time...
+      uint32_t uiIdx = 0;
+      char nameBuf[128];
+      
+      auto drawUiElem = [&]() -> bool {
+        for (const auto& uslider : m_parsed.m_sliderUints) {
+          if (uslider.uiIdx == uiIdx) {
+            ImGui::Text(uslider.name.c_str());
+            sprintf(nameBuf, "##%s_%u", uslider.name.c_str(), uiIdx);
+            int v = static_cast<int>(*uslider.pValue);
+            if (ImGui::SliderInt(nameBuf, &v, uslider.min, uslider.max)) {
+              *uslider.pValue = static_cast<uint32_t>(v);
+            }
+            return true;
+          }
+        }
+        for (const auto& islider : m_parsed.m_sliderInts) {
+          if (islider.uiIdx == uiIdx) {
+            ImGui::Text(islider.name.c_str());
+            sprintf(nameBuf, "##%s_%u", islider.name.c_str(), uiIdx);
+            ImGui::SliderInt(nameBuf, islider.pValue, islider.min, islider.max);
+            return true;
+          }
+        }
+        for (const auto& fslider : m_parsed.m_sliderFloats) {
+          if (fslider.uiIdx == uiIdx) {
+            ImGui::Text(fslider.name.c_str());
+            sprintf(nameBuf, "##%s_%u", fslider.name.c_str(), uiIdx);
+            ImGui::SliderFloat(nameBuf, fslider.pValue, fslider.min, fslider.max);
+            return true;
+          }
+        }
+        for (const auto& checkbox : m_parsed.m_checkboxes) {
+          if (checkbox.uiIdx == uiIdx) {
+            ImGui::Text(checkbox.name.c_str());
+            sprintf(nameBuf, "##%s_%u", checkbox.name.c_str(), uiIdx);
+            ImGui::Checkbox(nameBuf, checkbox.pValue);
+            return true;
+          }
+        }
+        return false;
+      };
+      while (drawUiElem()) {
+        uiIdx++;
+      }
+
+    }
+
+    ImGui::End();
+
+    m_dynamicUniforms.updateData(frame.frameRingBufferIndex, m_dynamicDataBuffer);
+  }
+}
+
 void Project::draw(
     Application& app,
     VkCommandBuffer commandBuffer,
@@ -405,6 +534,7 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
   char lineBuf[1024];
 
   uint32_t lineNumber = 0;
+  uint32_t uiIdx = 0;
 
 #define PARSER_VERIFY(X, MSG)                                                  \
   if (!(X)) {                                                                  \
@@ -465,6 +595,21 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
       while (parseChar('_') || parseLetter() || parseDigit())
         ;
       return std::string_view(c0, c - c0);
+    };
+
+    auto parseBool = [&]() -> std::optional<bool> {
+      char* c0 = c;
+      auto word = parseName();
+      if (!word)
+        return std::nullopt;
+
+      if (word->size() == 4 && !strncmp(word->data(), "true", 4))
+        return true;
+      else if (word->size() == 5 && !strncmp(word->data(), "false", 5))
+        return false;
+
+      c = c0;
+      return std::nullopt;
     };
 
     auto parseUint = [&]() -> std::optional<uint32_t> {
@@ -615,6 +760,67 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
       PARSER_VERIFY(arg0, "Could not parse const float.");
 
       m_constFloats.push_back({std::string(*name), *arg0});
+
+      break;
+    }
+    case I_SLIDER_UINT: {
+      PARSER_VERIFY(name, "Could not parse name for uint slider.");
+
+      auto value = parseUint();
+      PARSER_VERIFY(value, "Could not parse default value for uint slider.");
+      parseWhitespace();
+
+      auto min = parseUint();
+      PARSER_VERIFY(value, "Could not parse min value for uint slider.");
+      parseWhitespace();
+
+      auto max = parseUint();
+      PARSER_VERIFY(value, "Could not parse max value for uint slider.");
+
+      m_sliderUints.push_back({std::string(*name), *value, *min, *max, uiIdx++, nullptr});
+      break;
+    }
+    case I_SLIDER_INT: {
+      PARSER_VERIFY(name, "Could not parse name for int slider.");
+
+      auto value = parseInt();
+      PARSER_VERIFY(value, "Could not parse default value for int slider.");
+      parseWhitespace();
+
+      auto min = parseInt();
+      PARSER_VERIFY(value, "Could not parse min value for int slider.");
+      parseWhitespace();
+
+      auto max = parseInt();
+      PARSER_VERIFY(value, "Could not parse max value for int slider.");
+
+      m_sliderInts.push_back({std::string(*name), *value, *min, *max, uiIdx++, nullptr });
+      break;
+    }
+    case I_SLIDER_FLOAT: {
+      PARSER_VERIFY(name, "Could not parse name for float slider.");
+
+      auto value = parseFloat();
+      PARSER_VERIFY(value, "Could not parse default value for float slider.");
+      parseWhitespace();
+
+      auto min = parseFloat();
+      PARSER_VERIFY(value, "Could not parse min value for float slider.");
+      parseWhitespace();
+
+      auto max = parseFloat();
+      PARSER_VERIFY(value, "Could not parse max value for float slider.");
+
+      m_sliderFloats.push_back({std::string(*name), *value, *min, *max, uiIdx++, nullptr });
+      break;
+    }
+    case I_CHECKBOX: {
+      PARSER_VERIFY(name, "Could not parse name for checkbox.");
+
+      auto value = parseBool();
+      PARSER_VERIFY(value, "Could not parse default value for checkbox.");
+
+      m_checkboxes.push_back({std::string(*name), *value, uiIdx++, nullptr });
 
       break;
     }

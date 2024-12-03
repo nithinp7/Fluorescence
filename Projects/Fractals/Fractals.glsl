@@ -110,8 +110,9 @@ void PS_FractalDisplay() {
       // else
       // slow gentle wave
       float c = 0.01;
-      z *= 0.7 + 0.01 * wave(3.0  + c * z.y  + c * z.x, z.y * 0.1 + z.x);
-      
+      // z *= 0.7 + 0.01 * wave(3.0  + c * z.y  + c * z.x, z.y * 0.1 + z.x);
+      // z *= 0.7 + 0.01 * wave(3.0  + c * z.y  + c * z.x, z.y * 0.1 + z.x);
+      z *= 0.7 + 0.01 * wave(TEST_SLIDER  + c * z.y  + c * z.x, z.y * 0.1 + z.x);
       // uvec2 seed = uvec2(jumps - 1, jumps);      
       // z += 0.0001 * (2.0 * randVec2(seed) - vec2(1.0));
       

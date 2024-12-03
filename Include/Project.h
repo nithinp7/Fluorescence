@@ -43,6 +43,44 @@ struct ParsedFlr {
   };
   std::vector<ConstFloat> m_constFloats;
 
+  struct SliderUint {
+    std::string name;
+    uint32_t defaultValue;
+    uint32_t min;
+    uint32_t max;
+    uint32_t uiIdx;
+    uint32_t* pValue;
+  };
+  std::vector<SliderUint> m_sliderUints;
+
+  struct SliderInt {
+    std::string name;
+    int defaultValue;
+    int min;
+    int max;
+    uint32_t uiIdx;
+    int* pValue;
+  };
+  std::vector<SliderInt> m_sliderInts;
+
+  struct SliderFloat {
+    std::string name;
+    float defaultValue;
+    float min;
+    float max;
+    uint32_t uiIdx;
+    float* pValue;
+  };
+  std::vector<SliderFloat> m_sliderFloats;
+
+  struct Checkbox {
+    std::string name;
+    bool defaultValue;
+    uint32_t uiIdx;
+    bool* pValue;
+  };
+  std::vector<Checkbox> m_checkboxes;
+
   struct StructDef {
     std::string name;
     std::string body;
@@ -112,6 +150,10 @@ struct ParsedFlr {
     I_CONST_UINT = 0,
     I_CONST_INT,
     I_CONST_FLOAT,
+    I_SLIDER_UINT,
+    I_SLIDER_INT,
+    I_SLIDER_FLOAT,
+    I_CHECKBOX,
     I_STRUCT,
     I_STRUCT_SIZE,
     I_STRUCTURED_BUFFER,
@@ -128,6 +170,10 @@ struct ParsedFlr {
       "uint",
       "int",
       "float",
+      "slider_uint",
+      "slider_int",
+      "slider_float",
+      "checkbox",
       "struct",
       "struct_size",
       "structured_buffer",
@@ -146,6 +192,8 @@ public:
       GlobalHeap& heap,
       const TransientUniforms<FlrUniforms>& flrUniforms,
       const char* projectPath);
+
+  void tick(Application& app, const FrameContext& frame);
 
   void draw(
       Application& app,
@@ -194,8 +242,12 @@ private:
   std::vector<DrawPass> m_drawPasses;
 
   PerFrameResources m_descriptorSets;
+  DynamicBuffer m_dynamicUniforms;
+  std::vector<std::byte> m_dynamicDataBuffer;
 
   uint32_t m_displayPassIdx;
+
+  bool m_bHasDynamicData;
 
   bool m_failedShaderCompile;
   char m_shaderCompileErrMsg[2048];

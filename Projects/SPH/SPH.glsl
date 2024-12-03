@@ -22,7 +22,7 @@ float sampleDensity(vec2 pos) {
     }
   
     uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
-    uint count = tilesBuffer[tileIdx].count;
+    uint count = getParticleCountFromTile(tileIdx);
     for (uint k = 0; k < count; k++) {
       uint tileAddr = (tileIdx << 4) | k;
       vec2 particlePos = unpackPosFromTileAddr(tileAddr);
@@ -52,7 +52,7 @@ vec2 sampleVelocity(vec2 pos) {
     }
   
     uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
-    uint count = tilesBuffer[tileIdx].count;
+    uint count = getParticleCountFromTile(tileIdx);
     for (uint k = 0; k < count; k++) {
       uint tileAddr = (tileIdx << 4) | k;
       vec2 particlePos = unpackPosFromTileAddr(tileAddr);
@@ -166,9 +166,12 @@ void PS_Tiles() {
 
 void PS_TilesDensity() {
   float density = sampleDensity(inScreenUv);
-  density *= density;
+  float pressure = 
+      EOS_SOLVER_STIFFNESS * 
+        (pow(density / EOS_SOLVER_REST_DENSITY, EOS_SOLVER_COMPRESSIBILITY) - 1.0);
+  // density *= density;
   vec2 velocity = 0.1 * normalize(sampleVelocity(inScreenUv));
-  outColor = vec4(velocity, density, 1.0);
+  outColor = vec4(vec3(0.001 * pressure), 1.0);
 }
 
 void PS_Particles() {
