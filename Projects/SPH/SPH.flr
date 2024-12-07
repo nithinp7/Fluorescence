@@ -1,10 +1,13 @@
 # Smoothed Particle Hydrodynamics - 2D implementation in Fluorescence
 
 uint PARTICLE_COUNT: 5000
+uint HALF_PARTICLE_COUNT: 2500
+uint DOUBLE_PARTICLE_COUNT: 10000
 
 uint TILE_COUNT_X: 25
 uint TILE_COUNT_Y: 25
 uint TILE_COUNT: 1250
+uint DOUBLE_TILE_COUNT: 2500
 
 uint PARTICLE_CIRCLE_VERTS: 48
 
@@ -22,44 +25,77 @@ slider_float EOS_SOLVER_STIFFNESS: 0.5 0.0 1.0
 slider_float EOS_SOLVER_COMPRESSIBILITY: 5.0 1.0 6.0
 slider_float EOS_SOLVER_REST_DENSITY: 2.5 1.0 5.0
 
-uint PACKED_PARTICLES_PER_TILE: 20
-struct Tile {
-  uint packedPositions[PACKED_PARTICLES_PER_TILE/2];
-  uint packedVelocities[PACKED_PARTICLES_PER_TILE];
-  uint count;
-  uint padding;
-}
-struct_size: 128
-structured_buffer tilesBuffer: Tile TILE_COUNT 
+struct Uint { uint u; }
+struct_size: 4
 
-struct GlobalState {
-  bool bInitialized;
-  bool bPadding1;
-  bool bPadding2;
-  bool bPadding3;
+# double-buffered, each position is R8G8 quantized
+structured_buffer packedPositions: Uint PARTICLE_COUNT
+
+# double-buffered, each velocity is R16G16 half precision
+structured_buffer packedVelocities: Uint DOUBLE_PARTICLE_COUNT
+
+# double-buffered tileAddresses of each particle, maybe we can use a 
+# more compact look-up
+structured_buffer particleAddresses: Uint DOUBLE_PARTICLE_COUNT
+
+structured_buffer packedDensities: Uint HALF_PARTICLE_COUNT
+structured_buffer packedPressures: Uint HALF_PARTICLE_COUNT
+structured_buffer packedAccelerations: Uint PARTICLE_COUNT
+
+struct Tile {
+  uint offset24count8;
 }
 struct_size: 4
-structured_buffer globalStateBuffer: GlobalState 1
+# double-buffered
+structured_buffer tilesBuffer: Tile DOUBLE_TILE_COUNT 
 
-struct Vec2 {
-  vec2 v;
+# dictionary per 32 particles, helps lookup tile info from particle idx
+struct TileDict {
+  uint tileBumpMask;
+  uint startReducedTileIdx;
 }
 struct_size: 8
-structured_buffer positionBuffer: Vec2 PARTICLE_COUNT
-structured_buffer prevPositionBuffer: Vec2 PARTICLE_COUNT
-structured_buffer velocityBuffer: Vec2 PARTICLE_COUNT
+# TODO: really should be PARTICLE_COUNT / 32 ...
+# structured_buffer tileDictionaryBuffer TileDict 256
 
-compute_shader CS_Initialize: 1 1 1
-compute_shader CS_UpdateParticles: 32 1 1
+structured_buffer reducedTilesBuffer: Uint TILE_COUNT
+
+struct GlobalState {
+  uint tileEntryAllocator;
+  uint activeTileCount;
+  uint bInitialized;
+  uint bPhase;
+}
+struct_size: 16
+structured_buffer globalStateBuffer: GlobalState 1
+
+compute_shader CS_Tick: 1 1 1
 compute_shader CS_ClearTiles: 32 1 1
+compute_shader CS_UpdateParticles_Reserve: 32 1 1
+compute_shader CS_AllocateTiles: 32 1 1
+compute_shader CS_UpdateParticles_Insert: 32 1 1
+compute_shader CS_ComputeDensities: 32 1 1
+compute_shader CS_ComputePressures: 32 1 1
+compute_shader CS_ComputeAccelerations: 32 1 1
 
 # TASKS
-compute_dispatch: CS_Initialize 1 1 1
-barrier: globalStateBuffer
+compute_dispatch: CS_Tick 1 1 1
+barrier: globalStateBuffer packedPositions packedVelocities tilesBuffer particleAddresses reducedTilesBuffer
+
 compute_dispatch: CS_ClearTiles TILE_COUNT 1 1
 barrier: tilesBuffer
-compute_dispatch: CS_UpdateParticles PARTICLE_COUNT 1 1
-barrier: positionBuffer prevPositionBuffer tilesBuffer 
+compute_dispatch: CS_UpdateParticles_Reserve PARTICLE_COUNT 1 1
+barrier: tilesBuffer globalStateBuffer 
+compute_dispatch: CS_AllocateTiles TILE_COUNT 1 1
+barrier: tilesBuffer packedPositions reducedTilesBuffer
+compute_dispatch: CS_UpdateParticles_Insert PARTICLE_COUNT 1 1
+barrier: tilesBuffer packedPositions, packedVelocities particleAddresses 
+compute_dispatch: CS_ComputeDensities TILE_COUNT 1 1
+barrier: tilesBuffer 
+compute_dispatch: CS_ComputePressures TILE_COUNT 1 1
+barrier: tilesBuffer 
+compute_dispatch: CS_ComputeAccelerations TILE_COUNT 1 1
+barrier: tilesBuffer 
 
 display_pass:
 #  draw: VS_Tiles PS_Tiles 3 1

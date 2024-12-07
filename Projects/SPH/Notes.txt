@@ -1,0 +1,21 @@
+SPH IMPLEMENTATION NOTES
+
+TILING SCHEME IDEAS:
+- would be nice if tiles didn't have to hold fixed-size buckets
+- 2-pass solution with pre-sizing tiles by pseudo-inserting particles
+- second pass atomically allocates tiles. Sets of tile allocs can be done with single 
+  atomic operation with wave intrinsics
+
+GENERAL OUTLINE
+- predictor-corrector approach
+- advect velocity and positions with external forces --> predicted velocity
+- Pack resulting positions into tiles (see tiling scheme notes above)
+Once packed into tiles...
+- Pass to compute local density estimate for each particles
+- Pass to determine pressure (for EOS might be able to combine with next step)
+- Pass to determine acceleration due to pressure
+- Finally apply acceleration to predicted velocity --> final velocity 
+
+RESOURCE LAYOUT
+- need to experiment and determine which of these steps can be quantized, compressed etc 
+- density, pressure, acceleration

@@ -81,3 +81,10 @@ float grad_W_2D(float r) {
   }
 }
 
+// TODO: might want to rename file if this is going to be here...
+float computeEosPressure(float density) {
+  return
+      EOS_SOLVER_STIFFNESS * 
+        (pow(density / EOS_SOLVER_REST_DENSITY, EOS_SOLVER_COMPRESSIBILITY) - 1.0);
+}
+

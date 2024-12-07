@@ -12,37 +12,127 @@ int getTileIdxFromUv(vec2 uv) {
   return getTileIdxFromCoord(coord);
 }
 
-vec2 unpackPosFromTileAddr(uint tileAddr) {
-  uint tileIdx = tileAddr >> 4;
-  uint slot = tileAddr & 0xF;
+void getTile(uint tileIdx, out uint offset, out uint count) {
+  tileIdx += globalStateBuffer[0].bPhase * TILE_COUNT;
+  uint tile = tilesBuffer[tileIdx].offset24count8;
+  offset = tile >> 8;
+  count = tile & 0xFF;
+}
+
+// TODO: archive this bump-compressed reduced tile idx idea, there are some issues
+/*
+vec2 unpackPrevParticlePos(uint particleIdx) {
+  TileDict tileDict = subgroupBroadcast(tileDictionaryBuffer[particleIdx / 32], 0);
+  uint bTileBumped = (tileDict.tileBumpMask >> gl_SubgroupInvocationID) & 1;
+  uint redTileIdx = tileDict.startReducedTileIdx + subgroupInclusiveAdd(bTileBumped);
+  uint tileIdx = reducedTilesBuffer[redTileIdx].u;
   
-  ivec2 tileCoord = ivec2(tileIdx % TILE_COUNT_X, tileIdx / TILE_COUNT_X);
-  vec2 tileCoordf = vec2(tileCoord);
+  uint phaseParticleOffs = (1 - uint(globalStateBuffer[0].bPhase)) * PARTICLE_COUNT;
+  particleIdx += phaseOffs;
   
-  uint packed = tilesBuffer[tileIdx].packedPositions[slot/2];
-  packed = (packed >> ((slot & 1) << 4)) & 0xFFFF;
+  uint packed = packedPositions[particleIdx / 2];
+  packed = (packed >> ((particleIdx & 1) << 4)) & 0xFFFF;
   uvec2 qpos = uvec2(packed >> 8, packed & 0xFF);
-  vec2 particlePos = (tileCoordf + qpos / 256.0) / vec2(TILE_COUNT_X, TILE_COUNT_Y);
+  return (tileCoordf + qpos / 256.0) / vec2(TILE_COUNT_X, TILE_COUNT_Y);
+}*/
+
+vec2 unpackPos(uint particleIdx) {
+  particleIdx += globalStateBuffer[0].bPhase * PARTICLE_COUNT;
+  uint tileIdx = (particleAddresses[particleIdx].u >> 8) % TILE_COUNT;
+  vec2 tileCoordf = vec2(tileIdx % TILE_COUNT_X, tileIdx / TILE_COUNT_X);
+
+  uint packed = packedPositions[particleIdx / 2].u;
+  packed = (packed >> ((particleIdx & 1) << 4)) & 0xFFFF;
+  uvec2 qpos = uvec2(packed >> 8, packed & 0xFF);
+
+  return (tileCoordf + qpos / 256.0) / vec2(TILE_COUNT_X, TILE_COUNT_Y);
+}
+
+vec2 unpackVelocity(uint particleIdx) {
+  particleIdx += globalStateBuffer[0].bPhase * PARTICLE_COUNT;
+  return unpackHalf2x16(packedVelocities[particleIdx].u);
+}
+
+vec2 unpackPrevPos(uint particleIdx) {
+  particleIdx += (globalStateBuffer[0].bPhase ^ 1) * PARTICLE_COUNT;
+  uint tileIdx = (particleAddresses[particleIdx].u >> 8) % TILE_COUNT;
+  vec2 tileCoordf = vec2(tileIdx % TILE_COUNT_X, tileIdx / TILE_COUNT_X);
+
+  uint packed = packedPositions[particleIdx / 2].u;
+  packed = (packed >> ((particleIdx & 1) << 4)) & 0xFFFF;
+  uvec2 qpos = uvec2(packed >> 8, packed & 0xFF);
+  return (tileCoordf + qpos / 256.0) / vec2(TILE_COUNT_X, TILE_COUNT_Y);
+}
+
+vec2 unpackPrevVelocity(uint particleIdx) {
+  particleIdx += (globalStateBuffer[0].bPhase ^ 1) * PARTICLE_COUNT;
+  return unpackHalf2x16(packedVelocities[particleIdx].u);
+}
+
+// in: globalStateBuffer
+// out: tilesBuffer
+void clearTile(uint tileIdx) {
+  tileIdx += globalStateBuffer[0].bPhase * TILE_COUNT;
   
-  return particlePos;
+  Tile tile;
+  tile.offset24count8 = 0;
+  
+  tilesBuffer[tileIdx] = tile;
 }
 
-vec2 unpackVelocityFromTileAddr(uint tileAddr) {
-  uint tileIdx = tileAddr >> 4;
-  uint slot = tileAddr & 0xF;
-  return unpackHalf2x16(tilesBuffer[tileIdx].packedVelocities[slot]);
-}
+// in: tilesBuffer
+// out: tilesBuffer, reducedTilesBuffer, globalStateBuffer
+void reserveTileEntry(vec2 pos) {
+  uint bPhase = globalStateBuffer[0].bPhase;
 
-uint insertPosVelToTile(vec2 pos, vec2 vel) {
   vec2 tileCoordf = pos * vec2(TILE_COUNT_X, TILE_COUNT_Y);
   ivec2 tileCoord = ivec2(tileCoordf);
   tileCoord.x = clamp(tileCoord.x, 0, TILE_COUNT_X - 1);
   tileCoord.y = clamp(tileCoord.y, 0, TILE_COUNT_Y - 1);
-  uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x;
-  uint slot = atomicAdd(tilesBuffer[tileIdx].count, 1);
+  uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x + bPhase * TILE_COUNT;
 
-  if (slot >= PACKED_PARTICLES_PER_TILE)
-    return ~0;
+  uint prev = atomicAdd(tilesBuffer[tileIdx].offset24count8, 1);
+  if (prev == 0) { 
+    // if this is the first entry in the tile, need to set up a reduced
+    // tile idx
+    uint reducedIdx = atomicAdd(globalStateBuffer[0].activeTileCount, 1);
+    reducedTilesBuffer[reducedIdx].u = tileIdx;
+  }
+}
+
+// in: globalStateBuffer, tilesBuffer, reducedTilesBuffer
+// out: globalStateBuffer, tilesBuffer
+void allocateTile(uint redTileIdx) {
+  if (redTileIdx >= globalStateBuffer[0].activeTileCount)
+    return;
+
+  uint tileIdx = reducedTilesBuffer[redTileIdx].u;
+
+  Tile tile = tilesBuffer[tileIdx];
+  uint count = tile.offset24count8 & 0xFF;
+  uint offset = atomicAdd(globalStateBuffer[0].tileEntryAllocator, count);
+  uint particleStart = offset + globalStateBuffer[0].bPhase * PARTICLE_COUNT;
+  for (uint i = particleStart/2; i < (particleStart + count)/2; i++) {
+    packedPositions[i].u = 0;
+  }
+  tile.offset24count8 = offset << 8; // intentionally reset count
+  tilesBuffer[tileIdx] = tile;
+}
+
+// in: globalStateBuffer, tilesBuffer
+// out: tilesBuffer (?), packedPositions, particleAddresses
+uint insertTileEntry(vec2 pos) {
+  uint bPhase = globalStateBuffer[0].bPhase;
+
+  vec2 tileCoordf = pos * vec2(TILE_COUNT_X, TILE_COUNT_Y);
+  ivec2 tileCoord = ivec2(tileCoordf);
+  tileCoord.x = clamp(tileCoord.x, 0, TILE_COUNT_X - 1);
+  tileCoord.y = clamp(tileCoord.y, 0, TILE_COUNT_Y - 1);
+  uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x + bPhase * TILE_COUNT;
+
+  uint tileOffs = tilesBuffer[tileIdx].offset24count8 >> 8;
+  uint slot = atomicAdd(tilesBuffer[tileIdx].offset24count8, 1) & 0xFF;
+  uint particleIdx = tileOffs + slot + bPhase * PARTICLE_COUNT;
 
   vec2 relPos = tileCoordf - vec2(tileCoord);
   relPos *= 256.0;
@@ -50,16 +140,17 @@ uint insertPosVelToTile(vec2 pos, vec2 vel) {
   qpos.x = clamp(qpos.x, 0, 255);
   qpos.y = clamp(qpos.y, 0, 255);
   uint packed = (qpos.x << 8) | qpos.y;
-  packed = packed << ((slot & 1) << 4);
+  packed = packed << ((particleIdx & 1) << 4);
 
-  atomicOr(tilesBuffer[tileIdx].packedPositions[slot / 2], packed);
+  atomicOr(packedPositions[particleIdx / 2].u, packed);
 
-  tilesBuffer[tileIdx].packedVelocities[slot] = packHalf2x16(vel);
-
-  // TODO shader-assert here about tile size
-  return (tileIdx << 4) | slot;
+  particleAddresses[particleIdx].u = (tileIdx << 8) | slot;
+  
+  return particleIdx;
 }
 
-uint getParticleCountFromTile(uint tileIdx) {
-  return min(tilesBuffer[tileIdx].count, PACKED_PARTICLES_PER_TILE-1);
+// in: 
+// out: packedVelocities
+void insertVelocity(uint particleIdx, vec2 vel) {
+  packedVelocities[particleIdx].u = packHalf2x16(vel);
 }

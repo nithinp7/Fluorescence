@@ -163,8 +163,9 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
         (m_pProject->hasFailed() || m_pProject->hasRecompileFailed())) {
       if (ImGui::Begin("Project Errors", false)) {
         char buf[2048];
-        sprintf(
+        snprintf(
             buf,
+            2048,
             "%s",
             m_pProject->hasFailed() ? m_pProject->getErrorMessage()
                                     : m_pProject->getShaderCompileErrors());
