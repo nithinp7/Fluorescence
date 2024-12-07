@@ -20,8 +20,6 @@ float PARTICLE_RADIUS: 0.01
 # TODO - dynamic mass per particle
 float PARTICLE_MASS: 0.001
 
-# TODO - tune these
-
 slider_float TEST_SLIDER: 0.0 0.0 1.0
 slider_float DISPLAY_RADIUS: 0.1 0.0 1.0
 
@@ -52,15 +50,6 @@ struct Tile {
 struct_size: 4
 # double-buffered
 structured_buffer tilesBuffer: Tile DOUBLE_TILE_COUNT 
-
-# dictionary per 32 particles, helps lookup tile info from particle idx
-struct TileDict {
-  uint tileBumpMask;
-  uint startReducedTileIdx;
-}
-struct_size: 8
-# TODO: really should be PARTICLE_COUNT / 32 ...
-# structured_buffer tileDictionaryBuffer TileDict 256
 
 structured_buffer reducedTilesBuffer: Uint TILE_COUNT
 
