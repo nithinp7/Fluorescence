@@ -26,7 +26,7 @@ float sampleDensity(vec2 pos) {
     uint offset, count;
     getTile(tileIdx, offset, count);
     for (uint k = 0; k < count; k++) {
-      uint particleIdx = offset + i;
+      uint particleIdx = offset + k;
       vec2 particlePos = unpackPos(particleIdx);
       vec2 diff = particlePos - pos;
       float r = sqrt(dot(diff, diff));
@@ -57,7 +57,7 @@ vec2 sampleVelocity(vec2 pos) {
     uint offset, count;
     getTile(tileIdx, offset, count);
     for (uint k = 0; k < count; k++) {
-      uint particleIdx = offset + i;
+      uint particleIdx = offset + k;
       vec2 particlePos = unpackPos(particleIdx);
       vec2 diff = particlePos - pos;
       float r = sqrt(dot(diff, diff));
@@ -158,6 +158,13 @@ void CS_ClearTiles() {
   clearTile(tileIdx);
 }
 
+vec2 sampleAccelerationField(vec2 pos) {
+  vec2 r = vec2(wave(0.5, 3.0 * pos.x + 5.0 * pos.y), wave(0.5, 7.0 * pos.x + 2.0 * pos.y));
+  vec2 a = r * 2.0 - vec2(1.0);
+  a *= (0.001 * TEST_SLIDER) * wave(1.3, 1.0);
+  return a;
+}
+
 void CS_UpdateParticles_Reserve() {
   uint particleIdx = uint(gl_GlobalInvocationID.x);
   if (particleIdx >= PARTICLE_COUNT)
@@ -165,6 +172,7 @@ void CS_UpdateParticles_Reserve() {
 
   vec2 prevPos = unpackPrevPos(particleIdx);
   vec2 vel = unpackPrevVelocity(particleIdx);
+  vel += sampleAccelerationField(prevPos);
   vel.y += GRAVITY;
   
   // TODO: clamp velocity
@@ -191,7 +199,8 @@ void CS_UpdateParticles_Insert() {
     return;
 
   vec2 prevPos = unpackPrevPos(particleIdx);
-  vec2 vel = unpackPrevVelocity(particleIdx);
+  vec2 vel = unpackPrevVelocity(particleIdx);  
+  vel += sampleAccelerationField(prevPos);
   vel.y += GRAVITY;
   
   // TODO: clamp velocity
@@ -242,12 +251,12 @@ void VS_Tiles() {
 
 void VS_Particles() {
   vec2 particlePos = unpackPos(gl_InstanceIndex);
-  const float radius = 0.25 * PARTICLE_RADIUS;
+  const float radius = DISPLAY_RADIUS * PARTICLE_RADIUS;
   // const float radius = 0.1 * TILE_WIDTH;
   vec2 vertPos = VS_Circle(gl_VertexIndex, particlePos, radius, PARTICLE_CIRCLE_VERTS);
   outScreenUv = vertPos;
-  uvec2 seed = uvec2(gl_InstanceIndex, gl_InstanceIndex + 1);
-  outColor = randVec3(seed);
+  // uvec2 seed = uvec2(gl_InstanceIndex, gl_InstanceIndex + 1);
+  outColor = vec3(1.0,0.0, 1.0);//randVec3(seed);
   gl_Position = vec4(vertPos * 2.0f - 1.0f, 0.0f, 1.0f);
 }
 #endif // IS_VERTEX_SHADER
@@ -277,7 +286,8 @@ void PS_TilesDensity() {
         (pow(density / EOS_SOLVER_REST_DENSITY, EOS_SOLVER_COMPRESSIBILITY) - 1.0);
   // density *= density;
   vec2 velocity = 0.1 * normalize(sampleVelocity(inScreenUv));
-  outColor = vec4(vec3(0.001 * pressure), 1.0);
+  outColor = vec4(vec3(0.001 * pressure), 1.0);//, 1.0);
+  // outColor = vec4(vec3(density), 1.0);
 }
 
 void PS_Particles() {

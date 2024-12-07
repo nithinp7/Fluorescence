@@ -21,6 +21,10 @@ float PARTICLE_RADIUS: 0.01
 float PARTICLE_MASS: 0.001
 
 # TODO - tune these
+
+slider_float TEST_SLIDER: 0.0 0.0 1.0
+slider_float DISPLAY_RADIUS: 0.1 0.0 1.0
+
 slider_float EOS_SOLVER_STIFFNESS: 0.5 0.0 1.0
 slider_float EOS_SOLVER_COMPRESSIBILITY: 5.0 1.0 6.0
 slider_float EOS_SOLVER_REST_DENSITY: 2.5 1.0 5.0
