@@ -42,6 +42,7 @@ float grad_W(float r) {
 
 // reference: Monaghan 1992
 float W_2D(float r) {
+  r *= 0.5;
   const float h = PARTICLE_RADIUS;
   const float o = 10.0 / 7.0 / PI / h / h;
   float r_h = r / h;
@@ -62,6 +63,27 @@ float W_2D(float r) {
 }
 
 float grad_W_2D(float r) {
+  r *= 0.5;
+
+  const float h = PARTICLE_RADIUS;
+  const float o = 10.0 / 7.0 / PI / h / h;
+  float r_h = r / h;
+
+  if (r_h > 2.0)
+    return 0.0;
+  
+  if (r_h <= 1.0) {
+    float r_h_2 = r_h * r_h;
+    return o * (- 3.0 * r_h + 2.25 * r_h_2);
+  }
+  else 
+  {
+    float t = 2.0 - r_h;
+    return o * (-0.75 * t * t);
+  }
+}
+
+float grad_W_2D_2(float r) {
   const float h = PARTICLE_RADIUS;
   const float o = 10.0 / 7.0 / PI / h / h;
   float r_h = r / h;

@@ -36,6 +36,16 @@ vec2 unpackPrevParticlePos(uint particleIdx) {
   return (tileCoordf + qpos / 256.0) / vec2(TILE_COUNT_X, TILE_COUNT_Y);
 }*/
 
+void packDensityPressure(uint particleIdx, float density, float pressure) {
+  packedDensityPressure[particleIdx].u = packHalf2x16(vec2(density, pressure));
+}
+
+void unpackDensityPressure(uint particleIdx, out float density, out float pressure) {
+  vec2 unpacked = unpackHalf2x16(packedDensityPressure[particleIdx].u);
+  density = unpacked.x;
+  pressure = unpacked.y;
+}
+
 vec2 unpackPos(uint particleIdx) {
   particleIdx += globalStateBuffer[0].bPhase * PARTICLE_COUNT;
   uint tileIdx = (particleAddresses[particleIdx].u >> 8) % TILE_COUNT;
@@ -46,6 +56,11 @@ vec2 unpackPos(uint particleIdx) {
   uvec2 qpos = uvec2(packed >> 8, packed & 0xFF);
 
   return (tileCoordf + qpos / 256.0) / vec2(TILE_COUNT_X, TILE_COUNT_Y);
+}
+
+void packVelocity(uint particleIdx, vec2 vel) {
+  particleIdx += globalStateBuffer[0].bPhase * PARTICLE_COUNT;
+  packedVelocities[particleIdx].u = packHalf2x16(vel);
 }
 
 vec2 unpackVelocity(uint particleIdx) {
@@ -120,8 +135,8 @@ void allocateTile(uint redTileIdx) {
 }
 
 // in: globalStateBuffer, tilesBuffer
-// out: tilesBuffer (?), packedPositions, particleAddresses
-uint insertTileEntry(vec2 pos) {
+// out: tilesBuffer (?), packedPositions, particleAddresses, packedVelocities
+uint insertTileEntry(vec2 pos, vec2 vel) {
   uint bPhase = globalStateBuffer[0].bPhase;
 
   vec2 tileCoordf = pos * vec2(TILE_COUNT_X, TILE_COUNT_Y);
@@ -143,14 +158,9 @@ uint insertTileEntry(vec2 pos) {
   packed = packed << ((particleIdx & 1) << 4);
 
   atomicOr(packedPositions[particleIdx / 2].u, packed);
-
+  packedVelocities[particleIdx].u = packHalf2x16(vel);
+  
   particleAddresses[particleIdx].u = (tileIdx << 8) | slot;
   
   return particleIdx;
-}
-
-// in: 
-// out: packedVelocities
-void insertVelocity(uint particleIdx, vec2 vel) {
-  packedVelocities[particleIdx].u = packHalf2x16(vel);
 }
