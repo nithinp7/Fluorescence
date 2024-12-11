@@ -140,8 +140,7 @@ vec2 EOS_computeAcceleration(uint particleIdx) {
         continue;
       float w = W_2D(r);
       const float h = PARTICLE_RADIUS;
-      acceleration += PARTICLE_MASS * (p_over_d2_0 + p_over_d2_1) * grad_W_2D(r) * diff / r;
-      // acceleration += PARTICLE_MASS * (p_over_d2_0 + p_over_d2_1) * diff * w / h / h;
+      acceleration += -PARTICLE_MASS * (p_over_d2_0 + p_over_d2_1) * grad_W_2D(r) * diff / r;
     }
   }
 
@@ -280,7 +279,7 @@ void CS_UpdateVelocities() {
   unpackDensityPressure(particleIdx, density, pressure);
   
   vec2 acceleration = EOS_computeAcceleration(particleIdx);
-  vel += -acceleration * DELTA_TIME;
+  vel += acceleration * DELTA_TIME;
 
   // vel += 0.000000001 * acceleration;
   // vel += -0.001 * DELTA_TIME * acceleration;
