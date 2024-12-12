@@ -6,4 +6,10 @@ Fluorescence is an application for making generative shader art and GPU driven s
 
 The application is built on top of my rendering engine, [Althea](https://github.com/nithinp7/Althea).
 
+## Demo Projects
+
+### Smoothed Particle Hydrodynamics (SPH) - 2D Implementation
+
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/SPH.gif"/>
+
 More demo projects, screenshots, and proper documentation for the ".flr" format to come.
