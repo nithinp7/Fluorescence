@@ -1,6 +1,8 @@
 
 #include <Misc/Sampling.glsl>
 
+#define EPS 0.001
+
 // defines SPH kernels
 #include "Kernels.glsl"
 // defines tile packing / unpacking helpers
@@ -108,7 +110,10 @@ vec2 EOS_computeAcceleration(uint particleIdx) {
   vec2 particlePos = unpackPos(particleIdx);
   float density0, pressure0;
   unpackDensityPressure(particleIdx, density0, pressure0);
-  float p_over_d2_0 = pressure0 / (density0 * density0);
+  float d2_0 = (density0 * density0);
+  if (d2_0 < EPS)
+    return 0.0.xx;
+  float p_over_d2_0 = pressure0 / d2_0;
 
   // choose four adjacent tiles, based on which quadrant within the 
   // current tile the pixel resides
@@ -132,11 +137,14 @@ vec2 EOS_computeAcceleration(uint particleIdx) {
       vec2 otherParticlePos = unpackPos(otherParticleIdx);
       float density1, pressure1;
       unpackDensityPressure(otherParticleIdx, density1, pressure1);
-      float p_over_d2_1 = pressure1 / (density1 * density1);
+      float d2_1 = density1 * density1;
+      if (d2_1 < EPS)
+        continue;
+      float p_over_d2_1 = pressure1 / d2_1;
 
       vec2 diff = particlePos - otherParticlePos;
       float r = sqrt(dot(diff, diff));
-      if (r < 0.001)
+      if (r < EPS)
         continue;
       float w = W_2D(r);
       const float h = PARTICLE_RADIUS;
@@ -202,7 +210,7 @@ void CS_ClearTiles() {
 vec2 sampleAccelerationField(vec2 pos) {
   vec2 r = vec2(wave(0.5, 3.0 * pos.x + 5.0 * pos.y), wave(0.5, 7.0 * pos.x + 2.0 * pos.y));
   vec2 a = r * 2.0 - vec2(1.0);
-  a *= (0.001 * TEST_SLIDER) * wave(1.3, 1.0);
+  a *= (0.001 * WAVES) * (wave(1.3, 1.0) + 0.1 * wave(2.3 + 0.1 * pos.y * pos.x, pos.x + pos.y));
   return a;
 }
 
@@ -218,8 +226,7 @@ void CS_AdvectParticles_Reserve() {
   vec2 dpos = vel * DELTA_TIME;
   vec2 nextPos = prevPos + dpos;
 
-  // TODO: remove hack
-  nextPos = fract(nextPos);
+  nextPos = clamp(nextPos, 0.0.xx, 1.0.xx);
 
   reserveTileEntry(nextPos);
 }
@@ -244,8 +251,7 @@ void CS_AdvectParticles_Insert() {
   vec2 dpos = vel * DELTA_TIME;
   vec2 nextPos = prevPos + dpos;
 
-  // TODO: remove hack
-  nextPos = fract(nextPos);
+  nextPos = clamp(nextPos, 0.0.xx, 1.0.xx);
 
   insertTileEntry(nextPos, vel);
 }
@@ -280,11 +286,6 @@ void CS_UpdateVelocities() {
   
   vec2 acceleration = EOS_computeAcceleration(particleIdx);
   vel += acceleration * DELTA_TIME;
-
-  // vel += 0.000000001 * acceleration;
-  // vel += -0.001 * DELTA_TIME * acceleration;
-  // float t = 0.001 * pressure;
-  // vel.y += t * t;
 
   packVelocity(particleIdx, vel);
 }
@@ -351,8 +352,17 @@ void PS_TilesDensity() {
       EOS_SOLVER_STIFFNESS * 
         (pow(density / EOS_SOLVER_REST_DENSITY, EOS_SOLVER_COMPRESSIBILITY) - 1.0);
   // density *= density;
-  vec2 velocity = 0.1 * normalize(sampleVelocity(inScreenUv));
-  outColor = vec4(vec3(0.001 * pressure), 1.0);//, 1.0);
+  outColor = vec4(vec3(0.01 * pressure), 1.0);//, 1.0);
+  if (DISPLAY_MODE == 0) {
+    vec2 velocity = sampleVelocity(inScreenUv);
+    float speed = length(velocity);
+    float theta = 0.01 * speed;
+    vec2 cs = 0.5 * vec2(cos(theta), sin(theta)) + 0.5.xx;
+    // float theta = atan(velocity.y, velocity.x);
+    outColor = vec4(velocity, 0.0, 1.0);//, 1.0);
+    // outColor = vec4(0.1 * fract(0.5 * theta / PI), 0.01 * speed, 0.0, 1.0);
+    outColor = vec4(0.001 * speed * cs, 0.0, 1.0);
+  }
   // outColor = vec4(vec3(density), 1.0);
 }
 

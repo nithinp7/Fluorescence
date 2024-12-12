@@ -11,17 +11,17 @@ uint DOUBLE_TILE_COUNT: 2500
 
 uint PARTICLE_CIRCLE_VERTS: 48
 
-slider_float DAMPING: 0.001 0.0 0.05
-float GRAVITY: 0.0
+slider_float DAMPING: 0.02 0.0 0.05
+slider_float GRAVITY: 0.001 0.0 0.01
 float DELTA_TIME: 0.01667
 
 # half of tile-width
 float PARTICLE_RADIUS: 0.01
 
 # TODO - dynamic mass per particle
-float PARTICLE_MASS: 0.001
+slider_float PARTICLE_MASS: 0.001 0.0 0.01
 
-slider_float TEST_SLIDER: 0.15 0.0 1.0
+slider_float WAVES: 1.15 0.0 15.0
 
 slider_uint DISPLAY_MODE: 2 0 4
 slider_float DISPLAY_RADIUS: 0.1 0.0 1.0
