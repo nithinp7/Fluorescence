@@ -5,6 +5,7 @@
 #include <Althea/Gui.h>
 #include <Althea/ResourcesAssignment.h>
 #include <Althea/SingleTimeCommandBuffer.h>
+#include <Althea/Parser.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -23,7 +24,7 @@ Project::Project(
     GlobalHeap& heap,
     const TransientUniforms<FlrUniforms>& flrUniforms,
     const char* projPath)
-    : m_parsed(projPath),
+    : m_parsed(app, projPath),
       m_displayPassIdx(0),
       m_bHasDynamicData(false),
       m_failedShaderCompile(false),
@@ -31,11 +32,6 @@ Project::Project(
   // TODO: split out resource creation vs code generation
   if (m_parsed.m_failed)
     return;
-
-  m_parsed.m_constUints.push_back(
-      {"SCREEN_WIDTH", app.getSwapChainExtent().width});
-  m_parsed.m_constUints.push_back(
-      {"SCREEN_HEIGHT", app.getSwapChainExtent().height});
 
   std::filesystem::path projPath_(projPath);
   std::filesystem::path projName = projPath_.stem();
@@ -75,7 +71,7 @@ Project::Project(
     size += 4 * m_parsed.m_sliderUints.size();
     size += 4 * m_parsed.m_sliderInts.size();
     size += 4 * m_parsed.m_sliderFloats.size();
-    size += m_parsed.m_checkboxes.size();
+    size += 4 * m_parsed.m_checkboxes.size();
     if (size % 64) {
       size += 64 - (size % 64);
     }
@@ -84,29 +80,42 @@ Project::Project(
 
     m_dynamicDataBuffer.resize(size);
     for (auto& uslider : m_parsed.m_sliderUints) {
-      uslider.pValue = reinterpret_cast<uint32_t*>(m_dynamicDataBuffer.data() + offset);
+      uslider.pValue =
+          reinterpret_cast<uint32_t*>(m_dynamicDataBuffer.data() + offset);
       *uslider.pValue = uslider.defaultValue;
       offset += 4;
     }
     for (auto& islider : m_parsed.m_sliderInts) {
-      islider.pValue = reinterpret_cast<int*>(m_dynamicDataBuffer.data() + offset);
+      islider.pValue =
+          reinterpret_cast<int*>(m_dynamicDataBuffer.data() + offset);
       *islider.pValue = islider.defaultValue;
       offset += 4;
     }
     for (auto& fslider : m_parsed.m_sliderFloats) {
-      fslider.pValue = reinterpret_cast<float*>(m_dynamicDataBuffer.data() + offset);
+      fslider.pValue =
+          reinterpret_cast<float*>(m_dynamicDataBuffer.data() + offset);
       *fslider.pValue = fslider.defaultValue;
       offset += 4;
     }
     for (auto& checkbox : m_parsed.m_checkboxes) {
-      checkbox.pValue = reinterpret_cast<bool*>(m_dynamicDataBuffer.data() + offset);
-      *checkbox.pValue = checkbox.defaultValue;
-      offset++;
+      checkbox.pValue =
+          reinterpret_cast<uint32_t*>(m_dynamicDataBuffer.data() + offset);
+      *checkbox.pValue = (uint32_t)checkbox.defaultValue;
+      offset += 4; // bools are 32bit in glsl
     }
 
-    m_dynamicUniforms = DynamicBuffer(app, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, size);
+    m_dynamicUniforms =
+        DynamicBuffer(app, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, size);
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
       m_dynamicUniforms.updateData(i, m_dynamicDataBuffer);
+  }
+
+  if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
+    m_cameraController = CameraController(
+        90.0f,
+        (float)app.getSwapChainExtent().width /
+            (float)app.getSwapChainExtent().height);
+    m_perspectiveCamera = TransientUniforms<PerspectiveCamera>(app);
   }
 
   DescriptorSetLayoutBuilder dsBuilder{};
@@ -115,6 +124,9 @@ Project::Project(
     dsBuilder.addStorageBufferBinding(VK_SHADER_STAGE_ALL);
   }
   if (m_bHasDynamicData) {
+    dsBuilder.addUniformBufferBinding();
+  }
+  if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
     dsBuilder.addUniformBufferBinding();
   }
 
@@ -171,10 +183,10 @@ Project::Project(
 
     if (m_bHasDynamicData) {
       assign.bindTransientUniforms(m_dynamicUniforms);
-      
+
       CODE_APPEND(
-        "\nlayout(set=1, binding=%u) uniform _UserUniforms {\n",
-        slot++);
+          "\nlayout(set=1, binding=%u) uniform _UserUniforms {\n",
+          slot++);
 
       for (const auto& uslider : m_parsed.m_sliderUints) {
         CODE_APPEND("\tuint %s;\n", uslider.name.c_str());
@@ -191,10 +203,23 @@ Project::Project(
 
       CODE_APPEND("};\n\n");
     }
+
+    if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
+      assign.bindTransientUniforms(m_perspectiveCamera);
+    }
   }
 
   // includes
-  CODE_APPEND("#include <Fluorescence.glsl>\n");
+  CODE_APPEND("#include <Fluorescence.glsl>\n\n");
+
+  // camera uniforms (references included structs)
+  if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
+    CODE_APPEND(
+        "layout(set=1, binding=%u) uniform _CameraUniforms { PerspectiveCamera "
+        "camera; };\n\n",
+        slot++);
+  }
+
   std::string userShaderName = shaderFileName.filename().string();
   CODE_APPEND("#include \"%s\"\n\n", userShaderName.c_str());
 
@@ -369,7 +394,7 @@ void Project::tick(Application& app, const FrameContext& frame) {
       // TODO: cache UI order to avoid linear scans each time...
       uint32_t uiIdx = 0;
       char nameBuf[128];
-      
+
       auto drawUiElem = [&]() -> bool {
         for (const auto& uslider : m_parsed.m_sliderUints) {
           if (uslider.uiIdx == uiIdx) {
@@ -394,7 +419,11 @@ void Project::tick(Application& app, const FrameContext& frame) {
           if (fslider.uiIdx == uiIdx) {
             ImGui::Text(fslider.name.c_str());
             sprintf(nameBuf, "##%s_%u", fslider.name.c_str(), uiIdx);
-            ImGui::SliderFloat(nameBuf, fslider.pValue, fslider.min, fslider.max);
+            ImGui::SliderFloat(
+                nameBuf,
+                fslider.pValue,
+                fslider.min,
+                fslider.max);
             return true;
           }
         }
@@ -402,7 +431,9 @@ void Project::tick(Application& app, const FrameContext& frame) {
           if (checkbox.uiIdx == uiIdx) {
             ImGui::Text(checkbox.name.c_str());
             sprintf(nameBuf, "##%s_%u", checkbox.name.c_str(), uiIdx);
-            ImGui::Checkbox(nameBuf, checkbox.pValue);
+            bool bValue = (bool)*checkbox.pValue;
+            if (ImGui::Checkbox(nameBuf, &bValue))
+              *checkbox.pValue = (uint32_t)bValue;
             return true;
           }
         }
@@ -411,12 +442,23 @@ void Project::tick(Application& app, const FrameContext& frame) {
       while (drawUiElem()) {
         uiIdx++;
       }
-
     }
 
     ImGui::End();
 
-    m_dynamicUniforms.updateData(frame.frameRingBufferIndex, m_dynamicDataBuffer);
+    m_dynamicUniforms.updateData(
+        frame.frameRingBufferIndex,
+        m_dynamicDataBuffer);
+  }
+
+  if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
+    m_cameraController.tick(frame.deltaTime);
+    PerspectiveCamera camera{};
+    camera.view = m_cameraController.getCamera().computeView();
+    camera.inverseView = glm::inverse(camera.view);
+    camera.projection = m_cameraController.getCamera().getProjection();
+    camera.inverseProjection = glm::inverse(camera.projection);
+    m_perspectiveCamera.updateUniforms(camera, frame);
   }
 }
 
@@ -528,7 +570,11 @@ void Project::tryRecompile(Application& app) {
   }
 }
 
-ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
+ParsedFlr::ParsedFlr(Application& app, const char* filename)
+    : m_featureFlags(FF_NONE), m_failed(true), m_errMsg() {
+
+  m_constUints.push_back({"SCREEN_WIDTH", app.getSwapChainExtent().width});
+  m_constUints.push_back({"SCREEN_HEIGHT", app.getSwapChainExtent().height});
 
   std::ifstream flrFile(filename);
   char lineBuf[1024];
@@ -551,102 +597,12 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
   while (flrFile.getline(lineBuf, 1024)) {
     lineNumber++;
 
-    char* c = lineBuf;
-
-    auto parseChar = [&](char ref) -> std::optional<char> {
-      if (*c == ref) {
-        char cr = *c;
-        c++;
-        return cr;
-      }
-      return std::nullopt;
-    };
-
-    auto parseWhitespace = [&]() -> std::optional<std::string_view> {
-      char* c0 = c;
-      while (parseChar(' '))
-        ;
-      return c != c0 ? std::make_optional<std::string_view>(c0, c - c0)
-                     : std::nullopt;
-    };
-
-    auto parseLetter = [&]() -> std::optional<char> {
-      if ((*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z')) {
-        char l = *c;
-        c++;
-        return l;
-      }
-      return std::nullopt;
-    };
-
-    auto parseDigit = [&]() -> std::optional<uint32_t> {
-      if (*c >= '0' && *c <= '9') {
-        uint32_t d = *c - '0';
-        c++;
-        return d;
-      }
-      return std::nullopt;
-    };
-
-    auto parseName = [&]() -> std::optional<std::string_view> {
-      char* c0 = c;
-      if (!parseChar('_') && !parseLetter())
-        return std::nullopt;
-      while (parseChar('_') || parseLetter() || parseDigit())
-        ;
-      return std::string_view(c0, c - c0);
-    };
-
-    auto parseBool = [&]() -> std::optional<bool> {
-      char* c0 = c;
-      auto word = parseName();
-      if (!word)
-        return std::nullopt;
-
-      if (word->size() == 4 && !strncmp(word->data(), "true", 4))
-        return true;
-      else if (word->size() == 5 && !strncmp(word->data(), "false", 5))
-        return false;
-
-      c = c0;
-      return std::nullopt;
-    };
-
-    auto parseUint = [&]() -> std::optional<uint32_t> {
-      auto d = parseDigit();
-      if (!d)
-        return std::nullopt;
-      uint32_t u = *d;
-      while (d = parseDigit())
-        u = 10 * u + *d;
-      return u;
-    };
-
-    auto parseInt = [&]() -> std::optional<int32_t> {
-      char* c0 = c;
-      int sn = parseChar('-') ? -1 : 1;
-      if (auto u = parseUint())
-        return sn * *u;
-      c = c0;
-      return std::nullopt;
-    };
-
-    auto parseFloat = [&]() -> std::optional<float> {
-      char* c0 = c;
-      if (!parseInt())
-        return std::nullopt;
-      parseChar('.');
-      parseUint();
-      char* c1 = c;
-      parseChar('f');
-      parseChar('F');
-      return static_cast<float>(std::atof(c0));
-    };
+    Parser p{ lineBuf };
 
     auto parseUintOrVar = [&]() -> std::optional<uint32_t> {
-      if (auto u = parseUint())
+      if (auto u = p.parseUint())
         return u;
-      if (auto name = parseName()) {
+      if (auto name = p.parseName()) {
         for (const auto& v : m_constUints) {
           if (name->size() == v.name.size() &&
               !strncmp(name->data(), v.name.data(), v.name.size())) {
@@ -658,9 +614,9 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
     };
 
     auto parseIntOrVar = [&]() -> std::optional<int> {
-      if (auto i = parseInt())
+      if (auto i = p.parseInt())
         return i;
-      if (auto name = parseName()) {
+      if (auto name = p.parseName()) {
         for (const auto& v : m_constInts) {
           if (name->size() == v.name.size() &&
               !strncmp(name->data(), v.name.data(), v.name.size())) {
@@ -672,9 +628,9 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
     };
 
     auto parseFloatOrVar = [&]() -> std::optional<float> {
-      if (auto f = parseFloat())
+      if (auto f = p.parseFloat())
         return f;
-      if (auto name = parseName()) {
+      if (auto name = p.parseName()) {
         for (const auto& v : m_constFloats) {
           if (name->size() == v.name.size() &&
               !strncmp(name->data(), v.name.data(), v.name.size())) {
@@ -685,8 +641,18 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
       return std::nullopt;
     };
 
+
+    auto getOperPrecedence = [](char op) -> uint32_t {
+      if (op == '+' || op == '-')
+        return 0;
+      if (op == '*' || op == '/')
+        return 1;
+
+      return ~0;
+    };
+
     auto parseStructRef = [&]() -> std::optional<uint32_t> {
-      if (auto name = parseName()) {
+      if (auto name = p.parseName()) {
         for (uint32_t i = 0; i < m_structDefs.size(); ++i) {
           const auto& s = m_structDefs[i];
           if (name->size() == s.name.size() &&
@@ -700,43 +666,43 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
     };
 
     auto parseInstruction = [&]() -> std::optional<Instr> {
-      char* c0 = c;
-      if (parseName()) {
+      char* c0 = p.c; // TODO: avoid this, just use the name str directly
+      if (p.parseName()) {
         for (uint8_t i = 0; i < I_COUNT; ++i) {
           const char* instr = INSTR_NAMES[i];
           size_t len = strlen(instr);
-          if (len == (c - c0) && !strncmp(instr, c0, len)) {
+          if (len == (p.c - c0) && !strncmp(instr, c0, len)) {
             return (Instr)i;
           }
         }
 
-        c = c0;
+        p.c = c0;
       }
       return std::nullopt;
     };
 
-    parseWhitespace();
+    p.parseWhitespace();
 
     // TODO: support comment within line
-    if (parseChar('#') || parseChar(0))
+    if (p.parseChar('#') || p.parseChar(0))
       continue;
 
     auto instr = parseInstruction();
     PARSER_VERIFY(instr, "Could not parse instruction!");
 
-    parseWhitespace();
+    p.parseWhitespace();
 
-    auto name = parseName();
+    auto name = p.parseName();
 
-    parseWhitespace();
-    parseChar(':');
-    parseWhitespace();
+    p.parseWhitespace();
+    p.parseChar(':');
+    p.parseWhitespace();
 
     switch (*instr) {
     case I_CONST_UINT: {
       PARSER_VERIFY(name, "Could not parse name for const uint.");
 
-      auto arg0 = parseUint();
+      auto arg0 = p.parseUint(); // parseExpression();
       PARSER_VERIFY(arg0, "Could not parse const uint.");
 
       m_constUints.push_back({std::string(*name), *arg0});
@@ -746,7 +712,7 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
     case I_CONST_INT: {
       PARSER_VERIFY(name, "Could not parse name for const int.");
 
-      auto arg0 = parseInt();
+      auto arg0 = p.parseInt();
       PARSER_VERIFY(arg0, "Could not parse const int.");
 
       m_constInts.push_back({std::string(*name), *arg0});
@@ -756,7 +722,7 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
     case I_CONST_FLOAT: {
       PARSER_VERIFY(name, "Could not parse name for const float.");
 
-      auto arg0 = parseFloat();
+      auto arg0 = p.parseFloat();
       PARSER_VERIFY(arg0, "Could not parse const float.");
 
       m_constFloats.push_back({std::string(*name), *arg0});
@@ -766,61 +732,64 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
     case I_SLIDER_UINT: {
       PARSER_VERIFY(name, "Could not parse name for uint slider.");
 
-      auto value = parseUint();
+      auto value = p.parseUint();
       PARSER_VERIFY(value, "Could not parse default value for uint slider.");
-      parseWhitespace();
+      p.parseWhitespace();
 
-      auto min = parseUint();
+      auto min = p.parseUint();
       PARSER_VERIFY(value, "Could not parse min value for uint slider.");
-      parseWhitespace();
+      p.parseWhitespace();
 
-      auto max = parseUint();
+      auto max = p.parseUint();
       PARSER_VERIFY(value, "Could not parse max value for uint slider.");
 
-      m_sliderUints.push_back({std::string(*name), *value, *min, *max, uiIdx++, nullptr});
+      m_sliderUints.push_back(
+          {std::string(*name), *value, *min, *max, uiIdx++, nullptr});
       break;
     }
     case I_SLIDER_INT: {
       PARSER_VERIFY(name, "Could not parse name for int slider.");
 
-      auto value = parseInt();
+      auto value = p.parseInt();
       PARSER_VERIFY(value, "Could not parse default value for int slider.");
-      parseWhitespace();
+      p.parseWhitespace();
 
-      auto min = parseInt();
+      auto min = p.parseInt();
       PARSER_VERIFY(value, "Could not parse min value for int slider.");
-      parseWhitespace();
+      p.parseWhitespace();
 
-      auto max = parseInt();
+      auto max = p.parseInt();
       PARSER_VERIFY(value, "Could not parse max value for int slider.");
 
-      m_sliderInts.push_back({std::string(*name), *value, *min, *max, uiIdx++, nullptr });
+      m_sliderInts.push_back(
+          {std::string(*name), *value, *min, *max, uiIdx++, nullptr});
       break;
     }
     case I_SLIDER_FLOAT: {
       PARSER_VERIFY(name, "Could not parse name for float slider.");
 
-      auto value = parseFloat();
+      auto value = p.parseFloat();
       PARSER_VERIFY(value, "Could not parse default value for float slider.");
-      parseWhitespace();
+      p.parseWhitespace();
 
-      auto min = parseFloat();
+      auto min = p.parseFloat();
       PARSER_VERIFY(value, "Could not parse min value for float slider.");
-      parseWhitespace();
+      p.parseWhitespace();
 
-      auto max = parseFloat();
+      auto max = p.parseFloat();
       PARSER_VERIFY(value, "Could not parse max value for float slider.");
 
-      m_sliderFloats.push_back({std::string(*name), *value, *min, *max, uiIdx++, nullptr });
+      m_sliderFloats.push_back(
+          {std::string(*name), *value, *min, *max, uiIdx++, nullptr});
       break;
     }
     case I_CHECKBOX: {
       PARSER_VERIFY(name, "Could not parse name for checkbox.");
 
-      auto value = parseBool();
+      auto value = p.parseBool();
       PARSER_VERIFY(value, "Could not parse default value for checkbox.");
 
-      m_checkboxes.push_back({std::string(*name), *value, uiIdx++, nullptr });
+      m_checkboxes.push_back({std::string(*name), *value, uiIdx++, nullptr});
 
       break;
     }
@@ -834,13 +803,13 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
       uint32_t structStartLine = lineNumber;
       while (true) {
         bool breakOuter = false;
-        while (*c) {
-          if (*c == '}') {
-            ++c;
+        while (*p.c) {
+          if (*p.c == '}') {
+            ++p.c;
             breakOuter = true;
             break;
           }
-          ++c;
+          ++p.c;
         }
 
         offs += sprintf(body + offs, "%s", lineBuf);
@@ -858,7 +827,7 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
               "Found unterminated struct declaration, expected \'}\'.");
         }
         lineNumber++;
-        c = lineBuf;
+        p.c = lineBuf;
       }
 
       m_structDefs.push_back({nameStr, std::string(body), 0});
@@ -883,7 +852,7 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
           structIdx,
           "Could not find struct referenced in structured-buffer declaration.");
 
-      parseWhitespace();
+      p.parseWhitespace();
       auto elemCount = parseUintOrVar();
       PARSER_VERIFY(
           elemCount,
@@ -900,13 +869,13 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
           groupSizeX,
           "Could not parse groupSizeX in compute-shader declaration.");
 
-      parseWhitespace();
+      p.parseWhitespace();
       auto groupSizeY = parseUintOrVar();
       PARSER_VERIFY(
           groupSizeY,
           "Could not parse groupSizeY in compute-shader declaration.");
 
-      parseWhitespace();
+      p.parseWhitespace();
       auto groupSizeZ = parseUintOrVar();
       PARSER_VERIFY(
           groupSizeZ,
@@ -918,23 +887,23 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
       break;
     }
     case I_COMPUTE_DISPATCH: {
-      auto compShader = parseName();
+      auto compShader = p.parseName();
       PARSER_VERIFY(
           compShader,
           "Could not parse compute-shader name in compute-dispatch "
           "declaration.");
 
-      parseWhitespace();
+      p.parseWhitespace();
       auto dispatchSizeX = parseUintOrVar();
       PARSER_VERIFY(
           dispatchSizeX,
           "Could not parse dispatchSizeX in compute-dispatch declaration.");
-      parseWhitespace();
+      p.parseWhitespace();
       auto dispatchSizeY = parseUintOrVar();
       PARSER_VERIFY(
           dispatchSizeY,
           "Could not parse dispatchSizeY in compute-dispatch declaration.");
-      parseWhitespace();
+      p.parseWhitespace();
       auto dispatchSizeZ = parseUintOrVar();
       PARSER_VERIFY(
           dispatchSizeZ,
@@ -959,7 +928,7 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
       break;
     }
     case I_BARRIER: {
-      auto bn = parseName();
+      auto bn = p.parseName();
       PARSER_VERIFY(bn, "Expected at lesat one buffer in barrier declaration.");
 
       std::vector<uint32_t> buffers;
@@ -980,8 +949,8 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
 
         buffers.push_back(bufferIdx);
 
-        parseWhitespace();
-        bn = parseName();
+        p.parseWhitespace();
+        bn = p.parseName();
       }
 
       m_taskList.push_back({(uint32_t)m_barriers.size(), TT_BARRIER});
@@ -1001,7 +970,7 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
 
       auto width = parseUintOrVar();
       PARSER_VERIFY(width, "Could not parse render-pass target width.");
-      parseWhitespace();
+      p.parseWhitespace();
       auto height = parseUintOrVar();
       PARSER_VERIFY(height, "Could not parse render-pass target height.");
 
@@ -1016,21 +985,21 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
           "Expected render-pass or display-pass declaration to precede "
           "draw-call.");
 
-      auto vertShader = parseName();
+      auto vertShader = p.parseName();
       PARSER_VERIFY(
           vertShader,
           "Could not parse vertex shader name in draw-call declaration.");
-      parseWhitespace();
-      auto pixelShader = parseName();
+      p.parseWhitespace();
+      auto pixelShader = p.parseName();
       PARSER_VERIFY(
           pixelShader,
           "Could not parse pixel shader name in draw-call declaration.");
-      parseWhitespace();
+      p.parseWhitespace();
       auto vertexCount = parseUintOrVar();
       PARSER_VERIFY(
           vertexCount,
           "Could not parse vertexCount in draw-call declaration.");
-      parseWhitespace();
+      p.parseWhitespace();
       auto instanceCount = parseUintOrVar();
       PARSER_VERIFY(
           instanceCount,
@@ -1042,6 +1011,26 @@ ParsedFlr::ParsedFlr(const char* filename) : m_failed(true), m_errMsg() {
            std::string(*pixelShader),
            *vertexCount,
            *instanceCount});
+      break;
+    }
+    case I_FEATURE: {
+      char* c0 = p.c; 
+      PARSER_VERIFY(p.parseName(), "Could not parse feature name.");
+      bool bFoundFeature = false;
+      for (uint32_t i = 0;
+           i < (sizeof(FEATURE_FLAG_NAMES) / sizeof(*FEATURE_FLAG_NAMES));
+           ++i) {
+        const char* featureName = FEATURE_FLAG_NAMES[i];
+        size_t len = strlen(featureName);
+        // TODO: avoid this, just use the name directly
+        if (len == (p.c - c0) && !strncmp(featureName, c0, len)) {
+          bFoundFeature = true;
+          m_featureFlags |= (FeatureFlag)(1 << i);
+        }
+      }
+
+      PARSER_VERIFY(bFoundFeature, "Invalid feature flag specified.");
+
       break;
     }
     default:

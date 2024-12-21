@@ -11,6 +11,13 @@ struct FlrUniforms {
   uint inputMask;
 };
 
+struct PerspectiveCamera {
+  mat4 view;
+  mat4 inverseView;
+  mat4 projection;
+  mat4 inverseProjection;
+};
+
 struct FlrPush {
   uint push0;
   uint push1;

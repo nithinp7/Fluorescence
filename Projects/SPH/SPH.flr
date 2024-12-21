@@ -1,25 +1,26 @@
 # Smoothed Particle Hydrodynamics - 2D implementation in Fluorescence
 
-uint PARTICLE_COUNT: 5000
-uint HALF_PARTICLE_COUNT: 2500
-uint DOUBLE_PARTICLE_COUNT: 10000
+uint PARTICLE_COUNT: 10000
+uint HALF_PARTICLE_COUNT: 5000
+uint DOUBLE_PARTICLE_COUNT: 20000
 
-uint TILE_COUNT_X: 25
-uint TILE_COUNT_Y: 25
-uint TILE_COUNT: 1250
-uint DOUBLE_TILE_COUNT: 2500
+uint TILE_COUNT_X: 50
+uint TILE_COUNT_Y: 50
+uint TILE_COUNT: 2500
+uint DOUBLE_TILE_COUNT: 5000
 
 uint PARTICLE_CIRCLE_VERTS: 48
 
 slider_float DAMPING: 0.02 0.0 0.05
 slider_float GRAVITY: 0.001 0.0 0.01
-float DELTA_TIME: 0.01667
+float DELTA_TIME: 0.03333
+# 0.01667
 
 # half of tile-width
-float PARTICLE_RADIUS: 0.01
+float PARTICLE_RADIUS: 0.005
 
 # TODO - dynamic mass per particle
-slider_float PARTICLE_MASS: 0.001 0.0 0.01
+slider_float PARTICLE_MASS: 0.0005 0.0 0.01
 
 slider_float WAVES: 1.15 0.0 15.0
 

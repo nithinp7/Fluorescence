@@ -226,6 +226,15 @@ void CS_AdvectParticles_Reserve() {
   vec2 dpos = vel * DELTA_TIME;
   vec2 nextPos = prevPos + dpos;
 
+  {
+    vec2 diff = nextPos - uniforms.mouseUv;
+    float r = length(diff);
+    if (r < 5.0 * PARTICLE_RADIUS && r > EPS) {
+      diff /= r;
+      nextPos += (PARTICLE_RADIUS * 5.0 - r) * diff;
+    }
+  }
+
   nextPos = clamp(nextPos, 0.0.xx, 1.0.xx);
 
   reserveTileEntry(nextPos);
@@ -251,6 +260,14 @@ void CS_AdvectParticles_Insert() {
   vec2 dpos = vel * DELTA_TIME;
   vec2 nextPos = prevPos + dpos;
 
+  {
+    vec2 diff = nextPos - uniforms.mouseUv;
+    float r = length(diff);
+    if (r < 5.0 * PARTICLE_RADIUS && r > EPS) {
+      diff /= r;
+      nextPos += (PARTICLE_RADIUS * 5.0 - r) * diff;
+    }
+  }
   nextPos = clamp(nextPos, 0.0.xx, 1.0.xx);
 
   insertTileEntry(nextPos, vel);
@@ -362,6 +379,17 @@ void PS_TilesDensity() {
     outColor = vec4(velocity, 0.0, 1.0);//, 1.0);
     // outColor = vec4(0.1 * fract(0.5 * theta / PI), 0.01 * speed, 0.0, 1.0);
     outColor = vec4(0.001 * speed * cs, 0.0, 1.0);
+  } else if (DISPLAY_MODE == 3) {
+    float accumDensity = 0.0;
+    uint ITERS = 25;
+    vec2 step = (uniforms.mouseUv - inScreenUv) / ITERS;
+    vec2 currentUv = inScreenUv;
+    for (uint i = 0; i < ITERS; i++) {
+      currentUv += step;
+      float d = sampleDensity(currentUv);
+      accumDensity += 0.01 * d;
+    }
+    outColor = vec4(accumDensity.xxx, 1.0);
   }
   // outColor = vec4(vec3(density), 1.0);
 }

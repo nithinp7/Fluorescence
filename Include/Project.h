@@ -23,7 +23,7 @@ using namespace AltheaEngine;
 
 namespace flr {
 struct ParsedFlr {
-  ParsedFlr(const char* projectPath);
+  ParsedFlr(Application& app, const char* projectPath);
 
   struct ConstUint {
     std::string name;
@@ -77,7 +77,7 @@ struct ParsedFlr {
     std::string name;
     bool defaultValue;
     uint32_t uiIdx;
-    bool* pValue;
+    uint32_t* pValue; // glsl bools are 32bit
   };
   std::vector<Checkbox> m_checkboxes;
 
@@ -143,6 +143,20 @@ struct ParsedFlr {
   };
   std::vector<Task> m_taskList;
 
+  enum FeatureFlag : uint32_t {
+    FF_NONE = 0,
+    FF_PERSPECTIVE_CAMERA = (1 << 0)
+  };
+  uint32_t m_featureFlags;
+
+  bool isFeatureEnabled(FeatureFlag feature) const {
+    return (m_featureFlags & feature) != 0;
+  }
+
+  static constexpr char* FEATURE_FLAG_NAMES[] = {
+    "perspective_camera"
+  };
+
   bool m_failed;
   char m_errMsg[2048];
 
@@ -163,6 +177,7 @@ struct ParsedFlr {
     I_DISPLAY_PASS,
     I_RENDER_PASS,
     I_DRAW,
+    I_FEATURE,
     I_COUNT
   };
 
@@ -182,7 +197,8 @@ struct ParsedFlr {
       "barrier",
       "display_pass",
       "render_pass",
-      "draw"};
+      "draw",
+      "enable_feature"};
 };
 
 class Project {
@@ -244,6 +260,9 @@ private:
   PerFrameResources m_descriptorSets;
   DynamicBuffer m_dynamicUniforms;
   std::vector<std::byte> m_dynamicDataBuffer;
+
+  CameraController m_cameraController;
+  TransientUniforms<PerspectiveCamera> m_perspectiveCamera;
 
   uint32_t m_displayPassIdx;
 
