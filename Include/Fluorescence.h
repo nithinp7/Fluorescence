@@ -2,6 +2,7 @@
 
 #include "Shared/CommonStructures.h"
 #include "Project.h"
+#include "Audio.h"
 
 #include <Althea/Allocator.h>
 #include <Althea/CameraController.h>
@@ -66,6 +67,7 @@ private:
   RenderPass m_displayPass;
   SwapChainFrameBufferCollection m_swapChainFrameBuffers;
 
+  Audio* m_pAudio = nullptr;
   Project* m_pProject = nullptr;
   bool m_bOpenFileDialogue = false;
   bool m_bReloadProject = false;

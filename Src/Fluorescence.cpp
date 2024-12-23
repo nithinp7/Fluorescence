@@ -1,7 +1,6 @@
 #include "Fluorescence.h"
 
 #include "GraphEditor/Graph.h"
-#include "Project.h"
 
 #include <Althea/Application.h>
 #include <Althea/Camera.h>
@@ -80,6 +79,8 @@ void Fluorescence::shutdownGame(Application& app) {}
 void Fluorescence::createRenderState(Application& app) {
   Gui::createRenderState(app);
 
+  m_pAudio = new Audio; // TODO 
+
   SingleTimeCommandBuffer commandBuffer(app);
   _createGlobalResources(app, commandBuffer);
   _createDisplayPass(app);
@@ -87,6 +88,9 @@ void Fluorescence::createRenderState(Application& app) {
 
 void Fluorescence::destroyRenderState(Application& app) {
   Gui::destroyRenderState(app);
+
+  delete m_pAudio;
+  m_pAudio = nullptr;
 
   delete m_pProject;
   m_pProject = nullptr;
@@ -101,6 +105,8 @@ void Fluorescence::destroyRenderState(Application& app) {
 
 void Fluorescence::tick(Application& app, const FrameContext& frame) {
   {
+    m_pAudio->play();
+
     Gui::startRecordingImgui();
 
     const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
