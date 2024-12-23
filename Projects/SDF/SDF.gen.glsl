@@ -2,7 +2,7 @@
 
 #define SCREEN_WIDTH 1440
 #define SCREEN_HEIGHT 1280
-#define TEST 6
+#define TEST 126
 
 struct Pixel {
   vec4 accumulated;

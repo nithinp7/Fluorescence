@@ -1,5 +1,7 @@
 #version 460 core
 
+#define SCREEN_WIDTH 1440
+#define SCREEN_HEIGHT 1280
 #define MAX_AGENTS_PER_SHAPE 32
 #define agentCount 12000
 #define TILE_COUNT_X 16
@@ -7,8 +9,6 @@
 #define TILE_COUNT 256
 #define CIRCLE_VERTS 48
 #define MAX_SHAPE_COUNT 256
-#define SCREEN_WIDTH 1440
-#define SCREEN_HEIGHT 1280
 #define DELTA_TIME 0.010000
 #define RADIUS 0.002000
 #define GRAVITY 0.000000
@@ -52,6 +52,7 @@ layout(set=1,binding=4) buffer BUFFER_globalStateBuffer {  GlobalState globalSta
 layout(set=1,binding=5) buffer BUFFER_tilesBuffer {  Tile tilesBuffer[]; };
 layout(set=1,binding=6) buffer BUFFER_agentBuffer {  Agent agentBuffer[]; };
 #include <Fluorescence.glsl>
+
 #include "AgentSim.glsl"
 
 #ifdef IS_COMP_SHADER

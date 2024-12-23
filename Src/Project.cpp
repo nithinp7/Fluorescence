@@ -3,9 +3,9 @@
 #include <Althea/BufferUtilities.h>
 #include <Althea/DescriptorSet.h>
 #include <Althea/Gui.h>
+#include <Althea/Parser.h>
 #include <Althea/ResourcesAssignment.h>
 #include <Althea/SingleTimeCommandBuffer.h>
-#include <Althea/Parser.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -570,6 +570,35 @@ void Project::tryRecompile(Application& app) {
   }
 }
 
+namespace {
+template <typename T, typename V, V T::*Vptr, typename A>
+std::optional<V> findValueByName(const A& ts, std::string_view n) {
+  for (const T& t : ts) {
+    if (t.name.size() == n.size() &&
+        !strncmp(t.name.data(), n.data(), n.size())) {
+      return t.*Vptr;
+    }
+  }
+
+  return std::nullopt;
+}
+
+template <typename T, typename A>
+std::optional<uint32_t> findIndexByName(const A& ts, std::string_view n) {
+  uint32_t idx = 0;
+  for (const T& t : ts) {
+    if (t.name.size() == n.size() &&
+        !strncmp(t.name.data(), n.data(), n.size())) {
+      return idx;
+    }
+    idx++;
+  }
+
+  return std::nullopt;
+}
+
+} // namespace
+
 ParsedFlr::ParsedFlr(Application& app, const char* filename)
     : m_featureFlags(FF_NONE), m_failed(true), m_errMsg() {
 
@@ -597,88 +626,59 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
   while (flrFile.getline(lineBuf, 1024)) {
     lineNumber++;
 
-    Parser p{ lineBuf };
+    Parser p{lineBuf};
+
+    auto constUintResolver = [&](std::string_view n) -> std::optional<uint32_t> {
+      return findValueByName<ConstUint, uint32_t, &ConstUint::value>(
+          m_constUints,
+          n);
+    };
+    auto constIntResolver = [&](std::string_view n) -> std::optional<int32_t> {
+      return findValueByName<ConstInt, int32_t, &ConstInt::value>(
+          m_constInts,
+          n);
+    };
+    auto constFloatResolver = [&](std::string_view n) -> std::optional<float> {
+      if (auto f = findValueByName<ConstFloat, float, &ConstFloat::value>(
+        m_constFloats,
+        n))
+        return f;
+      if (auto u = constUintResolver(n))
+        return static_cast<float>(*u);
+      if (auto i = constIntResolver(n))
+        return static_cast<float>(*i);
+      return std::nullopt;
+    };
 
     auto parseUintOrVar = [&]() -> std::optional<uint32_t> {
-      if (auto u = p.parseUint())
-        return u;
-      if (auto name = p.parseName()) {
-        for (const auto& v : m_constUints) {
-          if (name->size() == v.name.size() &&
-              !strncmp(name->data(), v.name.data(), v.name.size())) {
-            return v.value;
-          }
-        }
-      }
-      return std::nullopt;
+      return p.parseLiteralOrRef<uint32_t>(constUintResolver);
     };
-
-    auto parseIntOrVar = [&]() -> std::optional<int> {
-      if (auto i = p.parseInt())
-        return i;
-      if (auto name = p.parseName()) {
-        for (const auto& v : m_constInts) {
-          if (name->size() == v.name.size() &&
-              !strncmp(name->data(), v.name.data(), v.name.size())) {
-            return v.value;
-          }
-        }
-      }
-      return std::nullopt;
+    auto parseIntOrVar = [&]() -> std::optional<int32_t> {
+      return p.parseLiteralOrRef<int32_t>(constIntResolver);
     };
-
     auto parseFloatOrVar = [&]() -> std::optional<float> {
-      if (auto f = p.parseFloat())
-        return f;
-      if (auto name = p.parseName()) {
-        for (const auto& v : m_constFloats) {
-          if (name->size() == v.name.size() &&
-              !strncmp(name->data(), v.name.data(), v.name.size())) {
-            return v.value;
-          }
-        }
-      }
-      return std::nullopt;
-    };
-
-
-    auto getOperPrecedence = [](char op) -> uint32_t {
-      if (op == '+' || op == '-')
-        return 0;
-      if (op == '*' || op == '/')
-        return 1;
-
-      return ~0;
-    };
-
-    auto parseStructRef = [&]() -> std::optional<uint32_t> {
-      if (auto name = p.parseName()) {
-        for (uint32_t i = 0; i < m_structDefs.size(); ++i) {
-          const auto& s = m_structDefs[i];
-          if (name->size() == s.name.size() &&
-              !strncmp(name->data(), s.name.data(), s.name.size())) {
-            return i;
-          }
-        }
-      }
-
-      return std::nullopt;
+      return p.parseLiteralOrRef<float>(constFloatResolver);
     };
 
     auto parseInstruction = [&]() -> std::optional<Instr> {
-      char* c0 = p.c; // TODO: avoid this, just use the name str directly
-      if (p.parseName()) {
+      return p.parseRef<Instr>([&](std::string_view n) -> std::optional<Instr> {
         for (uint8_t i = 0; i < I_COUNT; ++i) {
           const char* instr = INSTR_NAMES[i];
           size_t len = strlen(instr);
-          if (len == (p.c - c0) && !strncmp(instr, c0, len)) {
+          if (len == n.size() && !strncmp(instr, n.data(), n.size())) {
             return (Instr)i;
           }
         }
 
-        p.c = c0;
-      }
-      return std::nullopt;
+        return std::nullopt;
+      });
+    };
+
+    auto parseStructRef = [&]() -> std::optional<uint32_t> {
+      return p.parseRef<uint32_t>(
+          [&](std::string_view n) -> std::optional<uint32_t> {
+            return findIndexByName<StructDef>(m_structDefs, n);
+          });
     };
 
     p.parseWhitespace();
@@ -702,7 +702,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
     case I_CONST_UINT: {
       PARSER_VERIFY(name, "Could not parse name for const uint.");
 
-      auto arg0 = p.parseUint(); // parseExpression();
+      auto arg0 = p.parseExpression<uint32_t>(constUintResolver);
       PARSER_VERIFY(arg0, "Could not parse const uint.");
 
       m_constUints.push_back({std::string(*name), *arg0});
@@ -712,7 +712,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
     case I_CONST_INT: {
       PARSER_VERIFY(name, "Could not parse name for const int.");
 
-      auto arg0 = p.parseInt();
+      auto arg0 = p.parseExpression<int32_t>(constIntResolver);
       PARSER_VERIFY(arg0, "Could not parse const int.");
 
       m_constInts.push_back({std::string(*name), *arg0});
@@ -722,7 +722,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
     case I_CONST_FLOAT: {
       PARSER_VERIFY(name, "Could not parse name for const float.");
 
-      auto arg0 = p.parseFloat();
+      auto arg0 = p.parseExpression<float>(constFloatResolver);
       PARSER_VERIFY(arg0, "Could not parse const float.");
 
       m_constFloats.push_back({std::string(*name), *arg0});
@@ -929,7 +929,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
     }
     case I_BARRIER: {
       auto bn = p.parseName();
-      PARSER_VERIFY(bn, "Expected at lesat one buffer in barrier declaration.");
+      PARSER_VERIFY(bn, "Expected at least one buffer in barrier declaration.");
 
       std::vector<uint32_t> buffers;
 
@@ -1014,7 +1014,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       break;
     }
     case I_FEATURE: {
-      char* c0 = p.c; 
+      char* c0 = p.c;
       PARSER_VERIFY(p.parseName(), "Could not parse feature name.");
       bool bFoundFeature = false;
       for (uint32_t i = 0;

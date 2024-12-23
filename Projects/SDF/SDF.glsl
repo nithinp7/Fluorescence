@@ -148,9 +148,6 @@ void PS_SDF() {
   
   if (COLOR_REMAP)
     outColor.xyz = colorRemap(outColor.xyz);
-
-  if (TEST == 6)
-    outColor.x = 1.0;
 }
 #endif // IS_PIXEL_SHADER
 
