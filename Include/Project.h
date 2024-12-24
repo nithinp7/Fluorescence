@@ -16,12 +16,15 @@
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 using namespace AltheaEngine;
 
 namespace flr {
+class Audio;
+
 struct ParsedFlr {
   ParsedFlr(Application& app, const char* projectPath);
 
@@ -132,11 +135,7 @@ struct ParsedFlr {
   };
   std::vector<RenderPass> m_renderPasses;
 
-  enum TaskType : uint8_t {
-    TT_COMPUTE = 0,
-    TT_BARRIER,
-    TT_RENDER
-  };
+  enum TaskType : uint8_t { TT_COMPUTE = 0, TT_BARRIER, TT_RENDER };
   struct Task {
     uint32_t idx;
     TaskType type;
@@ -145,7 +144,8 @@ struct ParsedFlr {
 
   enum FeatureFlag : uint32_t {
     FF_NONE = 0,
-    FF_PERSPECTIVE_CAMERA = (1 << 0)
+    FF_PERSPECTIVE_CAMERA = (1 << 0),
+    FF_SYSTEM_AUDIO_INPUT = (1 << 1)
   };
   uint32_t m_featureFlags;
 
@@ -154,7 +154,8 @@ struct ParsedFlr {
   }
 
   static constexpr char* FEATURE_FLAG_NAMES[] = {
-    "perspective_camera"
+      "perspective_camera",
+      "system_audio_input" // TODO: mic audio input
   };
 
   bool m_failed;
@@ -208,6 +209,7 @@ public:
       GlobalHeap& heap,
       const TransientUniforms<FlrUniforms>& flrUniforms,
       const char* projectPath);
+  ~Project();
 
   void tick(Application& app, const FrameContext& frame);
 
@@ -225,15 +227,11 @@ public:
 
   bool hasFailed() const { return m_parsed.m_failed; }
 
-  const char* getErrorMessage() const {
-    return m_parsed.m_errMsg;
-  }
+  const char* getErrorMessage() const { return m_parsed.m_errMsg; }
 
   bool hasRecompileFailed() const { return m_failedShaderCompile; }
 
-  const char* getShaderCompileErrors() const {
-    return m_shaderCompileErrMsg;
-  }
+  const char* getShaderCompileErrors() const { return m_shaderCompileErrMsg; }
 
   void tryRecompile(Application& app);
 
@@ -263,6 +261,9 @@ private:
 
   CameraController m_cameraController;
   TransientUniforms<PerspectiveCamera> m_perspectiveCamera;
+  TransientUniforms<AudioInput> m_audioInput;
+
+  std::unique_ptr<Audio> m_pAudio;
 
   uint32_t m_displayPassIdx;
 

@@ -18,6 +18,10 @@ struct PerspectiveCamera {
   mat4 inverseProjection;
 };
 
+struct AudioInput {
+  vec4 packedSamples[512]; // TODO
+};
+
 struct FlrPush {
   uint push0;
   uint push1;

@@ -1,5 +1,7 @@
 #include "Project.h"
 
+#include "Audio.h"
+
 #include <Althea/BufferUtilities.h>
 #include <Althea/DescriptorSet.h>
 #include <Althea/Gui.h>
@@ -118,6 +120,10 @@ Project::Project(
     m_perspectiveCamera = TransientUniforms<PerspectiveCamera>(app);
   }
 
+  if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
+    m_audioInput = TransientUniforms<AudioInput>(app);
+  }
+
   DescriptorSetLayoutBuilder dsBuilder{};
   dsBuilder.addUniformBufferBinding();
   for (const BufferAllocation& b : m_buffers) {
@@ -127,6 +133,9 @@ Project::Project(
     dsBuilder.addUniformBufferBinding();
   }
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
+    dsBuilder.addUniformBufferBinding();
+  }
+  if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
     dsBuilder.addUniformBufferBinding();
   }
 
@@ -207,6 +216,10 @@ Project::Project(
     if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
       assign.bindTransientUniforms(m_perspectiveCamera);
     }
+
+    if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
+      assign.bindTransientUniforms(m_audioInput);
+    }
   }
 
   // includes
@@ -217,6 +230,14 @@ Project::Project(
     CODE_APPEND(
         "layout(set=1, binding=%u) uniform _CameraUniforms { PerspectiveCamera "
         "camera; };\n\n",
+        slot++);
+  }
+
+  // audio uniforms
+  if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
+    CODE_APPEND(
+        "layout(set=1, binding=%u) uniform _AudioUniforms { AudioInput "
+        "audio; };\n\n",
         slot++);
   }
 
@@ -386,9 +407,22 @@ Project::Project(
 
     pass.m_target.registerToTextureHeap(heap);
   }
+
+  if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
+    m_pAudio = std::make_unique<Audio>();
+  }
 }
 
+Project::~Project() {}
+
 void Project::tick(Application& app, const FrameContext& frame) {
+  if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
+    AudioInput audioInput;
+    m_pAudio->play();
+    m_pAudio->copySamples(&audioInput.packedSamples[0][0], 512 * 4);
+    m_audioInput.updateUniforms(audioInput, frame);
+  }
+
   if (m_bHasDynamicData && !app.getInputManager().getMouseCursorHidden()) {
     if (ImGui::Begin("Options", false)) {
       // TODO: cache UI order to avoid linear scans each time...
@@ -628,7 +662,8 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
 
     Parser p{lineBuf};
 
-    auto constUintResolver = [&](std::string_view n) -> std::optional<uint32_t> {
+    auto constUintResolver =
+        [&](std::string_view n) -> std::optional<uint32_t> {
       return findValueByName<ConstUint, uint32_t, &ConstUint::value>(
           m_constUints,
           n);
@@ -640,8 +675,8 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
     };
     auto constFloatResolver = [&](std::string_view n) -> std::optional<float> {
       if (auto f = findValueByName<ConstFloat, float, &ConstFloat::value>(
-        m_constFloats,
-        n))
+              m_constFloats,
+              n))
         return f;
       if (auto u = constUintResolver(n))
         return static_cast<float>(*u);

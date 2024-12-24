@@ -3,22 +3,27 @@
 #include <stdio.h>
 #include <cassert>
 #include <Windows.h>
+#include <mmreg.h>
+
+#include <cstdint>
 
 namespace flr {
 
 // TODO: Rename class to something more descriptive...
 
-Audio::Audio() {
+Audio::Audio() : m_sampleOffset(0) {
+  m_samples.resize(48000);
+
   HRESULT hr;
-  IMMDeviceEnumerator* enumerator = NULL;
+  IMMDeviceEnumerator* enumerator = nullptr;
 
   // Initializes the COM library
-  hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+  hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   assert(SUCCEEDED(hr));
 
   hr = CoCreateInstance(
     __uuidof(MMDeviceEnumerator),
-    NULL,
+    nullptr,
     CLSCTX_ALL,
     __uuidof(IMMDeviceEnumerator),
     (void**)&enumerator
@@ -33,11 +38,10 @@ Audio::Audio() {
   hr = enumerator->Release();
   assert(SUCCEEDED(hr));
 
-  hr = m_pRecorder->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&m_pRecorderClient);
+  hr = m_pRecorder->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&m_pRecorderClient);
   assert(SUCCEEDED(hr));
 
-  // REVIEW BLOCK
-  hr = m_pRenderer->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&m_pRenderClient);
+  hr = m_pRenderer->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&m_pRenderClient);
   assert(SUCCEEDED(hr));
 
   hr = m_pRecorderClient->GetMixFormat(&m_pFormat);
@@ -50,10 +54,10 @@ Audio::Audio() {
   printf("  Sample rate:   : %d\n", m_pFormat->nSamplesPerSec);
 
   // REVIEW BLOCK
-  hr = m_pRecorderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 10000000, 0, m_pFormat, NULL);
+  hr = m_pRecorderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 10000000, 0, m_pFormat, nullptr);
   assert(SUCCEEDED(hr));
 
-  hr = m_pRenderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 10000000, 0, m_pFormat, NULL);
+  hr = m_pRenderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 10000000, 0, m_pFormat, nullptr);
   assert(SUCCEEDED(hr));
 
   hr = m_pRenderClient->GetService(__uuidof(IAudioRenderClient), (void**)&m_pRenderService);
@@ -87,27 +91,49 @@ Audio::~Audio() {
   CoUninitialize();
 }
 
-void Audio::play() const {
+void Audio::play() {
   HRESULT hr;
-  UINT32 nFrames;
+  uint32_t nFrames;
   DWORD flags;
   BYTE* captureBuffer;
   BYTE* renderBuffer;
 
-  for (int i = 0; i < 10; i++) {
-    hr = m_pCaptureService->GetBuffer(&captureBuffer, &nFrames, &flags, NULL, NULL);
+  while (true)
+  {
+    hr = m_pCaptureService->GetBuffer(&captureBuffer, &nFrames, &flags, nullptr, nullptr);
     assert(SUCCEEDED(hr));
+    if (!nFrames)
+      break;
 
     hr = m_pCaptureService->ReleaseBuffer(nFrames);
     assert(SUCCEEDED(hr));
 
-    hr = m_pRenderService->GetBuffer(nFrames, &renderBuffer);
-    assert(SUCCEEDED(hr));
+    // hr = m_pRenderService->GetBuffer(nFrames, &renderBuffer);
+    // assert(SUCCEEDED(hr));
 
-    memcpy(renderBuffer, captureBuffer, m_pFormat->nBlockAlign * nFrames);
+    //float qdenom = static_cast<float>((1u << (m_pFormat->wBitsPerSample - 1)) - 1u);
 
-    hr = m_pRenderService->ReleaseBuffer(nFrames, 0);
-    assert(SUCCEEDED(hr));
+    for (int i = 0; i < nFrames; i++) {
+      BYTE* offs = captureBuffer + i * m_pFormat->nBlockAlign;
+      float c0 = *reinterpret_cast<float*>(offs);
+      float c1 = *reinterpret_cast<float*>(offs + 4);
+      //float c0 = *reinterpret_cast<uint32_t*>(offs) / qdenom;
+      //float c1 = *reinterpret_cast<uint32_t*>(offs + 4) / qdenom;
+
+      m_samples[m_sampleOffset++ % m_samples.size()] = c0;
+    }
+
+    // memcpy(renderBuffer, captureBuffer, m_pFormat->nBlockAlign * nFrames);
+
+    // hr = m_pRenderService->ReleaseBuffer(nFrames, 0);
+    // assert(SUCCEEDED(hr));
+  }
+}
+
+void Audio::copySamples(float* dst, uint32_t count) const {
+  for (uint32_t i = 0; i < count; i++) {
+    uint32_t idx = (m_sampleOffset + i) % m_samples.size();
+    dst[i] = m_samples[idx];
   }
 }
 } // namespace flr

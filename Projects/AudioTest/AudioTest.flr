@@ -1,0 +1,7 @@
+uint SAMPLE_CIRCLE_VERTS: 48
+
+enable_feature: system_audio_input
+
+display_pass:
+  draw: VS_Test PS_Test 3 1
+  draw: VS_SamplePlot PS_SamplePlot SAMPLE_CIRCLE_VERTS 2048
