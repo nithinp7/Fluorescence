@@ -2,7 +2,6 @@
 
 #define SCREEN_WIDTH 1440
 #define SCREEN_HEIGHT 1280
-#define TEST 126
 
 struct Pixel {
   vec4 accumulated;
@@ -12,6 +11,7 @@ struct Pixel {
 layout(set=1, binding=1) uniform _UserUniforms {
 	uint MAX_ITERS;
 	uint RENDER_MODE;
+	float ROUGHNESS;
 	float SLIDER_A;
 	float SLIDER_B;
 	float SLIDER_C;

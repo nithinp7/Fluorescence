@@ -132,7 +132,7 @@ void Audio::play() {
 
 void Audio::copySamples(float* dst, uint32_t count) const {
   for (uint32_t i = 0; i < count; i++) {
-    uint32_t idx = (m_sampleOffset + i) % m_samples.size();
+    uint32_t idx = (m_sampleOffset - i - 1) % m_samples.size();
     dst[i] = m_samples[idx];
   }
 }
