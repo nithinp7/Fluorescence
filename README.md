@@ -8,6 +8,10 @@ The application is built on top of my rendering engine, [Althea](https://github.
 
 ## Demo Projects
 
+### SDF Pathtracer
+
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/SDF.png"/>
+
 ### Smoothed Particle Hydrodynamics (SPH) - 2D Implementation
 
 <img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/SPH.gif"/>
