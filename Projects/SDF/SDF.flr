@@ -12,13 +12,23 @@ checkbox COLOR_REMAP: false
 
 slider_uint RENDER_MODE: 0 0 2
 
-# TODO - use regular image instead of flat buffer
-struct Pixel {
-  vec4 accumulated;
+struct GlobalState {
+  uint accumulationFrames;
 }
-struct_size: 16
+struct_size 4
+structured_buffer globalStateBuffer: GlobalState 1
 
-#compute_shader CS_PathTrace: 32 32 1
+image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba8
+texture_alias accumulationTexture
+
+compute_shader CS_Tick: 1 1 1
+compute_shader CS_PathTrace: 32 32 1
+
+compute_dispatch: CS_Tick 1 1 1
+barrier: globalStateBuffer
+transition_layout: accumulationBuffer image
+compute_dispatch: CS_PathTrace SCREEN_WIDTH SCREEN_HEIGHT 1
+transition_layout: accumulationBuffer texture
 
 display_pass:
   draw: VS_SDF PS_SDF 3 1

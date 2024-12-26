@@ -70,5 +70,7 @@ private:
   bool m_bOpenFileDialogue = false;
   bool m_bReloadProject = false;
   bool m_bPaused = false;
+  bool m_bFreezeTime = false;
+  float m_time = 0.0f;
 };
 } // namespace flr

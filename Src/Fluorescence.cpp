@@ -60,6 +60,9 @@ void Fluorescence::initGame(Application& app) {
       });
 
   input.addKeyBinding(
+      {GLFW_KEY_T, GLFW_PRESS, GLFW_MOD_CONTROL},
+      [&app, this]() { m_bFreezeTime = !m_bFreezeTime; });
+  input.addKeyBinding(
       {GLFW_KEY_R, GLFW_PRESS, GLFW_MOD_CONTROL | GLFW_MOD_SHIFT},
       [&app, this]() {
         m_displayPass.tryRecompile(app);
@@ -193,12 +196,15 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
   static uint32_t frameCount = 0;
   static uint32_t prevInputMask = inputMask;
 
+  if (!m_bFreezeTime)
+    m_time += frame.deltaTime;
+
   FlrUniforms uniforms;
   uniforms.mouseUv.x =
       static_cast<float>(mpos.x / app.getSwapChainExtent().width);
   uniforms.mouseUv.y =
       static_cast<float>(mpos.y / app.getSwapChainExtent().height);
-  uniforms.time = static_cast<float>(frame.currentTime);
+  uniforms.time = m_time;
   uniforms.frameCount = frameCount++;
   uniforms.prevInputMask = prevInputMask;
   uniforms.inputMask = inputMask;

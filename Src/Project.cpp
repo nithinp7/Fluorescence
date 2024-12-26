@@ -69,10 +69,7 @@ Project::Project(
   for (const ParsedFlr::ImageDesc& desc : m_parsed.m_images) {
     ImageResource& rsc = m_images.emplace_back();
 
-    ImageOptions imageOptions{};
-    imageOptions.width = desc.width;
-    imageOptions.height = desc.height;
-    rsc.image = Image(app, imageOptions);
+    rsc.image = Image(app, desc.createOptions);
 
     ImageViewOptions viewOptions{};
     rsc.view = ImageView(app, rsc.image, viewOptions);
@@ -218,8 +215,9 @@ Project::Project(
 
       assign.bindStorageImage(rsc.view, rsc.sampler);
       CODE_APPEND(
-          "layout(set=1,binding=%u) uniform image2D %s_Image;\n",
+          "layout(set=1,binding=%u, %s) uniform image2D %s;\n",
           slot++,
+          desc.format.c_str(),
           desc.name.c_str());
     }
 
@@ -229,7 +227,7 @@ Project::Project(
 
       assign.bindTexture(rsc);
       CODE_APPEND(
-          "layout(set=1,binding=%u) uniform sampler2D %s_Texture;\n",
+          "layout(set=1,binding=%u) uniform sampler2D %s;\n",
           slot++,
           txDesc.name.c_str());
     }
@@ -1146,30 +1144,36 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
     case I_IMAGE: {
       PARSER_VERIFY(name, "Could not parse image name.");
 
-      auto width = p.parseUint();
+      auto width = parseUintOrVar();
       PARSER_VERIFY(width, "Could not parse image width.");
 
-      auto height = p.parseUint();
+      p.parseWhitespace();
+
+      auto height = parseUintOrVar();
       PARSER_VERIFY(height, "Could not parse image height.");
 
-      m_images.push_back({std::string(*name), "", *width, *height});
+      p.parseWhitespace();
+      auto format = p.parseName();
+      PARSER_VERIFY(format, "Could not parse format string for image declaration.");
+
+      ImageDesc& desc = m_images.emplace_back();
+      desc.name = std::string(*name);
+      desc.format = std::string(*format);
+      desc.createOptions = ImageOptions{};
+      desc.createOptions.width = *width;
+      desc.createOptions.height = *height;
+      desc.createOptions.usage = VK_IMAGE_USAGE_STORAGE_BIT;
 
       break;
     }
-    case I_TEXTURE: {
+    case I_TEXTURE_ALIAS: {
       PARSER_VERIFY(name, "Could not parse texture name.");
 
-      auto imageName = p.parseName();
-      PARSER_VERIFY(
-          imageName,
-          "Could not parse image name in texture declaration.");
+      PARSER_VERIFY(m_images.size() > 0, "Could not find preceding image declaration before texture_alias declaration.");
 
-      auto imageIdx = findIndexByName(m_images, *imageName);
-      PARSER_VERIFY(
-          imageIdx,
-          "Could not find image name specified in texture declaration.");
-
-      m_textures.push_back({std::string(*imageName), *imageIdx});
+      uint32_t imageIdx = m_images.size() - 1;
+      m_images[imageIdx].createOptions.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+      m_textures.push_back({std::string(*name), imageIdx});
 
       break;
     }

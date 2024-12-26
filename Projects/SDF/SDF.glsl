@@ -35,7 +35,7 @@ float sampleSdf(vec3 pos) {
   vec3 c = 5.0.xxx;
   vec3 diff = fractPos - c;
   vec3 offs = SLIDER_A * diff;
-  float r = 1.5 + 0.1 * wave(10., SLIDER_B * offs.x * offs.z + offs.y + -SLIDER_C * pos.x * pos.y * pos.z);
+  float r = 2.0 + 0.25 * wave(10., SLIDER_B * offs.x * offs.z + offs.y + -SLIDER_C * pos.x * pos.y * pos.z);
   float d = length(diff);
   return d - r;
 }
@@ -54,7 +54,7 @@ Material sampleSdfMaterial(vec3 pos) {
   mat.roughness = ROUGHNESS;
   mat.metallic = 0.0;
   ivec3 cellCoord = ivec3(cellPos);
-  mat.emissive = (cellCoord.x == cellCoord.y) ? 1000000. * mat.diffuse : 0.0.xxx;
+  mat.emissive = (cellCoord.x == cellCoord.y) ? 1. * mat.diffuse : 0.0.xxx;
 
   return mat;
 }
@@ -103,7 +103,7 @@ vec4 samplePath(inout uvec2 seed, vec3 pos, vec3 dir) {
 
     if (length(hit.material.emissive) > 0.0)
     {
-      color.rgb += throughput * hit.material.emissive;//sampleEnv(dir);
+      color.rgb += throughput * hit.material.emissive;
       break;
     }
 
@@ -126,6 +126,32 @@ vec4 samplePath(inout uvec2 seed, vec3 pos, vec3 dir) {
 ////////////////////////// COMPUTE SHADERS //////////////////////////
 
 #ifdef IS_COMP_SHADER
+void CS_Tick() {
+  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0) {
+    globalStateBuffer[0].accumulationFrames = 0;
+  } else {
+    globalStateBuffer[0].accumulationFrames++;
+  }
+}
+
+void CS_PathTrace() {
+  uvec2 pixelCoord = uvec2(gl_GlobalInvocationID.xy);
+  if (pixelCoord.x >= SCREEN_WIDTH || pixelCoord.y >= SCREEN_HEIGHT) {
+    return;
+  }
+
+  vec4 prevColor = imageLoad(accumulationBuffer, ivec2(pixelCoord));
+
+  uvec2 seed = pixelCoord * uvec2(uniforms.frameCount, uniforms.frameCount + 1);
+  
+  vec2 uv = vec2(pixelCoord) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
+  vec3 dir = normalize(computeDir(uv));
+  vec3 pos = camera.inverseView[3].xyz;
+
+  vec4 color = samplePath(seed, pos, dir);
+  color.rgb = mix(prevColor.rgb, color.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
+  imageStore(accumulationBuffer, ivec2(pixelCoord), color);
+}
 #endif // IS_COMP_SHADER
 
 ////////////////////////// VERTEX SHADERS //////////////////////////
@@ -153,9 +179,7 @@ void PS_SDF() {
   vec3 pos = camera.inverseView[3].xyz;
   
   if (RENDER_MODE == 0) {
-    uvec2 seed = uvec2(inScreenUv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT)) * 
-                 uvec2(uniforms.frameCount, uniforms.frameCount + 1);
-    outColor = samplePath(seed, pos, dir);
+    outColor = texture(accumulationTexture, inScreenUv);
   }
   if (RENDER_MODE == 1) {
     HitResult hit;
@@ -177,9 +201,6 @@ void PS_SDF() {
   
   if (COLOR_REMAP)
     outColor.xyz = colorRemap(outColor.xyz);
-
-  if (gl_SampleID > 0)
-    outColor.xyz = vec3(1.0, 0.0, 0.0);
 }
 #endif // IS_PIXEL_SHADER
 

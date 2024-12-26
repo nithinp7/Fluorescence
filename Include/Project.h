@@ -101,9 +101,8 @@ struct ParsedFlr {
 
   struct ImageDesc {
     std::string name;
-    std::string textureName;
-    uint32_t width;
-    uint32_t height;
+    std::string format;
+    ImageOptions createOptions;
   };
   std::vector<ImageDesc> m_images;
 
@@ -212,7 +211,7 @@ struct ParsedFlr {
     I_DRAW,
     I_FEATURE,
     I_IMAGE,
-    I_TEXTURE,
+    I_TEXTURE_ALIAS,
     I_TRANSITION,
     I_COUNT
   };
@@ -236,7 +235,7 @@ struct ParsedFlr {
       "draw",
       "enable_feature",
       "image",
-      "texture",
+      "texture_alias",
       "transition_layout"};
 };
 

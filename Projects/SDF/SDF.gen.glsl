@@ -1,14 +1,17 @@
 #version 460 core
 
-#define SCREEN_WIDTH 1440
-#define SCREEN_HEIGHT 1280
+#define SCREEN_WIDTH 2560
+#define SCREEN_HEIGHT 1334
 
-struct Pixel {
-  vec4 accumulated;
+struct GlobalState {
+  uint accumulationFrames;
 };
 
+layout(set=1,binding=1) buffer BUFFER_globalStateBuffer {  GlobalState globalStateBuffer[]; };
+layout(set=1,binding=2, rgba8) uniform image2D accumulationBuffer;
+layout(set=1,binding=3) uniform sampler2D accumulationTexture;
 
-layout(set=1, binding=1) uniform _UserUniforms {
+layout(set=1, binding=4) uniform _UserUniforms {
 	uint MAX_ITERS;
 	uint RENDER_MODE;
 	float ROUGHNESS;
@@ -20,11 +23,19 @@ layout(set=1, binding=1) uniform _UserUniforms {
 
 #include <Fluorescence.glsl>
 
-layout(set=1, binding=2) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=5) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 #include "SDF.glsl"
 
 #ifdef IS_COMP_SHADER
+#ifdef _ENTRY_POINT_CS_Tick
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+void main() { CS_Tick(); }
+#endif // _ENTRY_POINT_CS_Tick
+#ifdef _ENTRY_POINT_CS_PathTrace
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+void main() { CS_PathTrace(); }
+#endif // _ENTRY_POINT_CS_PathTrace
 #endif // IS_COMP_SHADER
 
 
