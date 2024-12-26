@@ -9,6 +9,7 @@
 #include <Althea/FrameContext.h>
 #include <Althea/Framebuffer.h>
 #include <Althea/GlobalHeap.h>
+#include <Althea/ImageResource.h>
 #include <Althea/PerFrameResources.h>
 #include <Althea/RenderPass.h>
 #include <Althea/StructuredBuffer.h>
@@ -98,6 +99,20 @@ struct ParsedFlr {
   };
   std::vector<BufferDesc> m_buffers;
 
+  struct ImageDesc {
+    std::string name;
+    std::string textureName;
+    uint32_t width;
+    uint32_t height;
+  };
+  std::vector<ImageDesc> m_images;
+
+  struct TextureDesc {
+    std::string name;
+    uint32_t imageIdx; // TODO: allow for textures loaded from files
+  };
+  std::vector<TextureDesc> m_textures;
+
   struct ComputeShader {
     std::string name;
     uint32_t groupSizeX;
@@ -119,6 +134,18 @@ struct ParsedFlr {
   };
   std::vector<Barrier> m_barriers;
 
+  enum LayoutTransitionTarget : uint8_t { LTT_TEXTURE = 0, LTT_IMAGE_RW, LTT_ATTACHMENT };
+  static constexpr char* TRANSITION_TARGET_NAMES[] = {
+    "texture",
+    "image",
+    "attachment"
+  };
+  struct Transition {
+    uint32_t image;
+    LayoutTransitionTarget transitionTarget;
+  };
+  std::vector<Transition> m_transitions;
+
   struct Draw {
     // TODO: re-usable subpasses that can be used multiple times...
     std::string vertexShader;
@@ -135,7 +162,12 @@ struct ParsedFlr {
   };
   std::vector<RenderPass> m_renderPasses;
 
-  enum TaskType : uint8_t { TT_COMPUTE = 0, TT_BARRIER, TT_RENDER };
+  enum TaskType : uint8_t {
+    TT_COMPUTE = 0,
+    TT_BARRIER,
+    TT_RENDER,
+    TT_TRANSITION
+  };
   struct Task {
     uint32_t idx;
     TaskType type;
@@ -179,6 +211,9 @@ struct ParsedFlr {
     I_RENDER_PASS,
     I_DRAW,
     I_FEATURE,
+    I_IMAGE,
+    I_TEXTURE,
+    I_TRANSITION,
     I_COUNT
   };
 
@@ -199,7 +234,10 @@ struct ParsedFlr {
       "display_pass",
       "render_pass",
       "draw",
-      "enable_feature"};
+      "enable_feature",
+      "image",
+      "texture",
+      "transition_layout"};
 };
 
 class Project {
@@ -239,6 +277,7 @@ private:
   ParsedFlr m_parsed;
 
   std::vector<BufferAllocation> m_buffers;
+  std::vector<ImageResource> m_images;
   std::vector<ComputePipeline> m_computePipelines;
 
   struct DrawTask {

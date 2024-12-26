@@ -6,7 +6,7 @@ slider_float SLIDER_A: 0.5 0.0 10.0
 slider_float SLIDER_B: 0.5 0.0 10.0
 slider_float SLIDER_C: 0.5 0.0 10.0
 
-slider_uint MAX_ITERS: 100 50 1000
+slider_uint MAX_ITERS: 50 50 1000
 
 checkbox COLOR_REMAP: false
 
@@ -18,7 +18,7 @@ struct Pixel {
 }
 struct_size: 16
 
-# compute_shader CS_PathTrace: 32 32 1
+#compute_shader CS_PathTrace: 32 32 1
 
 display_pass:
   draw: VS_SDF PS_SDF 3 1

@@ -65,6 +65,22 @@ Project::Project(
         0);
   }
 
+  m_images.reserve(m_parsed.m_images.size());
+  for (const ParsedFlr::ImageDesc& desc : m_parsed.m_images) {
+    ImageResource& rsc = m_images.emplace_back();
+
+    ImageOptions imageOptions{};
+    imageOptions.width = desc.width;
+    imageOptions.height = desc.height;
+    rsc.image = Image(app, imageOptions);
+
+    ImageViewOptions viewOptions{};
+    rsc.view = ImageView(app, rsc.image, viewOptions);
+
+    SamplerOptions samplerOptions{};
+    rsc.sampler = Sampler(app, samplerOptions);
+  }
+
   m_bHasDynamicData =
       !m_parsed.m_sliderUints.empty() || !m_parsed.m_sliderInts.empty() ||
       !m_parsed.m_sliderFloats.empty() || !m_parsed.m_checkboxes.empty();
@@ -129,6 +145,12 @@ Project::Project(
   for (const BufferAllocation& b : m_buffers) {
     dsBuilder.addStorageBufferBinding(VK_SHADER_STAGE_ALL);
   }
+  for (const ImageResource& rsc : m_images) {
+    dsBuilder.addStorageImageBinding(VK_SHADER_STAGE_ALL);
+  }
+  for (const auto& t : m_parsed.m_textures) {
+    dsBuilder.addTextureBinding(VK_SHADER_STAGE_ALL);
+  }
   if (m_bHasDynamicData) {
     dsBuilder.addUniformBufferBinding();
   }
@@ -188,6 +210,28 @@ Project::Project(
           parsedBuf.name.c_str(),
           structdef.name.c_str(),
           parsedBuf.name.c_str());
+    }
+
+    for (int i = 0; i < m_images.size(); ++i) {
+      const auto& desc = m_parsed.m_images[i];
+      const auto& rsc = m_images[i];
+
+      assign.bindStorageImage(rsc.view, rsc.sampler);
+      CODE_APPEND(
+          "layout(set=1,binding=%u) uniform image2D %s_Image;\n",
+          slot++,
+          desc.name.c_str());
+    }
+
+    for (int i = 0; i < m_parsed.m_textures.size(); ++i) {
+      const auto& txDesc = m_parsed.m_textures[i];
+      const auto& rsc = m_images[txDesc.imageIdx];
+
+      assign.bindTexture(rsc);
+      CODE_APPEND(
+          "layout(set=1,binding=%u) uniform sampler2D %s_Texture;\n",
+          slot++,
+          txDesc.name.c_str());
     }
 
     if (m_bHasDynamicData) {
@@ -572,6 +616,39 @@ void Project::draw(
           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
       break;
     }
+
+    case ParsedFlr::TT_TRANSITION: {
+      const auto& transition = m_parsed.m_transitions[task.idx];
+      auto& rsc = m_images[transition.image];
+
+      switch (transition.transitionTarget) {
+      case ParsedFlr::LTT_TEXTURE: {
+        rsc.image.transitionLayout(
+            commandBuffer,
+            VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+            VK_ACCESS_SHADER_READ_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+        break;
+      }
+      case ParsedFlr::LTT_IMAGE_RW: {
+        rsc.image.transitionLayout(
+            commandBuffer,
+            VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+            VK_ACCESS_SHADER_READ_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+        break;
+      }
+      case ParsedFlr::LTT_ATTACHMENT: {
+        rsc.image.transitionLayout(
+            commandBuffer,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        break;
+      }
+      }
+      break;
+    }
     };
   }
 }
@@ -605,8 +682,8 @@ void Project::tryRecompile(Application& app) {
 }
 
 namespace {
-template <typename T, typename V, V T::*Vptr, typename A>
-std::optional<V> findValueByName(const A& ts, std::string_view n) {
+template <typename T, typename V, V T::*Vptr>
+std::optional<V> findValueByName(const std::vector<T>& ts, std::string_view n) {
   for (const T& t : ts) {
     if (t.name.size() == n.size() &&
         !strncmp(t.name.data(), n.data(), n.size())) {
@@ -617,8 +694,9 @@ std::optional<V> findValueByName(const A& ts, std::string_view n) {
   return std::nullopt;
 }
 
-template <typename T, typename A>
-std::optional<uint32_t> findIndexByName(const A& ts, std::string_view n) {
+template <typename T>
+std::optional<uint32_t>
+findIndexByName(const std::vector<T>& ts, std::string_view n) {
   uint32_t idx = 0;
   for (const T& t : ts) {
     if (t.name.size() == n.size() &&
@@ -631,6 +709,18 @@ std::optional<uint32_t> findIndexByName(const A& ts, std::string_view n) {
   return std::nullopt;
 }
 
+template <size_t N>
+std::optional<uint32_t>
+findIndexByName(char* const (&names)[N], std::string_view n) {
+  for (uint32_t i = 0; i < N; i++) {
+    if (strlen(names[i]) == n.size() &&
+        !strncmp(names[i], n.data(), n.size())) {
+      return i;
+    }
+  }
+
+  return std::nullopt;
+}
 } // namespace
 
 ParsedFlr::ParsedFlr(Application& app, const char* filename)
@@ -697,14 +787,8 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
 
     auto parseInstruction = [&]() -> std::optional<Instr> {
       return p.parseRef<Instr>([&](std::string_view n) -> std::optional<Instr> {
-        for (uint8_t i = 0; i < I_COUNT; ++i) {
-          const char* instr = INSTR_NAMES[i];
-          size_t len = strlen(instr);
-          if (len == n.size() && !strncmp(instr, n.data(), n.size())) {
-            return (Instr)i;
-          }
-        }
-
+        if (auto idx = findIndexByName(INSTR_NAMES, n))
+          return (Instr)*idx;
         return std::nullopt;
       });
     };
@@ -712,7 +796,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
     auto parseStructRef = [&]() -> std::optional<uint32_t> {
       return p.parseRef<uint32_t>(
           [&](std::string_view n) -> std::optional<uint32_t> {
-            return findIndexByName<StructDef>(m_structDefs, n);
+            return findIndexByName(m_structDefs, n);
           });
     };
 
@@ -1049,26 +1133,78 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       break;
     }
     case I_FEATURE: {
-      char* c0 = p.c;
-      PARSER_VERIFY(p.parseName(), "Could not parse feature name.");
-      bool bFoundFeature = false;
-      for (uint32_t i = 0;
-           i < (sizeof(FEATURE_FLAG_NAMES) / sizeof(*FEATURE_FLAG_NAMES));
-           ++i) {
-        const char* featureName = FEATURE_FLAG_NAMES[i];
-        size_t len = strlen(featureName);
-        // TODO: avoid this, just use the name directly
-        if (len == (p.c - c0) && !strncmp(featureName, c0, len)) {
-          bFoundFeature = true;
-          m_featureFlags |= (FeatureFlag)(1 << i);
-        }
-      }
+      auto featureName = p.parseName();
+      PARSER_VERIFY(featureName, "Could not parse feature name.");
 
-      PARSER_VERIFY(bFoundFeature, "Invalid feature flag specified.");
+      auto featureIdx = findIndexByName(FEATURE_FLAG_NAMES, *featureName);
+      PARSER_VERIFY(featureIdx, "Invalid feature flag specified.");
+
+      m_featureFlags |= (FeatureFlag)(1 << *featureIdx);
 
       break;
     }
+    case I_IMAGE: {
+      PARSER_VERIFY(name, "Could not parse image name.");
+
+      auto width = p.parseUint();
+      PARSER_VERIFY(width, "Could not parse image width.");
+
+      auto height = p.parseUint();
+      PARSER_VERIFY(height, "Could not parse image height.");
+
+      m_images.push_back({std::string(*name), "", *width, *height});
+
+      break;
+    }
+    case I_TEXTURE: {
+      PARSER_VERIFY(name, "Could not parse texture name.");
+
+      auto imageName = p.parseName();
+      PARSER_VERIFY(
+          imageName,
+          "Could not parse image name in texture declaration.");
+
+      auto imageIdx = findIndexByName(m_images, *imageName);
+      PARSER_VERIFY(
+          imageIdx,
+          "Could not find image name specified in texture declaration.");
+
+      m_textures.push_back({std::string(*imageName), *imageIdx});
+
+      break;
+    }
+    case I_TRANSITION: {
+      auto imageName = p.parseName();
+      PARSER_VERIFY(
+          imageName,
+          "Could not parse image name for transition_layout declaration.");
+
+      auto imageIdx = findIndexByName(m_images, *imageName);
+      PARSER_VERIFY(
+          imageIdx,
+          "Could not find specified image name in transition_layout "
+          "declaration.");
+
+      p.parseWhitespace();
+
+      auto mode = p.parseName();
+      PARSER_VERIFY(
+          mode,
+          "Could not parse transition mode specified in transition_layout "
+          "declaration.");
+      auto modeIdx = findIndexByName(TRANSITION_TARGET_NAMES, *mode);
+      PARSER_VERIFY(
+          modeIdx,
+          "Invalid transition target specified in transition_layout "
+          "declaration.");
+
+      m_taskList.push_back({(uint32_t)m_transitions.size(), TT_TRANSITION});
+      m_transitions.push_back({*imageIdx, (LayoutTransitionTarget)*modeIdx});
+
+      break;
+    };
     default:
+      PARSER_VERIFY(false, "Encountered unknown instruction.");
       continue;
     }
   }
