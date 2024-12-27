@@ -26,6 +26,7 @@ Feature Roadmap:
 - SETUP README!!
 
 Other TODOs:
+- [ ] More flexible comment syntax
 - [ ] Improved generated file caching
 - [x] Allow for reload of flr file? CTRL+SHIFT+R ??
 

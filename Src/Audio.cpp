@@ -11,7 +11,7 @@ namespace flr {
 
 // TODO: Rename class to something more descriptive...
 
-Audio::Audio() : m_sampleOffset(0) {
+Audio::Audio(bool bLoopBack) : m_bLoopBack(bLoopBack), m_sampleOffset(0) {
   m_samples.resize(48000);
 
   HRESULT hr;
@@ -31,9 +31,11 @@ Audio::Audio() : m_sampleOffset(0) {
   assert(SUCCEEDED(hr));
 
   // enumerate and choose recorder / renderer devices
-  hr = enumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &m_pRecorder);
-  assert(SUCCEEDED(hr));
-  hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &m_pRenderer);
+  if (m_bLoopBack)
+    hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &m_pRecorder);
+  else
+    hr = enumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &m_pRecorder);
+
   assert(SUCCEEDED(hr));
   hr = enumerator->Release();
   assert(SUCCEEDED(hr));
@@ -41,52 +43,25 @@ Audio::Audio() : m_sampleOffset(0) {
   hr = m_pRecorder->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&m_pRecorderClient);
   assert(SUCCEEDED(hr));
 
-  hr = m_pRenderer->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&m_pRenderClient);
-  assert(SUCCEEDED(hr));
-
   hr = m_pRecorderClient->GetMixFormat(&m_pFormat);
   assert(SUCCEEDED(hr));
 
-  printf("Mix format:\n");
-  printf("  Frame size     : %d\n", m_pFormat->nBlockAlign);
-  printf("  Channels       : %d\n", m_pFormat->nChannels);
-  printf("  Bits per second: %d\n", m_pFormat->wBitsPerSample);
-  printf("  Sample rate:   : %d\n", m_pFormat->nSamplesPerSec);
-
-  // REVIEW BLOCK
-  hr = m_pRecorderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 10000000, 0, m_pFormat, nullptr);
-  assert(SUCCEEDED(hr));
-
-  hr = m_pRenderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 10000000, 0, m_pFormat, nullptr);
-  assert(SUCCEEDED(hr));
-
-  hr = m_pRenderClient->GetService(__uuidof(IAudioRenderClient), (void**)&m_pRenderService);
+  hr = m_pRecorderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, m_bLoopBack ? AUDCLNT_STREAMFLAGS_LOOPBACK : 0, 10000000, 0, m_pFormat, nullptr);
   assert(SUCCEEDED(hr));
 
   hr = m_pRecorderClient->GetService(__uuidof(IAudioCaptureClient), (void**)&m_pCaptureService);
   assert(SUCCEEDED(hr));
 
-
   hr = m_pRecorderClient->Start();
   assert(SUCCEEDED(hr));
-
-  hr = m_pRenderClient->Start();
-  assert(SUCCEEDED(hr));
-
 }
 
 Audio::~Audio() {
   m_pRecorderClient->Stop();
-  m_pRenderClient->Stop();
 
   m_pCaptureService->Release();
-  m_pRenderService->Release();
-
   m_pRecorderClient->Release();
-  m_pRenderClient->Release();
-
   m_pRecorder->Release();
-  m_pRenderer->Release();
 
   CoUninitialize();
 }
@@ -108,25 +83,22 @@ void Audio::play() {
     hr = m_pCaptureService->ReleaseBuffer(nFrames);
     assert(SUCCEEDED(hr));
 
-    // hr = m_pRenderService->GetBuffer(nFrames, &renderBuffer);
-    // assert(SUCCEEDED(hr));
+    WAVEFORMATEXTENSIBLE* format = reinterpret_cast<WAVEFORMATEXTENSIBLE*>(m_pFormat);
+    if (format->SubFormat.Data1 == WAVE_FORMAT_IEEE_FLOAT) {
+      for (int i = 0; i < nFrames; i++) {
+        BYTE* offs = captureBuffer + i * m_pFormat->nBlockAlign;
+        float c0 = *reinterpret_cast<float*>(offs);
+        float c1 = *reinterpret_cast<float*>(offs + 4);
 
-    //float qdenom = static_cast<float>((1u << (m_pFormat->wBitsPerSample - 1)) - 1u);
-
-    for (int i = 0; i < nFrames; i++) {
-      BYTE* offs = captureBuffer + i * m_pFormat->nBlockAlign;
-      float c0 = *reinterpret_cast<float*>(offs);
-      float c1 = *reinterpret_cast<float*>(offs + 4);
+        m_samples[m_sampleOffset++ % m_samples.size()] = c0;
+      }
+    }
+    else {
+      //float qdenom = static_cast<float>((1u << (m_pFormat->wBitsPerSample - 1)) - 1u);
       //float c0 = *reinterpret_cast<uint32_t*>(offs) / qdenom;
       //float c1 = *reinterpret_cast<uint32_t*>(offs + 4) / qdenom;
-
-      m_samples[m_sampleOffset++ % m_samples.size()] = c0;
+      assert(false);
     }
-
-    // memcpy(renderBuffer, captureBuffer, m_pFormat->nBlockAlign * nFrames);
-
-    // hr = m_pRenderService->ReleaseBuffer(nFrames, 0);
-    // assert(SUCCEEDED(hr));
   }
 }
 
@@ -134,6 +106,22 @@ void Audio::copySamples(float* dst, uint32_t count) const {
   for (uint32_t i = 0; i < count; i++) {
     uint32_t idx = (m_sampleOffset - i - 1) % m_samples.size();
     dst[i] = m_samples[idx];
+  }
+}
+
+/*static*/
+void Audio::DCT2_naive(float* coeffs, const float* samples, uint32_t N) {
+  float PI = 3.14159265359f;
+  for (uint32_t k = 0; k < N; k++) {
+    coeffs[k] = 0.0f;
+  }
+
+  for (uint32_t n = 0; n < N; n++) {
+    float xn = samples[n];
+    float freqScale = PI / N * (n + 0.5f);
+    for (uint32_t k = 0; k < N; k++) {
+      coeffs[k] += xn * cos(freqScale * k);
+    }
   }
 }
 } // namespace flr

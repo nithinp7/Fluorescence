@@ -1,6 +1,9 @@
 #define TILE_WIDTH (1.0 / TILE_COUNT_X)
 #define TILE_HEIGHT (1.0 / TILE_COUNT_Y)
 
+#define PACKED_OFFSET_BITS 11
+#define PACKED_OFFSET_MASK ((1 << PACKED_OFFSET_BITS) - 1)
+
 int getTileIdxFromCoord(ivec2 coord) {
   coord.x = clamp(coord.x, 0, TILE_COUNT_X - 1);
   coord.y = clamp(coord.y, 0, TILE_COUNT_Y - 1);
@@ -14,9 +17,9 @@ int getTileIdxFromUv(vec2 uv) {
 
 void getTile(uint tileIdx, out uint offset, out uint count) {
   tileIdx += globalStateBuffer[0].bPhase * TILE_COUNT;
-  uint tile = tilesBuffer[tileIdx].offset24count8;
-  offset = tile >> 8;
-  count = tile & 0xFF;
+  uint tile = tilesBuffer[tileIdx].packedOffsetCount;
+  offset = tile >> PACKED_OFFSET_BITS;
+  count = tile & PACKED_OFFSET_MASK;
 }
 
 // TODO: archive this bump-compressed reduced tile idx idea, there are some issues
@@ -48,7 +51,7 @@ void unpackDensityPressure(uint particleIdx, out float density, out float pressu
 
 vec2 unpackPos(uint particleIdx) {
   particleIdx += globalStateBuffer[0].bPhase * PARTICLE_COUNT;
-  uint tileIdx = (particleAddresses[particleIdx].u >> 8) % TILE_COUNT;
+  uint tileIdx = (particleAddresses[particleIdx].u >> PACKED_OFFSET_BITS) % TILE_COUNT;
   vec2 tileCoordf = vec2(tileIdx % TILE_COUNT_X, tileIdx / TILE_COUNT_X);
 
   uint packed = packedPositions[particleIdx / 2].u;
@@ -70,7 +73,7 @@ vec2 unpackVelocity(uint particleIdx) {
 
 vec2 unpackPrevPos(uint particleIdx) {
   particleIdx += (globalStateBuffer[0].bPhase ^ 1) * PARTICLE_COUNT;
-  uint tileIdx = (particleAddresses[particleIdx].u >> 8) % TILE_COUNT;
+  uint tileIdx = (particleAddresses[particleIdx].u >> PACKED_OFFSET_BITS) % TILE_COUNT;
   vec2 tileCoordf = vec2(tileIdx % TILE_COUNT_X, tileIdx / TILE_COUNT_X);
 
   uint packed = packedPositions[particleIdx / 2].u;
@@ -90,7 +93,7 @@ void clearTile(uint tileIdx) {
   tileIdx += globalStateBuffer[0].bPhase * TILE_COUNT;
   
   Tile tile;
-  tile.offset24count8 = 0;
+  tile.packedOffsetCount = 0;
   
   tilesBuffer[tileIdx] = tile;
 }
@@ -106,7 +109,7 @@ void reserveTileEntry(vec2 pos) {
   tileCoord.y = clamp(tileCoord.y, 0, TILE_COUNT_Y - 1);
   uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x + bPhase * TILE_COUNT;
 
-  uint prev = atomicAdd(tilesBuffer[tileIdx].offset24count8, 1);
+  uint prev = atomicAdd(tilesBuffer[tileIdx].packedOffsetCount, 1);
   if (prev == 0) { 
     // if this is the first entry in the tile, need to set up a reduced
     // tile idx
@@ -124,13 +127,13 @@ void allocateTile(uint redTileIdx) {
   uint tileIdx = reducedTilesBuffer[redTileIdx].u;
 
   Tile tile = tilesBuffer[tileIdx];
-  uint count = tile.offset24count8 & 0xFF;
+  uint count = tile.packedOffsetCount & 0x1FF;
   uint offset = atomicAdd(globalStateBuffer[0].tileEntryAllocator, count);
   uint particleStart = offset + globalStateBuffer[0].bPhase * PARTICLE_COUNT;
   for (uint i = particleStart/2; i < (particleStart + count)/2; i++) {
     packedPositions[i].u = 0;
   }
-  tile.offset24count8 = offset << 8; // intentionally reset count
+  tile.packedOffsetCount = offset << PACKED_OFFSET_BITS; // intentionally reset count
   tilesBuffer[tileIdx] = tile;
 }
 
@@ -145,8 +148,8 @@ uint insertTileEntry(vec2 pos, vec2 vel) {
   tileCoord.y = clamp(tileCoord.y, 0, TILE_COUNT_Y - 1);
   uint tileIdx = tileCoord.y * TILE_COUNT_X + tileCoord.x + bPhase * TILE_COUNT;
 
-  uint tileOffs = tilesBuffer[tileIdx].offset24count8 >> 8;
-  uint slot = atomicAdd(tilesBuffer[tileIdx].offset24count8, 1) & 0xFF;
+  uint tileOffs = tilesBuffer[tileIdx].packedOffsetCount >> PACKED_OFFSET_BITS;
+  uint slot = atomicAdd(tilesBuffer[tileIdx].packedOffsetCount, 1) & PACKED_OFFSET_MASK;
   uint particleIdx = tileOffs + slot + bPhase * PARTICLE_COUNT;
 
   vec2 relPos = tileCoordf - vec2(tileCoord);
@@ -160,7 +163,7 @@ uint insertTileEntry(vec2 pos, vec2 vel) {
   atomicOr(packedPositions[particleIdx / 2].u, packed);
   packedVelocities[particleIdx].u = packHalf2x16(vel);
   
-  particleAddresses[particleIdx].u = (tileIdx << 8) | slot;
+  particleAddresses[particleIdx].u = (tileIdx << PACKED_OFFSET_BITS) | slot;
   
   return particleIdx;
 }

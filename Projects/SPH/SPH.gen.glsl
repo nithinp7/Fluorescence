@@ -1,14 +1,14 @@
 #version 460 core
 
-#define SCREEN_WIDTH 1440
-#define SCREEN_HEIGHT 1280
-#define PARTICLE_COUNT 10000
-#define HALF_PARTICLE_COUNT 5000
-#define DOUBLE_PARTICLE_COUNT 20000
-#define TILE_COUNT_X 50
-#define TILE_COUNT_Y 50
-#define TILE_COUNT 2500
-#define DOUBLE_TILE_COUNT 5000
+#define SCREEN_WIDTH 2560
+#define SCREEN_HEIGHT 1334
+#define PARTICLE_COUNT 100000
+#define HALF_PARTICLE_COUNT 50000
+#define DOUBLE_PARTICLE_COUNT 200000
+#define TILE_COUNT_X 100
+#define TILE_COUNT_Y 100
+#define TILE_COUNT 10000
+#define DOUBLE_TILE_COUNT 20000
 #define PARTICLE_CIRCLE_VERTS 48
 #define DELTA_TIME 0.033330
 #define PARTICLE_RADIUS 0.005000
@@ -16,7 +16,7 @@
 struct Uint { uint u; };
 
 struct Tile {
-  uint offset24count8;
+  uint packedOffsetCount;
 };
 
 struct GlobalState {

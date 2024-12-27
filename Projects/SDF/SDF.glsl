@@ -21,7 +21,7 @@ struct HitResult {
 
 vec3 colorRemap(vec3 color) {
   // color *= 25;
-  color = vec3(1.0) - exp(-color * 0.1);
+  color = vec3(1.0) - exp(-color * 0.3);
   // vec3 color2 = color * color;
   // vec3 color3 = color2 * color;
   // color = -2 * color3 + 3 * color2;
@@ -35,7 +35,7 @@ float sampleSdf(vec3 pos) {
   vec3 c = 5.0.xxx;
   vec3 diff = fractPos - c;
   vec3 offs = SLIDER_A * diff;
-  float r = 2.0 + 0.25 * wave(10., SLIDER_B * offs.x * offs.z + offs.y + -SLIDER_C * pos.x * pos.y * pos.z);
+  float r = 2.0 + 0.05 * wave(10., SLIDER_B * offs.x * offs.z + offs.y + -SLIDER_C * pos.x * pos.y * pos.z);
   float d = length(diff);
   return d - r;
 }
@@ -83,7 +83,7 @@ vec3 computeDir(vec2 uv) {
 }
 
 vec3 sampleEnv(vec3 dir) {
-  return 100.0 * round(0.5 * normalize(dir) + 0.5.xxx);
+  return 1000.0 * round(0.5 * normalize(dir) + 0.5.xxx);
 }
 
 vec4 samplePath(inout uvec2 seed, vec3 pos, vec3 dir) {

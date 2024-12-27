@@ -8,18 +8,19 @@
 namespace flr {
 class Audio { // TODO: better name
 public:
-  Audio();
+  Audio(bool bLoopBack);
   ~Audio();
 
   void play();
   void copySamples(float* dst, uint32_t count) const;
 
+  static void DCT2_naive(float* coeffs, const float* samples, uint32_t N);
+
 private:
+  bool m_bLoopBack = false;
+
   IMMDevice* m_pRecorder;
-  IMMDevice* m_pRenderer;
   IAudioClient* m_pRecorderClient;
-  IAudioClient* m_pRenderClient;
-  IAudioRenderClient* m_pRenderService;
   IAudioCaptureClient* m_pCaptureService;
   WAVEFORMATEX* m_pFormat;
 

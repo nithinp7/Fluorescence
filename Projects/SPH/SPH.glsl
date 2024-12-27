@@ -296,12 +296,16 @@ void CS_UpdateVelocities() {
   vec2 vel = unpackVelocity(particleIdx);
   vel *= 1.0 - DAMPING;
   vel += sampleAccelerationField(pos);
+
+  uvec2 seed = uvec2(particleIdx, uniforms.frameCount);
+  // vel += 0.001 * (2.0 * randVec2(seed) - 1.0.xx);
   vel.y += GRAVITY;
 
   float density, pressure;
   unpackDensityPressure(particleIdx, density, pressure);
   
   vec2 acceleration = EOS_computeAcceleration(particleIdx);
+  // vel.y += -0.0000005 * density * density;
   vel += acceleration * DELTA_TIME;
 
   packVelocity(particleIdx, vel);

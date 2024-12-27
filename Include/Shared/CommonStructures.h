@@ -20,6 +20,7 @@ struct PerspectiveCamera {
 
 struct AudioInput {
   vec4 packedSamples[512]; // TODO
+  vec4 packedCoeffs[512];
 };
 
 struct FlrPush {

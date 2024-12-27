@@ -1,7 +1,18 @@
 uint SAMPLE_CIRCLE_VERTS: 48
+float LINE_WIDTH: 0.005
 
 enable_feature: system_audio_input
 
+# TODO: might want to do this tiled
+uint SAMPLE_COUNT: 2048
+uint GROUP_SIZE: 32
+uint DISPATCH_SIZE: GROUP_SIZE
+
+# compute_shader CS_DCT_II: GROUP_SIZE 1 1
+
+# compute_dispatch: CS_DCT_II DISPATCH_SIZE 1 1
+
 display_pass:
   draw: VS_Test PS_Test 3 1
-  draw: VS_SamplePlot PS_SamplePlot SAMPLE_CIRCLE_VERTS 2048
+  # draw: VS_SamplePlot PS_SamplePlot SAMPLE_CIRCLE_VERTS 2048
+  draw: VS_FrequencyPlot PS_SamplePlot 6 2048

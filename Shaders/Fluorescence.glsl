@@ -16,6 +16,24 @@ vec2 VS_FullScreen() {
   return screenPos;
 }
 
+vec2 VS_Square(uint vertexIdx, vec2 center, vec2 halfDims) {
+  vec2 pos;
+  if (vertexIdx == 0)
+    pos = vec2(-1.0, -1.0);
+  else if (vertexIdx == 1) 
+    pos = vec2(1.0, 1.0);
+  else if (vertexIdx == 2)
+    pos = vec2(-1.0, 1.0);
+  else if (vertexIdx == 3) 
+    pos = vec2(-1.0, -1.0);
+  else if (vertexIdx == 4)
+    pos = vec2(1.0, -1.0);
+  else
+    pos = vec2(1.0, 1.0);
+
+  return center + pos * halfDims;
+}
+
 vec2 VS_Circle(uint vertexIdx, vec2 pos, float radius, uint circleVerts) {
   float dtheta = 2.0 * PI * 3.0 / circleVerts;
 

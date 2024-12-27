@@ -451,7 +451,7 @@ Project::Project(
   }
 
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
-    m_pAudio = std::make_unique<Audio>();
+    m_pAudio = std::make_unique<Audio>(true);
   }
 }
 
@@ -462,6 +462,8 @@ void Project::tick(Application& app, const FrameContext& frame) {
     AudioInput audioInput;
     m_pAudio->play();
     m_pAudio->copySamples(&audioInput.packedSamples[0][0], 512 * 4);
+    Audio::DCT2_naive(&audioInput.packedCoeffs[0][0], &audioInput.packedSamples[0][0], 512 * 4);
+
     m_audioInput.updateUniforms(audioInput, frame);
   }
 

@@ -1,14 +1,46 @@
 
-#define LINE_WIDTH 0.005
+#include <Misc/Constants.glsl>
+
+float getSample(uint segment) {
+  return audio.packedSamples[segment>>2][segment&3];
+}
+
+float getCoeff(uint segment) {
+  return audio.packedCoeffs[segment>>2][segment&3];
+}
 
 float f(float x) {
   uint segment = uint(x * 511.5);
-  return audio.packedSamples[segment>>2][segment&3];
+  return getSample(segment);
 }
 
 ////////////////////////// COMPUTE SHADERS //////////////////////////
 
 #ifdef IS_COMP_SHADER
+shared inputsShared[SAMPLE_COUNT];
+
+void CS_DCT_II() {
+  uint threadIdx = uint(gl_GlobalInvocationID.x);
+  if (threadIdx >= DISPATCH_SIZE) {
+    return;
+  }
+
+  uint localThreadIdx = uint(gl_SubgroupInvocationID);
+
+  // load inputs to LDS
+  for (uint i = localThreadIdx; i < SAMPLE_COUNT; i += DISPATCH_SIZE) {
+    inputsShared[localThreadIdx] = getSample(i);
+  }
+
+  // flush LDS writes
+  subgroupMemoryBarrier();
+
+  for (uint i = 0; i < SAMPLE_COUNT; i += DISPATCH_SIZE) {
+    float freqScale = PI / SAMPLE_COUNT * (i + 0.5);
+    // for (uint j = 0; j < )
+    float c = cos(freqScale * )
+  }
+}
 #endif // IS_COMP_SHADER
 
 ////////////////////////// VERTEX SHADERS //////////////////////////
@@ -27,8 +59,9 @@ void VS_SamplePlot() {
   uint sampleIdx = gl_InstanceIndex;
 
   vec2 samplePos;
-  samplePos.x = sampleIdx / 512.0 / 4.0;
-  samplePos.y = 0.5 + 2.0 * audio.packedSamples[sampleIdx>>2][sampleIdx&3];
+  samplePos.x = 0.5 * log2(sampleIdx / 512.0);
+  // samplePos.y = 0.5 + 2.0 * audio.packedSamples[sampleIdx>>2][sampleIdx&3];
+  samplePos.y = 0.5 + 2.0 * audio.packedCoeffs[sampleIdx>>2][sampleIdx&3];
 
   const float radius = LINE_WIDTH;
 
@@ -37,6 +70,19 @@ void VS_SamplePlot() {
   outScreenUv = vertPos;
 }
 
+void VS_FrequencyPlot() {
+  uint sampleIdx = gl_InstanceIndex;
+
+  vec2 pos;
+  pos.x = log2(float(sampleIdx)/512.0);
+  pos.y = 0.5;
+  // samplePos.y = 0.5 + 2.0 * audio.packedSamples[sampleIdx>>2][sampleIdx&3];
+  float h = audio.packedCoeffs[sampleIdx>>2][sampleIdx&3];
+
+  vec2 vertPos = VS_Square(gl_VertexIndex, pos, vec2(1.0 / 512.0, max(h, 1.0 / 512.0)));
+  gl_Position = vec4(vertPos * 2.0f - 1.0f, 0.0f, 1.0f);
+  outScreenUv = vertPos;
+}
 #endif // IS_VERTEX_SHADER
 
 ////////////////////////// PIXEL SHADERS //////////////////////////
