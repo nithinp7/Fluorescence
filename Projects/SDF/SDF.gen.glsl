@@ -12,12 +12,14 @@ layout(set=1,binding=2, rgba8) uniform image2D accumulationBuffer;
 layout(set=1,binding=3) uniform sampler2D accumulationTexture;
 
 layout(set=1, binding=4) uniform _UserUniforms {
+	uint BOUNCES;
 	uint MAX_ITERS;
 	uint RENDER_MODE;
 	float ROUGHNESS;
 	float SLIDER_A;
 	float SLIDER_B;
 	float SLIDER_C;
+	bool ACCUMULATE;
 	bool COLOR_REMAP;
 };
 

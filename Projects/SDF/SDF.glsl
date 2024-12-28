@@ -30,10 +30,8 @@ vec3 colorRemap(vec3 color) {
 }
 
 float sampleSdf(vec3 pos) {
-  vec3 fractPos = fract(abs(pos) / 10.0) * 10.0;
-  // vec3 fractPos = fract(abs(wave(0.5, 0.001 * pos.x * pos.y - 0.01 *pos.z) * pos) / 10.0) * 10.0;
-  vec3 c = 5.0.xxx;
-  vec3 diff = fractPos - c;
+  vec3 c = vec3(0.0, 0.0, -5.0);
+  vec3 diff = pos - c;
   vec3 offs = SLIDER_A * diff;
   float r = 2.0 + 0.05 * wave(10., SLIDER_B * offs.x * offs.z + offs.y + -SLIDER_C * pos.x * pos.y * pos.z);
   float d = length(diff);
@@ -49,12 +47,10 @@ vec3 sampleSdfGrad(vec3 pos) {
 
 Material sampleSdfMaterial(vec3 pos) {
   Material mat;
-  vec3 cellPos = 0.05 * pos;
-  mat.diffuse = round(fract(cellPos));
+  mat.diffuse = vec3(0.85, 0.15, 0.15);
   mat.roughness = ROUGHNESS;
   mat.metallic = 0.0;
-  ivec3 cellCoord = ivec3(cellPos);
-  mat.emissive = (cellCoord.x == cellCoord.y) ? 1. * mat.diffuse : 0.0.xxx;
+  mat.emissive = 0.0.xxx;
 
   return mat;
 }
@@ -62,7 +58,7 @@ Material sampleSdfMaterial(vec3 pos) {
 bool raymarch(vec3 pos, vec3 dir, out HitResult result) {
   for (int i = 0; i < MAX_ITERS; i++) {
     float sdf = (sampleSdf(pos));
-    if (sdf < 0.01) {
+    if (sdf < 0.001) {
       result.pos = pos;
       result.grad = sampleSdfGrad(pos);
       result.material = sampleSdfMaterial(pos);
@@ -83,21 +79,20 @@ vec3 computeDir(vec2 uv) {
 }
 
 vec3 sampleEnv(vec3 dir) {
-  return 1000.0 * round(0.5 * normalize(dir) + 0.5.xxx);
+  return round(0.5 * normalize(dir) + 0.5.xxx);
 }
 
 vec4 samplePath(inout uvec2 seed, vec3 pos, vec3 dir) {
   vec4 color = vec4(0.0.xxx, 1.0);
 
-  int bounces = 3;
   vec3 throughput = 1.0.xxx;
-  for (int bounce = 0; bounce < bounces; bounce++) {
+  for (int bounce = 0; bounce < BOUNCES; bounce++) {
     HitResult hit;
     bool bResult = raymarch(pos, dir, hit);
     vec3 normal = normalize(hit.grad);
 
     if (!bResult) {
-      // color.rgb = 0.001 * sampleEnv(dir);
+      color.rgb = sampleEnv(dir);
       break;
     }
 
@@ -127,9 +122,12 @@ vec4 samplePath(inout uvec2 seed, vec3 pos, vec3 dir) {
 
 #ifdef IS_COMP_SHADER
 void CS_Tick() {
-  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0) {
-    globalStateBuffer[0].accumulationFrames = 0;
-  } else {
+  if (!ACCUMULATE || (uniforms.inputMask & INPUT_BIT_SPACE) != 0) 
+  {
+    globalStateBuffer[0].accumulationFrames = 1;
+  } 
+  else 
+  {
     globalStateBuffer[0].accumulationFrames++;
   }
 }

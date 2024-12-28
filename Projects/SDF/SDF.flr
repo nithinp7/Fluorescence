@@ -1,7 +1,10 @@
 
 enable_feature: perspective_camera
 
+checkbox ACCUMULATE: false
 slider_float ROUGHNESS: 0.1 0.01 1.0
+slider_uint BOUNCES: 2 2 5
+
 slider_float SLIDER_A: 0.5 0.0 10.0
 slider_float SLIDER_B: 0.5 0.0 10.0
 slider_float SLIDER_C: 0.5 0.0 10.0
