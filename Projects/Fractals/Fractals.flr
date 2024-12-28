@@ -1,3 +1,10 @@
+# enable_feature: system_audio_input
+# uint SAMPLE_COUNT: 2048
+
+# slider_uint FREQ_A: 12 2 512
+# slider_uint FREQ_B: 24 2 512
+# slider_uint FREQ_C: 96 2 512
+
 # TODO image resources
 uint IMAGE_SIZE_X: 1440
 uint IMAGE_SIZE_Y: 1280

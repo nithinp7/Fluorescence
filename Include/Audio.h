@@ -13,6 +13,7 @@ public:
 
   void play();
   void copySamples(float* dst, uint32_t count) const;
+  void DCT2_naive(float* coeffs, uint32_t K) const;
 
   static void DCT2_naive(float* coeffs, const float* samples, uint32_t N);
 

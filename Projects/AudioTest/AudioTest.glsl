@@ -6,7 +6,7 @@ float getSample(uint segment) {
 }
 
 float getCoeff(uint segment) {
-  return audio.packedCoeffs[segment>>2][segment&3];
+  return abs(audio.packedCoeffs[segment>>2][segment&3]);
 }
 
 float f(float x) {
@@ -54,30 +54,19 @@ void VS_Test() {
   outScreenUv = uv;
 }
 
-
-void VS_SamplePlot() {
-  uint sampleIdx = gl_InstanceIndex;
-
-  vec2 samplePos;
-  samplePos.x = 0.5 * log2(sampleIdx / 512.0);
-  // samplePos.y = 0.5 + 2.0 * audio.packedSamples[sampleIdx>>2][sampleIdx&3];
-  samplePos.y = 0.5 + 2.0 * audio.packedCoeffs[sampleIdx>>2][sampleIdx&3];
-
-  const float radius = LINE_WIDTH;
-
-  vec2 vertPos = VS_Circle(gl_VertexIndex, samplePos, radius, SAMPLE_CIRCLE_VERTS);
-  gl_Position = vec4(vertPos * 2.0f - 1.0f, 0.0f, 1.0f);
-  outScreenUv = vertPos;
-}
-
 void VS_FrequencyPlot() {
   uint sampleIdx = gl_InstanceIndex;
 
   vec2 pos;
-  pos.x = log2(float(sampleIdx)/512.0);
+  pos.x = float(sampleIdx) / SAMPLE_COUNT;// / 2048.0;//log2(float(sampleIdx)/2048.0);
   pos.y = 0.5;
-  // samplePos.y = 0.5 + 2.0 * audio.packedSamples[sampleIdx>>2][sampleIdx&3];
-  float h = audio.packedCoeffs[sampleIdx>>2][sampleIdx&3];
+  float h;
+  if (MODE == 0)
+    h = getSample(sampleIdx);
+  else
+    h = getCoeff(sampleIdx);
+
+  h *= SCALE;
 
   vec2 vertPos = VS_Square(gl_VertexIndex, pos, vec2(1.0 / 512.0, max(h, 1.0 / 512.0)));
   gl_Position = vec4(vertPos * 2.0f - 1.0f, 0.0f, 1.0f);
@@ -94,11 +83,6 @@ layout(location = 0) out vec4 outColor;
 
 void PS_Test() {
   outColor = 1.0.xxxx;
-
-  // float y = 0.5 - inScreenUv.y;
-  // float f_x = f(inScreenUv.x);
-  // if (abs(y - f_x) < LINE_WIDTH)
-  //   outColor.xyz = vec3(1.0, 0.0, 0.0);
 }
 
 void PS_SamplePlot() {

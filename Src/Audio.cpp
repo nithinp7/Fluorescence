@@ -12,7 +12,7 @@ namespace flr {
 // TODO: Rename class to something more descriptive...
 
 Audio::Audio(bool bLoopBack) : m_bLoopBack(bLoopBack), m_sampleOffset(0) {
-  m_samples.resize(48000);
+  m_samples.resize(4800);
 
   HRESULT hr;
   IMMDeviceEnumerator* enumerator = nullptr;
@@ -83,14 +83,21 @@ void Audio::play() {
     hr = m_pCaptureService->ReleaseBuffer(nFrames);
     assert(SUCCEEDED(hr));
 
+    uint32_t reductionFactor = 1;
+
     WAVEFORMATEXTENSIBLE* format = reinterpret_cast<WAVEFORMATEXTENSIBLE*>(m_pFormat);
     if (format->SubFormat.Data1 == WAVE_FORMAT_IEEE_FLOAT) {
-      for (int i = 0; i < nFrames; i++) {
-        BYTE* offs = captureBuffer + i * m_pFormat->nBlockAlign;
-        float c0 = *reinterpret_cast<float*>(offs);
-        float c1 = *reinterpret_cast<float*>(offs + 4);
+      for (int i = 0; i < nFrames; i+=reductionFactor) {
+        float avg = 0.0f;
+        for (int j = i; j < i + reductionFactor; j++) {
+          BYTE* offs = captureBuffer + j * m_pFormat->nBlockAlign;
+          float c0 = *reinterpret_cast<float*>(offs);
+          float c1 = *reinterpret_cast<float*>(offs + 4);
 
-        m_samples[m_sampleOffset++ % m_samples.size()] = c0;
+          avg += 0.5f * (c0 + c1) / reductionFactor;
+        }
+
+        m_samples[m_sampleOffset++ % m_samples.size()] = avg;
       }
     }
     else {
@@ -104,24 +111,60 @@ void Audio::play() {
 
 void Audio::copySamples(float* dst, uint32_t count) const {
   for (uint32_t i = 0; i < count; i++) {
-    uint32_t idx = (m_sampleOffset - i - 1) % m_samples.size();
+    uint32_t idx = (m_sampleOffset - count + i) % m_samples.size();
     dst[i] = m_samples[idx];
+  }
+}
+
+void Audio::DCT2_naive(float* coeffs, uint32_t K) const {
+  uint32_t skip = 4;
+  uint32_t N = m_samples.size() / skip;
+
+  float PI = 3.14159265359f;
+  for (uint32_t k = 0; k < K; k++) {
+    coeffs[k] = 0.0f;
+  }
+
+  for (uint32_t n = 0; n < N; n++) {
+    float xn = m_samples[(m_sampleOffset + n*skip)%m_samples.size()];
+    float freqScale = PI / K * (n + 0.5f);
+    for (uint32_t k = 0; k < K; k++) {
+      float f = cos(freqScale * k);
+      coeffs[k] += xn * f;
+    }
+  }
+
+  float sqrt_2overN = sqrt(2.0 / K);
+  coeffs[0] *= 1.0 / sqrt(K);
+  for (uint32_t k = 1; k < K; k++) {
+    coeffs[k] *= sqrt_2overN;
   }
 }
 
 /*static*/
 void Audio::DCT2_naive(float* coeffs, const float* samples, uint32_t N) {
+  //float* norm = (float*)alloca(sizeof(float) * N);
+
   float PI = 3.14159265359f;
   for (uint32_t k = 0; k < N; k++) {
     coeffs[k] = 0.0f;
+    //norm[k] = 0.0f;
   }
 
   for (uint32_t n = 0; n < N; n++) {
     float xn = samples[n];
     float freqScale = PI / N * (n + 0.5f);
     for (uint32_t k = 0; k < N; k++) {
-      coeffs[k] += xn * cos(freqScale * k);
+      float f = cos(freqScale * k);
+      coeffs[k] += xn * f;
+      //norm[k] += f;
     }
+  }
+
+  float sqrt_2overN = sqrt(2.0 / N);
+  coeffs[0] *= 1.0 / sqrt(N);
+  for (uint32_t k = 1; k < N; k++) {
+    coeffs[k] *= sqrt_2overN;
   }
 }
 } // namespace flr

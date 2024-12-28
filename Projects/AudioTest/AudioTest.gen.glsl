@@ -8,9 +8,15 @@
 #define DISPATCH_SIZE 32
 #define LINE_WIDTH 0.005000
 
+
+layout(set=1, binding=1) uniform _UserUniforms {
+	uint MODE;
+	float SCALE;
+};
+
 #include <Fluorescence.glsl>
 
-layout(set=1, binding=1) uniform _AudioUniforms { AudioInput audio; };
+layout(set=1, binding=2) uniform _AudioUniforms { AudioInput audio; };
 
 #include "AudioTest.glsl"
 

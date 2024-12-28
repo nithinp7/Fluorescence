@@ -2,6 +2,15 @@
 #include <Misc/Constants.glsl>
 #include <Misc/Sampling.glsl>
 
+/*
+float getSample(uint segment) {
+  return audio.packedSamples[segment>>2][segment&3];
+}
+
+float getCoeff(uint segment) {
+  return abs(audio.packedCoeffs[segment>>2][segment&3]);
+}*/
+
 ////////////////////////// COMPUTE SHADERS //////////////////////////
 
 #ifdef IS_COMP_SHADER
@@ -95,8 +104,8 @@ void PS_FractalDisplay() {
       jumps++;
     }{
       // AHH!
-      // z *= (0.7  + 0.19 * wave(2.0, iters + z.x));// * length(z);
-      
+      z *= (0.7  + 0.19 * wave(2.0, iters + z.x));// * length(z);
+      continue;
       
       // large swirls
       // z *= (0.7  + 0.29 * wave(2.0, z.y * 2 + z.x));// * length(z);
@@ -107,12 +116,22 @@ void PS_FractalDisplay() {
         uvec2 seed = uvec2(iters, jumps);
         // z *= 5.0 + 0.25 * wave(1.0 + 0.01 * z.y  + 0.01 * z.x, z.y * 2.0 + z.x);
       }
+
+      
+
       // else
       // slow gentle wave
-      float c = 0.01;
+      // float test = TEST_SLIDER + 0.001 * coeff;
+      float test = 0.;//+ 0.1 * abs(coeff);
+      float f = 2.0 * wave(0.15 + 0, 1.0);
+      float c = 0.1;//05 * f;//(TEST_SLIDER - 1.0);//
+      
       // z *= 0.7 + 0.01 * wave(3.0  + c * z.y  + c * z.x, z.y * 0.1 + z.x);
       // z *= 0.7 + 0.01 * wave(3.0  + c * z.y  + c * z.x, z.y * 0.1 + z.x);
-      z *= 0.7 + 0.01 * wave(TEST_SLIDER  + c * z.y  + c * z.x, z.y * 0.1 + z.x);
+      // z.x += 0.01 * getCoeff(uint(500.0 * z.y) % SAMPLE_COUNT);
+      // z.y += 0.01 * getCoeff(uint(325. * z.x) % SAMPLE_COUNT);
+      z *= 0.7 + 0.01 * wave(test  + c * z.y  + c * z.x, z.y * 0.1 + z.x);
+      
       // uvec2 seed = uvec2(jumps - 1, jumps);      
       // z += 0.0001 * (2.0 * randVec2(seed) - vec2(1.0));
       
@@ -126,8 +145,8 @@ void PS_FractalDisplay() {
     }
   }
 
-  float intensity = 0.2 * float(jumps);
-  float colorTheta = 0.1 * jumps;
+  float intensity = 0.2 * float(jumps);// / coeff;
+  float colorTheta = 0.1 * jumps;// + 1. * coeff;
   float cosColor = 0.5 * cos(colorTheta) + 0.5;
   float sinColor = 0.5 * sin(colorTheta) + 0.5;
 
@@ -141,6 +160,8 @@ void PS_FractalDisplay() {
   color *= color;
   // if (iters == 0)
     
+  // color.rgb += getCoeff(uint(color.r) % SAMPLE_COUNT);
+  
   color = vec3(1.0) - exp(-color * 0.05);
   vec3 color2 = color * color;
   vec3 color3 = color2 * color;
