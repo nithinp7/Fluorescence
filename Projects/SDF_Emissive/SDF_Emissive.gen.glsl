@@ -25,7 +25,7 @@ layout(set=1, binding=4) uniform _UserUniforms {
 
 layout(set=1, binding=5) uniform _CameraUniforms { PerspectiveCamera camera; };
 
-#include "SDF.glsl"
+#include "SDF_Emissive.glsl"
 
 #ifdef IS_COMP_SHADER
 #ifdef _ENTRY_POINT_CS_Tick
