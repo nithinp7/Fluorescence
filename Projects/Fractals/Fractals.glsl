@@ -104,8 +104,8 @@ void PS_FractalDisplay() {
       jumps++;
     }{
       // AHH!
-      z *= (0.7  + 0.19 * wave(2.0, iters + z.x));// * length(z);
-      continue;
+      // z *= (0.7  + 0.19 * wave(2.0, iters + z.x));// * length(z);
+      // continue;
       
       // large swirls
       // z *= (0.7  + 0.29 * wave(2.0, z.y * 2 + z.x));// * length(z);

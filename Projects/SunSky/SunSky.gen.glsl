@@ -1,7 +1,7 @@
 #version 460 core
 
-#define SCREEN_WIDTH 2560
-#define SCREEN_HEIGHT 1334
+#define SCREEN_WIDTH 1276
+#define SCREEN_HEIGHT 1321
 
 struct GlobalState {
   uint accumulationFrames;
@@ -15,6 +15,8 @@ layout(set=1, binding=4) uniform _UserUniforms {
 	uint BOUNCES;
 	uint MAX_ITERS;
 	uint RENDER_MODE;
+	float SUN_LIGHT_SCALE;
+	float ATM_SIZE_SCALE;
 	float RED;
 	float GREEN;
 	float BLUE;
@@ -23,6 +25,7 @@ layout(set=1, binding=4) uniform _UserUniforms {
 	float SLIDER_A;
 	float SLIDER_B;
 	float SLIDER_C;
+	bool TEST_BOX;
 	bool ACCUMULATE;
 	bool COLOR_REMAP;
 };
