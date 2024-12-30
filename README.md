@@ -8,6 +8,11 @@ The application is built on top of my rendering engine, [Althea](https://github.
 
 ## Demo Projects
 
+### Atmospheric Scattering
+
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/SunSky2.png"/>
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/SunSky3.png"/>
+
 ### SDF Pathtracer
 
 <img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/SDF.png"/>
