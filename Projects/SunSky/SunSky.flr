@@ -1,10 +1,11 @@
 
 enable_feature: perspective_camera
 
+slider_float DENSITY_SCALE: 1.0 0.1 10.0
 slider_float SUN_LIGHT_SCALE: 1.0 1.0 10.0
 slider_float ATM_SIZE_SCALE: 1.0 0.1 1.0
 slider_float RED: 1.0 0.0 1.0
-slider_float GREEN: 1.0 0.0 1.0
+slider_float GREEN: 0.65 0.0 1.0
 slider_float BLUE: 1.0 0.0 1.0
 
 slider_float TIME_OF_DAY: 0.5 0.0 1.0
@@ -12,7 +13,7 @@ checkbox ACCUMULATE: false
 slider_float ROUGHNESS: 0.1 0.01 1.0
 slider_uint BOUNCES: 2 2 5
 
-slider_float SLIDER_A: 0.5 0.0 10.0
+slider_float SLIDER_A: 6.5 0.0 10.0
 slider_float SLIDER_B: 0.5 0.0 10.0
 slider_float SLIDER_C: 0.5 0.0 10.0
 

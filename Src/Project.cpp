@@ -27,6 +27,17 @@ Project::Project(
     const TransientUniforms<FlrUniforms>& flrUniforms,
     const char* projPath)
     : m_parsed(app, projPath),
+      m_buffers(),
+      m_images(),
+      m_computePipelines(),
+      m_drawPasses(),
+      m_descriptorSets(),
+      m_dynamicUniforms(),
+      m_dynamicDataBuffer(),
+      m_cameraController(),
+      m_perspectiveCamera(),
+      m_audioInput(),
+      m_pAudio(nullptr),
       m_displayPassIdx(0),
       m_bHasDynamicData(false),
       m_failedShaderCompile(false),
@@ -462,7 +473,8 @@ void Project::tick(Application& app, const FrameContext& frame) {
     AudioInput audioInput;
     m_pAudio->play();
     m_pAudio->copySamples(&audioInput.packedSamples[0][0], 512 * 4);
-    //Audio::DCT2_naive(&audioInput.packedCoeffs[0][0], &audioInput.packedSamples[0][0], 512 * 4);
+    // Audio::DCT2_naive(&audioInput.packedCoeffs[0][0],
+    // &audioInput.packedSamples[0][0], 512 * 4);
     m_pAudio->DCT2_naive(&audioInput.packedCoeffs[0][0], 512 * 4);
 
     m_audioInput.updateUniforms(audioInput, frame);
@@ -1157,7 +1169,9 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
 
       p.parseWhitespace();
       auto format = p.parseName();
-      PARSER_VERIFY(format, "Could not parse format string for image declaration.");
+      PARSER_VERIFY(
+          format,
+          "Could not parse format string for image declaration.");
 
       ImageDesc& desc = m_images.emplace_back();
       desc.name = std::string(*name);
@@ -1172,7 +1186,10 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
     case I_TEXTURE_ALIAS: {
       PARSER_VERIFY(name, "Could not parse texture name.");
 
-      PARSER_VERIFY(m_images.size() > 0, "Could not find preceding image declaration before texture_alias declaration.");
+      PARSER_VERIFY(
+          m_images.size() > 0,
+          "Could not find preceding image declaration before texture_alias "
+          "declaration.");
 
       uint32_t imageIdx = m_images.size() - 1;
       m_images[imageIdx].createOptions.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
