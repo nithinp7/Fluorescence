@@ -21,6 +21,8 @@ layout(set=1,binding=2) buffer BUFFER_globalStateBuffer {  GlobalState globalSta
 layout(set=1, binding=3) uniform _UserUniforms {
 	uint MAX_ITERS;
 	uint RENDER_MODE;
+	float REFRACTION;
+	float DENSITY;
 	float FREQ;
 	float AMPL;
 	float OFFS;

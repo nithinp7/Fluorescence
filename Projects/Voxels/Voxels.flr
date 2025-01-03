@@ -1,12 +1,14 @@
 
 enable_feature: perspective_camera
 
+slider_float REFRACTION: 0.01 0.0 0.1
+slider_float DENSITY: 10.0 1.0 100.0
 slider_float FREQ: 1.0 0.0 20.0
 slider_float AMPL: 1.0 0.1 * 10.0
 slider_float OFFS: 0.0 0.0 1.0
 slider_uint MAX_ITERS: 50 50 200
-slider_float STEP_SIZE: 0.1 0.01 1.0
-slider_uint RENDER_MODE: 0 0 2
+slider_float STEP_SIZE: 0.01 0.01 1.0
+slider_uint RENDER_MODE: 2 0 2
 
 uint GRID_DIM_X: 100
 uint GRID_DIM_Y: 100

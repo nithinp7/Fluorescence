@@ -21,6 +21,14 @@ vec4 samplePath(inout uvec2 seed, vec3 pos, vec3 dir) {
   return color;
 }
 
+vec3 worldPosToGridPos(vec3 pos) {
+  return 0.01 * pos;
+}
+
+vec3 worldDirToGridDir(vec3 dir) {
+  return dir;
+}
+
 bool sampleDensity(vec3 pos) {
   float h = AMPL * 0.5 * cos(FREQ * PI * pos.x) + OFFS;
   return pos.y < h;
@@ -66,7 +74,7 @@ void CS_UpdateVoxels() {
   uvec3 cellId = uvec3(gl_GlobalInvocationID.xyz);
   if (cellId.x >= GRID_DIM_X || 
       cellId.y >= GRID_DIM_Y ||
-      cellId.z >=  GRID_DIM_Z) {
+      cellId.z >= GRID_DIM_Z) {
     return;
   }
 
@@ -116,14 +124,18 @@ layout(location = 0) in vec2 inScreenUv;
 layout(location = 0) out vec4 outColor;
 
 void PS_RayMarchVoxels() {
-  vec3 dir = normalize(computeDir(inScreenUv));
-  vec3 pos = camera.inverseView[3].xyz;
+  vec3 dir = worldDirToGridDir(normalize(computeDir(inScreenUv)));
+  vec3 pos = worldPosToGridPos(camera.inverseView[3].xyz);
+
+  uvec2 jitterSeed = uvec2(inScreenUv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
+  pos += 0.01 * rng(jitterSeed) * dir;
+
   float depth = 0.0;
 
+  float accumDensity = 0.0;
   for (uint iter = 0; iter < MAX_ITERS; iter++) {
     depth += STEP_SIZE;
     vec3 samplePos = pos + dir * depth;
-    samplePos *= 0.01;
     uvec3 globalId;
     if (sampleBitField(samplePos, globalId)) {
       if (RENDER_MODE == 0) {
@@ -132,13 +144,17 @@ void PS_RayMarchVoxels() {
         uvec2 seed = globalId.xz ^ globalId.yy;
         outColor = vec4(randVec3(seed), 1.0);
       } else {
-        outColor = vec4(1.0, 0.0, 0.0, 1.0);
+        uvec2 seed = globalId.xz ^ globalId.yy;
+        dir = normalize(dir + REFRACTION * (2.0 * randVec3(seed) - 1.0.xxx));
+        accumDensity += DENSITY * STEP_SIZE;
+        continue;
       }
       return;
     }
   }
 
-  outColor = vec4(0.1 * sampleEnv(dir), 1.0);
+  float throughput = exp(-accumDensity);
+  outColor = vec4(throughput * sampleEnv(dir), 1.0);
 }
 #endif // IS_PIXEL_SHADER
 
