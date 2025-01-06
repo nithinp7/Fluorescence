@@ -1,5 +1,11 @@
 FLUORESCENCE ROADMAP:
 
+Project Ideas:
+- Slimemold sim
+- Grass / wheatfield
+- Ant colony 
+- Flocking sim with procedural anim (jellyfish, butterflies, etc)
+
 Current State:
 - Simple .flr file format
 - Can specify struct defs, resource declarations, constants

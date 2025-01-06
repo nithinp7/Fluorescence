@@ -12,7 +12,18 @@ vec3 computeDir(vec2 uv) {
 }
 
 vec3 sampleEnv(vec3 dir) {
-  return round(0.5 * normalize(dir) + 0.5.xxx);
+  float c = 5.0;
+  vec3 n = 0.5 * normalize(dir) + 0.5.xxx;
+  if (BACKGROUND == 0) {
+    return round(n * c) / c;
+  } else if (BACKGROUND == 1) {
+    return round(fract(n * c));
+  } else if (BACKGROUND == 2) {
+    return round(n);
+  } else {
+    float f = n.x + n.y + n.z;
+    return max(round(fract(f * c)), 0.2).xxx;
+  }
 }
 
 vec4 samplePath(inout uvec2 seed, vec3 pos, vec3 dir) {
@@ -30,7 +41,7 @@ vec3 worldDirToGridDir(vec3 dir) {
 }
 
 bool sampleDensity(vec3 pos) {
-  float h = AMPL * 0.5 * cos(FREQ * PI * pos.x) + OFFS;
+  float h = AMPL * 0.5 * cos(FREQ_A * PI * pos.x + 10.0 * uniforms.time) * 0.5 * cos(FREQ_B * PI * pos.z) + OFFS;
   return pos.y < h;
 }
 
@@ -61,6 +72,15 @@ bool sampleBitField(vec3 pos, out uvec3 globalId) {
 
   uint val = ((bitfield[chunkId.z][chunkId.y] >> byteOffset) >> bitIdx) & 1;
   return val != 0;
+}
+
+vec3 sampleBitFieldGradient(vec3 pos) {
+  uvec3 unused;
+  float D = STEP_SIZE;
+  return vec3(
+      float(sampleBitField(pos + vec3(D, 0.0, 0.0), unused)) - float(sampleBitField(pos - vec3(D, 0.0, 0.0), unused)),
+      float(sampleBitField(pos + vec3(0.0, D, 0.0), unused)) - float(sampleBitField(pos - vec3(0.0, D, 0.0), unused)),
+      float(sampleBitField(pos + vec3(0.0, 0.0, D), unused)) - float(sampleBitField(pos - vec3(0.0, 0.0, D), unused)));
 }
 
 ////////////////////////// COMPUTE SHADERS //////////////////////////
@@ -131,29 +151,39 @@ void PS_RayMarchVoxels() {
   pos += 0.01 * rng(jitterSeed) * dir;
 
   float depth = 0.0;
-
-  float accumDensity = 0.0;
+  bool bPrevInside = false;
+  vec3 accumDensity = 0.0.xxx;
   for (uint iter = 0; iter < MAX_ITERS; iter++) {
     depth += STEP_SIZE;
     vec3 samplePos = pos + dir * depth;
     uvec3 globalId;
-    if (sampleBitField(samplePos, globalId)) {
+    bool bInside = sampleBitField(samplePos, globalId);
+    if (bInside) {
       if (RENDER_MODE == 0) {
-        outColor = vec4(fract(samplePos), 1.0);
+        // outColor = vec4(fract(samplePos), 1.0);
+        vec3 n = normalize(sampleBitFieldGradient(samplePos));
+        outColor = vec4(sampleEnv(n), 1.0);
+        return;
       } else if (RENDER_MODE == 1) {
         uvec2 seed = globalId.xz ^ globalId.yy;
         outColor = vec4(randVec3(seed), 1.0);
-      } else {
-        uvec2 seed = globalId.xz ^ globalId.yy;
-        dir = normalize(dir + REFRACTION * (2.0 * randVec3(seed) - 1.0.xxx));
+        return;
+      } else if (RENDER_MODE == 2) {
+        if (!bPrevInside) {
+          uvec2 seed = globalId.xz ^ globalId.yy;
+          mat3 m = LocalToWorld(dir);  
+          vec2 deviation = REFRACTION * (2.0 * randVec2(seed) - 1.0.xx);
+          dir = normalize(m * vec3(deviation, 1.0));   
+        }
         accumDensity += DENSITY * STEP_SIZE;
         continue;
       }
-      return;
-    }
+    } 
+
+    bPrevInside = bInside;
   }
 
-  float throughput = exp(-accumDensity);
+  vec3 throughput = exp(-accumDensity.rgb * vec3(RED, GREEN, BLUE));
   outColor = vec4(throughput * sampleEnv(dir), 1.0);
 }
 #endif // IS_PIXEL_SHADER
