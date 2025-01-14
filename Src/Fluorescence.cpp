@@ -34,9 +34,16 @@
 #include <string>
 #include <vector>
 
+static char s_filename[512] = {0};
+
 using namespace AltheaEngine;
 
 namespace flr {
+
+void Fluorescence::setStartupProject(const char* path) {
+  strncpy(s_filename, path, 512);
+  m_bReloadProject = true;
+}
 
 Fluorescence::Fluorescence() {}
 
@@ -115,8 +122,6 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
     // ImGui::EndMainMenuBar();
 
     // ImGui::SetNextWindowSize(ImVec2(1280, 1024));
-
-    static char s_filename[512] = {0};
 
     if (m_bOpenFileDialogue) {
       m_bOpenFileDialogue = false;

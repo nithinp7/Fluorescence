@@ -43,6 +43,7 @@ public:
   Fluorescence();
   // virtual ~Fluorescence();
 
+  void setStartupProject(const char* path);
   void initGame(Application& app) override;
   void shutdownGame(Application& app) override;
 
