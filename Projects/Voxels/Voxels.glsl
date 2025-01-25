@@ -83,6 +83,29 @@ vec3 sampleBitFieldGradient(vec3 pos) {
       float(sampleBitField(pos + vec3(0.0, 0.0, D), unused)) - float(sampleBitField(pos - vec3(0.0, 0.0, D), unused)));
 }
 
+
+float phaseFunction(float cosTheta, float g) {
+  float g2 = g * g;
+  return  
+      3.0 * (1.0 - g2) * (1.0 + cosTheta * cosTheta) / 
+      (8 * PI * (2.0 + g2) * pow(1.0 + g2 - 2.0 * g * cosTheta, 1.5));
+}
+
+float sampleRefraction(inout uvec2 seed, inout vec3 throughput) {
+  vec3 wlDistrib = vec3(RED, GREEN, BLUE) / (RED + GREEN + BLUE);
+  float x = rng(seed);
+  if (x < wlDistrib.x) {
+    throughput *= vec3(1.0, 0.5, 0.5);
+    return REFRACTION_RED;
+  } else if (x < wlDistrib.y) {
+    throughput *= vec3(0.5, 1.0, 0.5);
+    return REFRACTION_GREEN;
+  } else {
+    throughput *= vec3(0.5, 0.5, 1.0);
+    return REFRACTION_BLUE;
+  }
+}
+
 ////////////////////////// COMPUTE SHADERS //////////////////////////
 
 #ifdef IS_COMP_SHADER
@@ -152,6 +175,7 @@ void PS_RayMarchVoxels() {
 
   float depth = 0.0;
   bool bPrevInside = false;
+  vec3 throughput = 1.0.xxx;
   vec3 accumDensity = 0.0.xxx;
   for (uint iter = 0; iter < MAX_ITERS; iter++) {
     depth += STEP_SIZE;
@@ -172,10 +196,12 @@ void PS_RayMarchVoxels() {
         if (!bPrevInside) {
           uvec2 seed = globalId.xz ^ globalId.yy;
           mat3 m = LocalToWorld(dir);  
-          vec2 deviation = REFRACTION * (2.0 * randVec2(seed) - 1.0.xx);
+          vec2 deviation = sampleRefraction(seed, throughput) * (2.0 * randVec2(seed) - 1.0.xx);
           dir = normalize(m * vec3(deviation, 1.0));   
         }
-        accumDensity += DENSITY * STEP_SIZE;
+        throughput *= exp(-DENSITY * STEP_SIZE);
+        // accumDensity += DENSITY * STEP_SIZE;
+        
         continue;
       }
     } 
@@ -183,7 +209,8 @@ void PS_RayMarchVoxels() {
     bPrevInside = bInside;
   }
 
-  vec3 throughput = exp(-accumDensity.rgb * vec3(RED, GREEN, BLUE));
+  // vec3 coeffs = 1.0.xxx;//vec3(RED, GREEN, BLUE);
+  // vec3 throughput = exp(-accumDensity.rgb * pow(coeffs, 4.0.xxx));
   outColor = vec4(throughput * sampleEnv(dir), 1.0);
 }
 #endif // IS_PIXEL_SHADER

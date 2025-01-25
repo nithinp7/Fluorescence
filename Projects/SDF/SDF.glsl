@@ -79,7 +79,18 @@ vec3 computeDir(vec2 uv) {
 }
 
 vec3 sampleEnv(vec3 dir) {
-  return round(0.5 * normalize(dir) + 0.5.xxx);
+  float c = 5.0;
+  vec3 n = 0.5 * normalize(dir) + 0.5.xxx;
+  if (BACKGROUND == 0) {
+    return round(n * c) / c;
+  } else if (BACKGROUND == 1) {
+    return round(fract(n * c));
+  } else if (BACKGROUND == 2) {
+    return round(n);
+  } else {
+    float f = n.x + n.y + n.z;
+    return max(round(fract(f * c)), 0.2).xxx;
+  }
 }
 
 vec4 samplePath(inout uvec2 seed, vec3 pos, vec3 dir) {

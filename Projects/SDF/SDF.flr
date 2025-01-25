@@ -14,6 +14,7 @@ slider_uint MAX_ITERS: 50 50 1000
 checkbox COLOR_REMAP: false
 
 slider_uint RENDER_MODE: 0 0 2
+slider_uint BACKGROUND: 0 0 3
 
 struct GlobalState {
   uint accumulationFrames;

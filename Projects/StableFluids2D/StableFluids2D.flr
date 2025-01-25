@@ -1,0 +1,49 @@
+uint CELLS_X: SCREEN_WIDTH
+uint CELLS_Y: SCREEN_HEIGHT
+uint CELLS_COUNT: CELLS_X * CELLS_Y
+uint HALF_CELLS_COUNT: CELLS_COUNT / 2
+uint QUARTER_CELLS_COUNT: CELLS_COUNT / 4
+
+slider_uint CLAMP_MODE: 0 0 1
+slider_float TEST_SLIDER: 0.0 -1.0 1.0
+slider_uint RENDER_MODE: 0 0 2
+slider_float MAX_VELOCITY: 100.0 0.1 100.0
+
+float DELTA_TIME: 0.01
+
+struct GlobalState {
+  vec2 pan;
+  float zoom;
+  uint initialized;
+}
+struct_size: 16
+structured_buffer globalStateBuffer: GlobalState 1
+
+struct ExtraFields {
+  vec4 color; // TODO: turn into id or quantized color
+};
+struct_size: 16
+
+struct Uint { uint u; }
+struct_size: 4
+structured_buffer velocityField: Uint HALF_CELLS_COUNT
+structured_buffer advectedVelocityField: Uint HALF_CELLS_COUNT
+
+structured_buffer extraFields: ExtraFields CELLS_COUNT
+structured_buffer advectedExtraFields: ExtraFields CELLS_COUNT
+
+structured_buffer pressureField: Uint QUARTER_CELLS_COUNT
+
+compute_shader CS_HandleInput: 1 1 1
+compute_shader CS_InitVelocity: 32 1 1
+compute_shader CS_AdvectVelocity: 32 1 1
+
+compute_dispatch: CS_HandleInput 1 1 1
+barrier: globalStateBuffer
+compute_dispatch: CS_InitVelocity CELLS_COUNT 1 1
+barrier: velocityField, advectedVelocityField, extraFields, advectedExtraFields
+compute_dispatch: CS_AdvectVelocity CELLS_COUNT 1 1
+barrier: velocityField, advectedVelocityField, extraFields, advectedExtraFields
+
+display_pass:
+  draw: VS_Display PS_Display 3 1

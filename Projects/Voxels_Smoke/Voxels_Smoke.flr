@@ -1,18 +1,8 @@
 
 enable_feature: perspective_camera
 
-slider_float RED: 0.327 0.0 1.0
-slider_float GREEN: 0.747 0.0 1.0
-slider_float BLUE: 0.851 0.0 1.0
-slider_float ROUGHNESS: 0.03 0.01 1.0
-slider_float REFRACTION_RED: 0.032 0.0 0.1
-slider_float REFRACTION_GREEN: 0.032 0.0 0.1
-slider_float REFRACTION_BLUE: 0.032 0.0 0.1
+slider_float LIGHT_ANGLE: 0.5 0.0 1.0
 slider_float DENSITY: 30.0 1.0 100.0
-slider_float FREQ_A: 12.5 0.0 20.0
-slider_float FREQ_B: 9.1 0.0 20.0
-slider_float AMPL: 0.361 0.1 * 10.0
-slider_float OFFS: 0.092 0.0 1.0
 slider_uint MAX_ITERS: 50 50 200
 slider_float STEP_SIZE: 0.01 0.01 1.0
 slider_uint RENDER_MODE: 2 0 2
@@ -23,7 +13,12 @@ uint GRID_DIM_Y: 100
 uint GRID_DIM_Z: 100
 uint GRID_CELL_COUNT: GRID_DIM_X * GRID_DIM_Y * GRID_DIM_Z
 
-# each cell represents a 8x8x8=512 block of binary density values
+uint SIM_GRID_X: GRID_DIM_X * 4
+uint SIM_GRID_Y: GRID_DIM_Y * 4
+uint SIM_GRID_Z: GRID_DIM_Z * 4
+uint SIM_GRID_COUNT: SIM_GRID_X * SIM_GRID_Y * SIM_GRID_Z 
+
+# each cell represents a 4x4x4 block of 8bit quantized density values
 struct GridCell {
   uvec4 packedValues[4];
 }

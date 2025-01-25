@@ -6,6 +6,10 @@
 #define GRID_DIM_Y 100
 #define GRID_DIM_Z 100
 #define GRID_CELL_COUNT 1000000
+#define SIM_GRID_X 400
+#define SIM_GRID_Y 400
+#define SIM_GRID_Z 400
+#define SIM_GRID_COUNT 64000000
 
 struct GridCell {
   uvec4 packedValues[4];
@@ -22,18 +26,8 @@ layout(set=1, binding=3) uniform _UserUniforms {
 	uint MAX_ITERS;
 	uint RENDER_MODE;
 	uint BACKGROUND;
-	float RED;
-	float GREEN;
-	float BLUE;
-	float ROUGHNESS;
-	float REFRACTION_RED;
-	float REFRACTION_GREEN;
-	float REFRACTION_BLUE;
+	float LIGHT_ANGLE;
 	float DENSITY;
-	float FREQ_A;
-	float FREQ_B;
-	float AMPL;
-	float OFFS;
 	float STEP_SIZE;
 };
 
@@ -41,7 +35,7 @@ layout(set=1, binding=3) uniform _UserUniforms {
 
 layout(set=1, binding=4) uniform _CameraUniforms { PerspectiveCamera camera; };
 
-#include "Voxels.glsl"
+#include "Voxels_Smoke.glsl"
 
 #ifdef IS_COMP_SHADER
 #ifdef _ENTRY_POINT_CS_Tick

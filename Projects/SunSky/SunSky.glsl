@@ -255,7 +255,7 @@ vec3 colorRemap(vec3 color) {
 }
 
 float SDF_floor(vec3 pos) {
-    return pos.y - 2.0;
+  return pos.y - 2.0;
 }
 
 float SDF_sphere(vec3 pos) {
@@ -301,7 +301,7 @@ Material sampleSdfMaterial(vec3 pos) {
     mat.roughness = 0.005 + 0.1 * round(fract(abs(pos.x - 0.25))) * round(fract(abs(pos.z - 0.25)));// * round(fract(10. * (pos.x + pos.y + pos.z)));
   }
   
-  mat.metallic = 1.0;
+  mat.metallic = 0.0;
   mat.emissive = 0.0.xxx;
 
   return mat;
@@ -344,7 +344,7 @@ vec4 samplePath(inout uvec2 seed, vec3 pos, vec3 dir) {
     vec3 normal = normalize(hit.grad);
 
     if (!bResult) {
-      color.rgb = throughput * 2.0 * sampleSky(pos, dir);//// sampleEnv(dir);
+      color.rgb = throughput * sampleSky(pos, dir);//// sampleEnv(dir);
       break;
     }
 
@@ -361,8 +361,8 @@ vec4 samplePath(inout uvec2 seed, vec3 pos, vec3 dir) {
       hit.material.diffuse, hit.material.metallic, hit.material.roughness, 
       reflDir, pdf);
     
-    if (pdf < 0.05)
-      continue;
+    // if (pdf < 0.05)
+      // continue;
 
     throughput *= f * hit.material.diffuse / pdf;
 

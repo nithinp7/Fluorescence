@@ -15,6 +15,7 @@ layout(set=1, binding=4) uniform _UserUniforms {
 	uint BOUNCES;
 	uint MAX_ITERS;
 	uint RENDER_MODE;
+	uint BACKGROUND;
 	float ROUGHNESS;
 	float SLIDER_A;
 	float SLIDER_B;
