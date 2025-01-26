@@ -61,6 +61,42 @@ void CS_AdvectVelocity() {
 
   advectVelocity(flatIdx);
 }
+
+void CS_ComputeDivergence() {
+  uint flatIdx = gl_GlobalInvocationID.x; 
+  if (flatIdx >= CELLS_COUNT) {
+    return;
+  }
+
+  computeDivergence(flatIdx);
+}
+
+void CS_ComputePressureA() {
+  uint flatIdx = gl_GlobalInvocationID.x; 
+  if (flatIdx >= CELLS_COUNT) {
+    return;
+  }
+
+  computePressure(0, flatIdx);
+}
+
+void CS_ComputePressureB() {
+  uint flatIdx = gl_GlobalInvocationID.x; 
+  if (flatIdx >= CELLS_COUNT) {
+    return;
+  }
+
+  computePressure(1, flatIdx);
+}
+
+void CS_ResolveVelocity() {
+  uint flatIdx = gl_GlobalInvocationID.x; 
+  if (flatIdx >= CELLS_COUNT) {
+    return;
+  }
+
+  resolveVelocity(flatIdx);
+}
 #endif // IS_COMP_SHADER
 
 ////////////////////////// VERTEX SHADERS //////////////////////////
@@ -90,10 +126,10 @@ void PS_Display() {
     outColor = extraFields[flatIdx].color;
   } else {
     vec2 v = readVelocity(flatIdx);
-    // vec2 v = 500.0 * (vec2(coord) / vec2(CELLS_X, CELLS_Y) - 0.5.xx);//(2.0 * randVec2(seed) - 1.0.xx);// + 0.01 * jitter;
-    // v = dequantizeVelocity(quantizeVelocity(v));
     outColor = vec4(0.5 * v / MAX_VELOCITY + 0.5.xx, 0.0, 1.0);
   }
+  // outColor = vec4(readDivergence(flatIdx) * 0.1, 0.0, 0.0, 1.0);
+  // outColor = vec4(readPressure(0, flatIdx), 0.0, 0.0, 1.0);
 }
 #endif // IS_PIXEL_SHADER
 

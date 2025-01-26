@@ -11,6 +11,16 @@ uvec2 flatIdxToCoord(uint idx) {
   return uvec2(idx % CELLS_X, idx / CELLS_X);
 }
 
+ivec2 clampCoord(ivec2 coord) {
+  if (CLAMP_MODE == 0) {
+    // clamp
+    return clamp(coord, ivec2(0), ivec2(CELLS_X - 1, CELLS_Y - 1));
+  } else {
+    // wrap
+    return (coord + ivec2(CELLS_X, CELLS_Y) % ivec2(CELLS_X, CELLS_Y));
+  }
+}
+
 uint quantizeVelocity(vec2 v) {
   float qoffs = -MAX_VELOCITY;
   float qscale = 2.0 * MAX_VELOCITY;
@@ -35,6 +45,48 @@ vec2 readVelocity(uint flatIdx) {
   return dequantizeVelocity(vpacked);
 }
 
+vec2 readVelocity(ivec2 coord) {
+  return readVelocity(coordToFlatIdx(uvec2(clampCoord(coord))));
+}
+
+vec2 readAdvectedVelocity(uint flatIdx) {
+  uint bitoffs = (flatIdx & 1) << 4;
+  uint vpacked = (advectedVelocityField[flatIdx >> 1].u >> bitoffs) & 0xFFFF;
+  return dequantizeVelocity(vpacked);
+}
+
+vec2 readAdvectedVelocity(ivec2 coord) {
+  return readAdvectedVelocity(coordToFlatIdx(uvec2(clampCoord(coord))));
+}
+
+// TODO quantize divergence
+void writeDivergence(uint flatIdx, float div) {
+  divergenceField[flatIdx].f = div;
+}
+
+float readDivergence(uint flatIdx) {
+  return divergenceField[flatIdx].f;
+}
+
+// TODO: quantize pressure
+void writePressure(int phase, uint flatIdx, float pressure) {
+  if (phase == 0)
+    pressureFieldB[flatIdx].f = pressure;
+  else
+    pressureFieldA[flatIdx].f = pressure;
+}
+
+float readPressure(int phase, uint flatIdx) {
+  if (phase == 0)
+    return pressureFieldA[flatIdx].f;
+  else
+    return pressureFieldB[flatIdx].f;
+}
+
+float readPressure(int phase, ivec2 coord) {
+  return readPressure(phase, coordToFlatIdx(clampCoord(coord)));
+}
+
 struct BilerpResult {
   ExtraFields fields;
   vec2 velocity;
@@ -48,15 +100,8 @@ BilerpResult bilerpFields(vec2 pos) {
 
   vec2 uv = pos - vec2(c[0]);
 
-  if (CLAMP_MODE == 0) {
-    // clamp
-    for (int i = 0; i < 4; i++)
-      c[i] = clamp(c[i], ivec2(0), ivec2(CELLS_X - 1, CELLS_Y - 1));
-  } else {
-    // wrap
-    for (int i = 0; i < 4; i++)
-      c[i] = (c[i] + ivec2(CELLS_X, CELLS_Y) % ivec2(CELLS_X, CELLS_Y));
-  }
+  for (int i = 0; i < 4; i++)
+    c[i] = clampCoord(c[i]);
 
   uint flatIdx[4];
   for (int i = 0; i < 4; i++)
@@ -75,11 +120,34 @@ BilerpResult bilerpFields(vec2 pos) {
   return res;
 }
 
+vec2 bilerpVelocity(vec2 pos) {
+  ivec2 c[4];
+  c[0] = ivec2(floor(pos));
+  c[1] = c[0] + ivec2(1, 0);
+  c[2] = c[0] + ivec2(0, 1);
+  c[3] = c[0] + ivec2(1, 1);
+
+  vec2 uv = pos - vec2(c[0]);
+
+  for (int i = 0; i < 4; i++)
+    c[i] = clampCoord(c[i]);
+
+  uint flatIdx[4];
+  for (int i = 0; i < 4; i++)
+    flatIdx[i] = coordToFlatIdx(c[i]);
+
+  return mix(
+      mix(readVelocity(flatIdx[0]), readVelocity(flatIdx[1]), uv.x),
+      mix(readVelocity(flatIdx[2]), readVelocity(flatIdx[3]), uv.x),
+      uv.y);
+}
+
 void initVelocity(uint flatIdx) {
   bool bInitRandom = globalStateBuffer[0].initialized <= 1 || (uniforms.inputMask & INPUT_BIT_SPACE) != 0;
 
+  uvec2 coord = flatIdxToCoord(flatIdx);
+
   if (bInitRandom) {
-    uvec2 coord = flatIdxToCoord(flatIdx);
     uvec2 seed = coord;
     vec2 jitter = 2.0 * randVec2(seed) - 1.0.xx;
     vec2 v = 50.0 * normalize(vec2(coord) / vec2(CELLS_X, CELLS_Y) - 0.5.xx);//(2.0 * randVec2(seed) - 1.0.xx);// + 0.01 * jitter;
@@ -95,10 +163,16 @@ void initVelocity(uint flatIdx) {
     extraFields[flatIdx].color = rcol;
     advectedExtraFields[flatIdx].color = rcol;
   } else {
-    if ((flatIdx & 1) == 0) {
-      velocityField[flatIdx >> 1].u = advectedVelocityField[flatIdx >> 1].u;
+
+    if (coord.x < 12 && coord.y < 12) {
+      if ((flatIdx & 1) == 0) {
+        uint vpacked = quantizeVelocity(200 * vec2(1.0, 1.0));
+        vpacked |= vpacked << 16;
+        velocityField[flatIdx >> 1].u = vpacked;
+      }
     }
 
+    // TODO 
     extraFields[flatIdx] = advectedExtraFields[flatIdx];
   }
 }
@@ -120,5 +194,47 @@ void advectVelocity(uint flatIdx) {
     advectedVelocityField[flatIdx >> 1].u = vpacked;
   }
 
+  // TODO
   advectedExtraFields[flatIdx] = bilerp.fields;
+}
+
+void computeDivergence(uint flatIdx) {
+  ivec2 center = ivec2(flatIdxToCoord(flatIdx));
+  vec2 vL = readAdvectedVelocity(center + ivec2(-1, 0));
+  vec2 vR = readAdvectedVelocity(center + ivec2(1, 0));
+  vec2 vU = readAdvectedVelocity(center + ivec2(0, -1));
+  vec2 vD = readAdvectedVelocity(center + ivec2(0, 1));
+
+  float div = 0.5 / H * (vR.x - vL.x + vD.y - vU.y);
+  writeDivergence(flatIdx, div);
+}
+
+void computePressure(int phase, uint flatIdx) {
+  ivec2 center = ivec2(flatIdxToCoord(flatIdx));
+  float pL = readPressure(phase, center + ivec2(-2, 0));
+  float pR = readPressure(phase, center + ivec2(2, 0));
+  float pU = readPressure(phase, center + ivec2(0, -2));
+  float pD = readPressure(phase, center + ivec2(0, 2));
+
+  float div = readDivergence(flatIdx);
+
+  float p = 0.25 * (pL + pR + pU + pD - div * H * H);
+  writePressure(phase, flatIdx, p);
+}
+
+void resolveVelocity(uint flatIdx) {
+  ivec2 center = ivec2(flatIdxToCoord(flatIdx));
+  vec2 v = readAdvectedVelocity(flatIdx);
+  float pL = readPressure(0, center + ivec2(-1, 0));
+  float pR = readPressure(0, center + ivec2(1, 0));
+  float pU = readPressure(0, center + ivec2(0, -1));
+  float pD = readPressure(0, center + ivec2(0, 1));
+
+  v -= 0.5 / H * vec2(pR - pL, pD - pU);
+  
+  uint vpacked = quantizeVelocity(v);
+  vpacked |= subgroupShuffleDown(vpacked, 1) << 16;
+  if ((flatIdx & 1) == 0) {
+    velocityField[flatIdx >> 1].u = vpacked;
+  }
 }

@@ -21,17 +21,21 @@ struct ExtraFields {
 
 struct Uint { uint u; };
 
+struct Float { float f; };
+
 layout(set=1,binding=1) buffer BUFFER_globalStateBuffer {  GlobalState globalStateBuffer[]; };
 layout(set=1,binding=2) buffer BUFFER_velocityField {  Uint velocityField[]; };
 layout(set=1,binding=3) buffer BUFFER_advectedVelocityField {  Uint advectedVelocityField[]; };
 layout(set=1,binding=4) buffer BUFFER_extraFields {  ExtraFields extraFields[]; };
 layout(set=1,binding=5) buffer BUFFER_advectedExtraFields {  ExtraFields advectedExtraFields[]; };
-layout(set=1,binding=6) buffer BUFFER_pressureField {  Uint pressureField[]; };
+layout(set=1,binding=6) buffer BUFFER_divergenceField {  Float divergenceField[]; };
+layout(set=1,binding=7) buffer BUFFER_pressureFieldA {  Float pressureFieldA[]; };
+layout(set=1,binding=8) buffer BUFFER_pressureFieldB {  Float pressureFieldB[]; };
 
-layout(set=1, binding=7) uniform _UserUniforms {
+layout(set=1, binding=9) uniform _UserUniforms {
 	uint CLAMP_MODE;
 	uint RENDER_MODE;
-	float TEST_SLIDER;
+	float H;
 	float MAX_VELOCITY;
 };
 
@@ -52,6 +56,22 @@ void main() { CS_InitVelocity(); }
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 void main() { CS_AdvectVelocity(); }
 #endif // _ENTRY_POINT_CS_AdvectVelocity
+#ifdef _ENTRY_POINT_CS_ComputeDivergence
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+void main() { CS_ComputeDivergence(); }
+#endif // _ENTRY_POINT_CS_ComputeDivergence
+#ifdef _ENTRY_POINT_CS_ComputePressureA
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+void main() { CS_ComputePressureA(); }
+#endif // _ENTRY_POINT_CS_ComputePressureA
+#ifdef _ENTRY_POINT_CS_ComputePressureB
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+void main() { CS_ComputePressureB(); }
+#endif // _ENTRY_POINT_CS_ComputePressureB
+#ifdef _ENTRY_POINT_CS_ResolveVelocity
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+void main() { CS_ResolveVelocity(); }
+#endif // _ENTRY_POINT_CS_ResolveVelocity
 #endif // IS_COMP_SHADER
 
 
