@@ -124,12 +124,14 @@ void PS_Display() {
   uint flatIdx = coordToFlatIdx(coord);
   if (RENDER_MODE == 0) {
     outColor = extraFields[flatIdx].color;
-  } else {
+  } else if (RENDER_MODE == 1) {
     vec2 v = readVelocity(flatIdx);
-    outColor = vec4(0.5 * v / MAX_VELOCITY + 0.5.xx, 0.0, 1.0);
+    outColor = vec4(length(v).xxx / MAX_VELOCITY, 1.0);
+  } else if (RENDER_MODE == 2) {
+    outColor = vec4((100. * readDivergence(flatIdx) * 0.1).xxx, 1.0);
+  } else {
+    outColor = vec4(0.001 * readPressure(0, flatIdx).xxx, 1.0);
   }
-  // outColor = vec4(readDivergence(flatIdx) * 0.1, 0.0, 0.0, 1.0);
-  // outColor = vec4(readPressure(0, flatIdx), 0.0, 0.0, 1.0);
 }
 #endif // IS_PIXEL_SHADER
 

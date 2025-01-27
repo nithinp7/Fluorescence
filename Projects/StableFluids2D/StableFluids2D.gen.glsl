@@ -7,7 +7,8 @@
 #define CELLS_COUNT 1843200
 #define HALF_CELLS_COUNT 921600
 #define QUARTER_CELLS_COUNT 460800
-#define DELTA_TIME 0.010000
+#define H 0.000694
+#define DELTA_TIME 0.033333
 
 struct GlobalState {
   vec2 pan;
@@ -35,7 +36,6 @@ layout(set=1,binding=8) buffer BUFFER_pressureFieldB {  Float pressureFieldB[]; 
 layout(set=1, binding=9) uniform _UserUniforms {
 	uint CLAMP_MODE;
 	uint RENDER_MODE;
-	float H;
 	float MAX_VELOCITY;
 };
 

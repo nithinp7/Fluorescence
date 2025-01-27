@@ -4,12 +4,14 @@ uint CELLS_COUNT: CELLS_X * CELLS_Y
 uint HALF_CELLS_COUNT: CELLS_COUNT / 2
 uint QUARTER_CELLS_COUNT: CELLS_COUNT / 4
 
-slider_float H: 1.0 0.1 2.0
-slider_uint CLAMP_MODE: 0 0 1
-slider_uint RENDER_MODE: 0 0 2
-slider_float MAX_VELOCITY: 100.0 0.1 100.0
+float H: 1.0 / SCREEN_WIDTH
 
-float DELTA_TIME: 0.01
+# slider_float H: 1.0 0.1 2.0
+slider_uint CLAMP_MODE: 0 0 1
+slider_uint RENDER_MODE: 0 0 3
+slider_float MAX_VELOCITY: 2000.0 100.0 4000.0
+
+float DELTA_TIME: 1.0 / 30.0
 
 struct GlobalState {
   vec2 pan;
@@ -56,6 +58,54 @@ barrier: velocityField, advectedVelocityField, extraFields, advectedExtraFields
 compute_dispatch: CS_ComputeDivergence CELLS_COUNT 1 1
 barrier: divergenceField
 
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
 compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
 barrier: pressureFieldB
 compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1

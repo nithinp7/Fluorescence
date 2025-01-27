@@ -46,7 +46,13 @@ vec2 readVelocity(uint flatIdx) {
 }
 
 vec2 readVelocity(ivec2 coord) {
-  return readVelocity(coordToFlatIdx(uvec2(clampCoord(coord))));
+  ivec2 clampedCoord = clampCoord(coord);
+  vec2 sn = 1.0.xx;
+  if (CLAMP_MODE == 0) {
+    if (clampedCoord.x != coord.x) return 0.0.xx;//sn.x = -1.0;
+    if (clampedCoord.y != coord.y) return 0.0.xx;//sn.y = -1.0;
+  }
+  return sn * readVelocity(coordToFlatIdx(uvec2(clampedCoord)));
 }
 
 vec2 readAdvectedVelocity(uint flatIdx) {
@@ -56,6 +62,12 @@ vec2 readAdvectedVelocity(uint flatIdx) {
 }
 
 vec2 readAdvectedVelocity(ivec2 coord) {
+  ivec2 clampedCoord = clampCoord(coord);
+  vec2 sn = 1.0.xx;
+  if (CLAMP_MODE == 0) {
+    if (clampedCoord.x != coord.x) return 0.0.xx;//sn.x = -1.0;
+    if (clampedCoord.y != coord.y) return 0.0.xx;//sn.y = -1.0;
+  }
   return readAdvectedVelocity(coordToFlatIdx(uvec2(clampCoord(coord))));
 }
 
@@ -100,6 +112,12 @@ BilerpResult bilerpFields(vec2 pos) {
 
   vec2 uv = pos - vec2(c[0]);
 
+  BilerpResult res;
+  res.velocity = mix(
+      mix(readVelocity(c[0]), readVelocity(c[1]), uv.x),
+      mix(readVelocity(c[2]), readVelocity(c[3]), uv.x),
+      uv.y);
+      
   for (int i = 0; i < 4; i++)
     c[i] = clampCoord(c[i]);
 
@@ -107,11 +125,6 @@ BilerpResult bilerpFields(vec2 pos) {
   for (int i = 0; i < 4; i++)
     flatIdx[i] = coordToFlatIdx(c[i]);
 
-  BilerpResult res;
-  res.velocity = mix(
-      mix(readVelocity(flatIdx[0]), readVelocity(flatIdx[1]), uv.x),
-      mix(readVelocity(flatIdx[2]), readVelocity(flatIdx[3]), uv.x),
-      uv.y);
   res.fields.color = mix(
       mix(extraFields[flatIdx[0]].color, extraFields[flatIdx[1]].color, uv.x),
       mix(extraFields[flatIdx[2]].color, extraFields[flatIdx[3]].color, uv.x),
@@ -150,7 +163,7 @@ void initVelocity(uint flatIdx) {
   if (bInitRandom) {
     uvec2 seed = coord;
     vec2 jitter = 2.0 * randVec2(seed) - 1.0.xx;
-    vec2 v = 50.0 * normalize(vec2(coord) / vec2(CELLS_X, CELLS_Y) - 0.5.xx);//(2.0 * randVec2(seed) - 1.0.xx);// + 0.01 * jitter;
+    vec2 v = 0.0.xx;//50.0 * normalize(vec2(coord) / vec2(CELLS_X, CELLS_Y) - 0.5.xx);//(2.0 * randVec2(seed) - 1.0.xx);// + 0.01 * jitter;
 
     uint vpacked = quantizeVelocity(v);
     vpacked |= subgroupShuffleDown(vpacked, 1) << 16;
@@ -164,9 +177,9 @@ void initVelocity(uint flatIdx) {
     advectedExtraFields[flatIdx].color = rcol;
   } else {
 
-    if (coord.x < 12 && coord.y < 12) {
+    if (coord.x < 40 && coord.y > (SCREEN_HEIGHT / 2 - 20) && coord.y < (SCREEN_HEIGHT / 2 + 20)) {
       if ((flatIdx & 1) == 0) {
-        uint vpacked = quantizeVelocity(200 * vec2(1.0, 1.0));
+        uint vpacked = quantizeVelocity(20000 * vec2(1.0, 0.0));
         vpacked |= vpacked << 16;
         velocityField[flatIdx >> 1].u = vpacked;
       }
