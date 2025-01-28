@@ -47,12 +47,11 @@ vec2 readVelocity(uint flatIdx) {
 
 vec2 readVelocity(ivec2 coord) {
   ivec2 clampedCoord = clampCoord(coord);
-  vec2 sn = 1.0.xx;
   if (CLAMP_MODE == 0) {
-    if (clampedCoord.x != coord.x) return 0.0.xx;//sn.x = -1.0;
-    if (clampedCoord.y != coord.y) return 0.0.xx;//sn.y = -1.0;
+    if (clampedCoord.x != coord.x) return 0.0.xx;
+    if (clampedCoord.y != coord.y) return 0.0.xx;
   }
-  return sn * readVelocity(coordToFlatIdx(uvec2(clampedCoord)));
+  return readVelocity(coordToFlatIdx(uvec2(clampedCoord)));
 }
 
 vec2 readAdvectedVelocity(uint flatIdx) {
@@ -63,12 +62,11 @@ vec2 readAdvectedVelocity(uint flatIdx) {
 
 vec2 readAdvectedVelocity(ivec2 coord) {
   ivec2 clampedCoord = clampCoord(coord);
-  vec2 sn = 1.0.xx;
   if (CLAMP_MODE == 0) {
-    if (clampedCoord.x != coord.x) return 0.0.xx;//sn.x = -1.0;
-    if (clampedCoord.y != coord.y) return 0.0.xx;//sn.y = -1.0;
+    if (clampedCoord.x != coord.x) return 0.0.xx;
+    if (clampedCoord.y != coord.y) return 0.0.xx;
   }
-  return readAdvectedVelocity(coordToFlatIdx(uvec2(clampCoord(coord))));
+  return readAdvectedVelocity(coordToFlatIdx(uvec2(clampedCoord)));
 }
 
 // TODO quantize divergence
@@ -96,6 +94,11 @@ float readPressure(int phase, uint flatIdx) {
 }
 
 float readPressure(int phase, ivec2 coord) {
+  if (coord.x < 0) coord.x = -coord.x - 1;
+  if (coord.y < 0) coord.y = -coord.y - 1;
+  if (coord.x >= CELLS_X) coord.x = 2 * CELLS_X - coord.x - 1;
+  if (coord.y >= CELLS_Y) coord.y = 2 * CELLS_Y - coord.y - 1;
+  
   return readPressure(phase, coordToFlatIdx(clampCoord(coord)));
 }
 
@@ -134,6 +137,27 @@ BilerpResult bilerpFields(vec2 pos) {
 }
 
 vec2 bilerpVelocity(vec2 pos) {
+  vec2 sn = 1.0.xx;
+  if (pos.x < 0.0) {
+    pos.x = -pos.x;
+    sn.x = -1.0;
+  }
+
+  if (pos.y < 0.0) {
+    pos.y = -pos.y;
+    sn.y = -1.0;
+  }
+
+  if (pos.x >= CELLS_X) {
+    pos.x = 2.0 * CELLS_X - pos.x - 0.01;
+    sn.x = -1.0;
+  }
+  
+  if (pos.y >= CELLS_Y) {
+    pos.y = 2.0 * CELLS_Y - pos.y - 0.01;
+    sn.y = -1.0;
+  }
+
   ivec2 c[4];
   c[0] = ivec2(floor(pos));
   c[1] = c[0] + ivec2(1, 0);
@@ -142,16 +166,9 @@ vec2 bilerpVelocity(vec2 pos) {
 
   vec2 uv = pos - vec2(c[0]);
 
-  for (int i = 0; i < 4; i++)
-    c[i] = clampCoord(c[i]);
-
-  uint flatIdx[4];
-  for (int i = 0; i < 4; i++)
-    flatIdx[i] = coordToFlatIdx(c[i]);
-
-  return mix(
-      mix(readVelocity(flatIdx[0]), readVelocity(flatIdx[1]), uv.x),
-      mix(readVelocity(flatIdx[2]), readVelocity(flatIdx[3]), uv.x),
+  return sn * mix(
+      mix(readVelocity(c[0]), readVelocity(c[1]), uv.x),
+      mix(readVelocity(c[2]), readVelocity(c[3]), uv.x),
       uv.y);
 }
 
@@ -172,21 +189,23 @@ void initVelocity(uint flatIdx) {
       advectedVelocityField[flatIdx >> 1].u = vpacked;
     }
 
-    vec4 rcol = vec4(randVec3(seed), 1.0);
-    extraFields[flatIdx].color = rcol;
-    advectedExtraFields[flatIdx].color = rcol;
+    // vec4 rcol = vec4(randVec3(seed), 1.0);
+    vec4 col = vec4(0.0.xxx, 1.0);//vec4(fract(0.01 * vec2(coord)), 0.0, 1.0);
+    extraFields[flatIdx].color = col;
+    advectedExtraFields[flatIdx].color = col;
   } else {
 
     if (coord.x < 40 && coord.y > (SCREEN_HEIGHT / 2 - 20) && coord.y < (SCREEN_HEIGHT / 2 + 20)) {
       if ((flatIdx & 1) == 0) {
-        uint vpacked = quantizeVelocity(20000 * vec2(1.0, 0.0));
+        uint vpacked = quantizeVelocity(vec2(MAX_VELOCITY, 0.0));
         vpacked |= vpacked << 16;
         velocityField[flatIdx >> 1].u = vpacked;
       }
+      extraFields[flatIdx].color = vec4(1.0, wave(2, 5), wave(6, 1), 1.0);
+    } else {
+      // TODO 
+      extraFields[flatIdx] = advectedExtraFields[flatIdx];
     }
-
-    // TODO 
-    extraFields[flatIdx] = advectedExtraFields[flatIdx];
   }
 }
 
@@ -195,20 +214,24 @@ void advectVelocity(uint flatIdx) {
     return;
   
   uvec2 coord = flatIdxToCoord(flatIdx);
-  vec2 v = readVelocity(flatIdx);
+  
+  uvec2 seed = coord * uvec2(uniforms.frameCount, uniforms.frameCount + 1);
+  vec2 jitterVel1 = JITTER * (randVec2(seed) - 0.5.xx);
+  vec2 jitterVel2 = JITTER * (randVec2(seed) - 0.5.xx);
+
+  vec2 v = readVelocity(flatIdx) + jitterVel1;
   vec2 pos = vec2(coord);
   pos -= v * DELTA_TIME;
 
-  BilerpResult bilerp = bilerpFields(pos);
-
-  uint vpacked = quantizeVelocity(bilerp.velocity);
+  vec2 srcVel = bilerpVelocity(pos) + jitterVel2;
+  uint vpacked = quantizeVelocity(srcVel);
   vpacked |= subgroupShuffleDown(vpacked, 1) << 16;
   if ((flatIdx & 1) == 0) {
     advectedVelocityField[flatIdx >> 1].u = vpacked;
   }
 
   // TODO
-  advectedExtraFields[flatIdx] = bilerp.fields;
+  // advectedExtraFields[flatIdx] = bilerp.fields;
 }
 
 void computeDivergence(uint flatIdx) {
@@ -250,4 +273,15 @@ void resolveVelocity(uint flatIdx) {
   if ((flatIdx & 1) == 0) {
     velocityField[flatIdx >> 1].u = vpacked;
   }
+}
+
+void advectColor(uint flatIdx) {
+  uvec2 coord = flatIdxToCoord(flatIdx);
+  vec2 v = readVelocity(flatIdx);
+  vec2 pos = vec2(coord);
+  pos -= v * DELTA_TIME;
+
+  ExtraFields fields = bilerpFields(pos).fields;
+  fields.color.xyz *= vec3(0.997, 0.992, 0.98);
+  advectedExtraFields[flatIdx] = fields;
 }

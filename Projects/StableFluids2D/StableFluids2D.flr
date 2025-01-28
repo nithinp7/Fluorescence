@@ -6,7 +6,7 @@ uint QUARTER_CELLS_COUNT: CELLS_COUNT / 4
 
 float H: 1.0 / SCREEN_WIDTH
 
-# slider_float H: 1.0 0.1 2.0
+slider_float JITTER: 1.0 0.01 10.0
 slider_uint CLAMP_MODE: 0 0 1
 slider_uint RENDER_MODE: 0 0 3
 slider_float MAX_VELOCITY: 2000.0 100.0 4000.0
@@ -44,6 +44,7 @@ structured_buffer pressureFieldB: Float CELLS_COUNT
 compute_shader CS_HandleInput: 1 1 1
 compute_shader CS_InitVelocity: 32 1 1
 compute_shader CS_AdvectVelocity: 32 1 1
+compute_shader CS_AdvectColor: 32 1 1
 compute_shader CS_ComputeDivergence: 32 1 1
 compute_shader CS_ComputePressureA: 32 1 1
 compute_shader CS_ComputePressureB: 32 1 1
@@ -54,7 +55,7 @@ barrier: globalStateBuffer
 compute_dispatch: CS_InitVelocity CELLS_COUNT 1 1
 barrier: velocityField, advectedVelocityField, extraFields, advectedExtraFields
 compute_dispatch: CS_AdvectVelocity CELLS_COUNT 1 1
-barrier: velocityField, advectedVelocityField, extraFields, advectedExtraFields
+barrier: velocityField, advectedVelocityField
 compute_dispatch: CS_ComputeDivergence CELLS_COUNT 1 1
 barrier: divergenceField
 
@@ -86,77 +87,11 @@ compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
 barrier: pressureFieldB
 compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
 barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
-compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
-barrier: pressureFieldB
-compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
-barrier: pressureFieldA
 
 compute_dispatch: CS_ResolveVelocity CELLS_COUNT 1 1
 barrier: velocityField
+compute_dispatch: CS_AdvectColor CELLS_COUNT 1 1
+barrier: advectedExtraFields
 
 display_pass:
   draw: VS_Display PS_Display 3 1

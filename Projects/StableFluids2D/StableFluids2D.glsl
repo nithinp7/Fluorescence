@@ -97,6 +97,15 @@ void CS_ResolveVelocity() {
 
   resolveVelocity(flatIdx);
 }
+
+void CS_AdvectColor() {
+  uint flatIdx = gl_GlobalInvocationID.x; 
+  if (flatIdx >= CELLS_COUNT) {
+    return;
+  }
+
+  advectColor(flatIdx);
+}
 #endif // IS_COMP_SHADER
 
 ////////////////////////// VERTEX SHADERS //////////////////////////

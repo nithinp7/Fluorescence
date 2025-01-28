@@ -1,13 +1,13 @@
 #version 460 core
 
-#define SCREEN_WIDTH 1440
-#define SCREEN_HEIGHT 1280
-#define CELLS_X 1440
-#define CELLS_Y 1280
-#define CELLS_COUNT 1843200
-#define HALF_CELLS_COUNT 921600
-#define QUARTER_CELLS_COUNT 460800
-#define H 0.000694
+#define SCREEN_WIDTH 2560
+#define SCREEN_HEIGHT 1334
+#define CELLS_X 2560
+#define CELLS_Y 1334
+#define CELLS_COUNT 3415040
+#define HALF_CELLS_COUNT 1707520
+#define QUARTER_CELLS_COUNT 853760
+#define H 0.000391
 #define DELTA_TIME 0.033333
 
 struct GlobalState {
@@ -36,6 +36,7 @@ layout(set=1,binding=8) buffer BUFFER_pressureFieldB {  Float pressureFieldB[]; 
 layout(set=1, binding=9) uniform _UserUniforms {
 	uint CLAMP_MODE;
 	uint RENDER_MODE;
+	float JITTER;
 	float MAX_VELOCITY;
 };
 
@@ -56,6 +57,10 @@ void main() { CS_InitVelocity(); }
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 void main() { CS_AdvectVelocity(); }
 #endif // _ENTRY_POINT_CS_AdvectVelocity
+#ifdef _ENTRY_POINT_CS_AdvectColor
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+void main() { CS_AdvectColor(); }
+#endif // _ENTRY_POINT_CS_AdvectColor
 #ifdef _ENTRY_POINT_CS_ComputeDivergence
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 void main() { CS_ComputeDivergence(); }
