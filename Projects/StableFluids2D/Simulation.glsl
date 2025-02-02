@@ -3,6 +3,9 @@
 #extension GL_KHR_shader_subgroup_shuffle : enable
 #extension GL_KHR_shader_subgroup_shuffle_relative : enable
 
+// #define PACKED_PRESSURE
+#define QUANTIZED_PRESSURE 
+
 uint coordToFlatIdx(uvec2 coord) {
   return coord.y * CELLS_X + coord.x;
 }
@@ -54,6 +57,14 @@ vec2 readVelocity(ivec2 coord) {
   return readVelocity(coordToFlatIdx(uvec2(clampedCoord)));
 }
 
+void writeVelocity(uint flatIdx, vec2 v) {
+  uint vpacked = quantizeVelocity(v);
+  vpacked |= subgroupShuffleDown(vpacked, 1) << 16;
+  if ((flatIdx & 1) == 0) {
+    velocityField[flatIdx >> 1].u = vpacked;
+  }
+}
+
 vec2 readAdvectedVelocity(uint flatIdx) {
   uint bitoffs = (flatIdx & 1) << 4;
   uint vpacked = (advectedVelocityField[flatIdx >> 1].u >> bitoffs) & 0xFFFF;
@@ -69,6 +80,14 @@ vec2 readAdvectedVelocity(ivec2 coord) {
   return readAdvectedVelocity(coordToFlatIdx(uvec2(clampedCoord)));
 }
 
+void writeAdvectedVelocity(uint flatIdx, vec2 v) {
+  uint vpacked = quantizeVelocity(v);
+  vpacked |= subgroupShuffleDown(vpacked, 1) << 16;
+  if ((flatIdx & 1) == 0) {
+    advectedVelocityField[flatIdx >> 1].u = vpacked;
+  }
+}
+
 // TODO quantize divergence
 void writeDivergence(uint flatIdx, float div) {
   divergenceField[flatIdx].f = div;
@@ -78,19 +97,56 @@ float readDivergence(uint flatIdx) {
   return divergenceField[flatIdx].f;
 }
 
-// TODO: quantize pressure
 void writePressure(int phase, uint flatIdx, float pressure) {
+#ifdef PACKED_PRESSURE
+  uint packed = packHalf2x16(vec2(pressure, subgroupShuffleDown(pressure, 1)));
+  if ((flatIdx & 1) == 0) {
+    if (phase == 0)
+      pressureFieldB[flatIdx >> 1].packed = packed;
+    else 
+      pressureFieldA[flatIdx >> 1].packed = packed;
+  }
+#elif defined(QUANTIZED_PRESSURE)
+  float qoffs = -MAX_PRESSURE;
+  float qscale = 2.0 * MAX_PRESSURE;
+  uint packed = quantizeFloatToU16(pressure, qoffs, qscale);
+  packed |= subgroupShuffleDown(packed, 1) << 16;
+  if ((flatIdx & 1) == 0) {
+    if (phase == 0) 
+      pressureFieldB[flatIdx >> 1].packed = packed;
+    else
+      pressureFieldA[flatIdx >> 1].packed = packed;
+  }
+#else
   if (phase == 0)
     pressureFieldB[flatIdx].f = pressure;
   else
     pressureFieldA[flatIdx].f = pressure;
+#endif
 }
 
 float readPressure(int phase, uint flatIdx) {
+#ifdef PACKED_PRESSURE
+  if (phase == 0)
+    return unpackHalf2x16(pressureFieldB[flatIdx >> 1].packed)[flatIdx & 1];
+  else 
+    return unpackHalf2x16(pressureFieldA[flatIdx >> 1].packed)[flatIdx & 1];
+#elif defined(QUANTIZED_PRESSURE)
+  uint bitoffs = (flatIdx & 1) << 4;
+  uint packed;
+  if (phase == 0)
+    packed = (pressureFieldB[flatIdx >> 1].packed >> bitoffs) & 0xFFFF;
+  else
+    packed = (pressureFieldA[flatIdx >> 1].packed >> bitoffs) & 0xFFFF;
+  float qoffs = -MAX_PRESSURE;
+  float qscale = 2.0 * MAX_PRESSURE;
+  return dequantizeU16ToFloat(packed, qoffs, qscale);
+#else
   if (phase == 0)
     return pressureFieldA[flatIdx].f;
   else
     return pressureFieldB[flatIdx].f;
+#endif
 }
 
 float readPressure(int phase, ivec2 coord) {
@@ -182,26 +238,23 @@ void initVelocity(uint flatIdx) {
     vec2 jitter = 2.0 * randVec2(seed) - 1.0.xx;
     vec2 v = 0.0.xx;//50.0 * normalize(vec2(coord) / vec2(CELLS_X, CELLS_Y) - 0.5.xx);//(2.0 * randVec2(seed) - 1.0.xx);// + 0.01 * jitter;
 
-    uint vpacked = quantizeVelocity(v);
-    vpacked |= subgroupShuffleDown(vpacked, 1) << 16;
-    if ((flatIdx & 1) == 0) {
-      velocityField[flatIdx >> 1].u = vpacked;
-      advectedVelocityField[flatIdx >> 1].u = vpacked;
-    }
+    writeVelocity(flatIdx, v);
+    writeAdvectedVelocity(flatIdx, v);
 
     // vec4 rcol = vec4(randVec3(seed), 1.0);
     vec4 col = vec4(0.0.xxx, 1.0);//vec4(fract(0.01 * vec2(coord)), 0.0, 1.0);
     extraFields[flatIdx].color = col;
     advectedExtraFields[flatIdx].color = col;
+    writePressure(0, flatIdx, 0.0);
+    writePressure(1, flatIdx, 0.0);
   } else {
-
-    if (coord.x < 40 && coord.y > (SCREEN_HEIGHT / 2 - 20) && coord.y < (SCREEN_HEIGHT / 2 + 20)) {
+    if (coord.y > (SCREEN_HEIGHT - 40) && coord.x > (SCREEN_WIDTH / 2 - 20) && coord.x < (SCREEN_WIDTH / 2 + 20)) {
       if ((flatIdx & 1) == 0) {
-        uint vpacked = quantizeVelocity(vec2(MAX_VELOCITY, 0.0));
+        uint vpacked = quantizeVelocity(vec2(0.0, -MAX_VELOCITY));
         vpacked |= vpacked << 16;
         velocityField[flatIdx >> 1].u = vpacked;
       }
-      extraFields[flatIdx].color = vec4(1.0, wave(2, 5), wave(6, 1), 1.0);
+      extraFields[flatIdx].color = vec4(1.0, 0.1 * wave(10, 5) + 0.2, 0.05 * wave(32, 1), 1.0);
     } else {
       // TODO 
       extraFields[flatIdx] = advectedExtraFields[flatIdx];
@@ -223,15 +276,8 @@ void advectVelocity(uint flatIdx) {
   vec2 pos = vec2(coord);
   pos -= v * DELTA_TIME;
 
-  vec2 srcVel = bilerpVelocity(pos) + jitterVel2;
-  uint vpacked = quantizeVelocity(srcVel);
-  vpacked |= subgroupShuffleDown(vpacked, 1) << 16;
-  if ((flatIdx & 1) == 0) {
-    advectedVelocityField[flatIdx >> 1].u = vpacked;
-  }
-
-  // TODO
-  // advectedExtraFields[flatIdx] = bilerp.fields;
+  vec2 srcVel = VEL_DAMPING * (bilerpVelocity(pos) + jitterVel2);
+  writeAdvectedVelocity(flatIdx, srcVel);
 }
 
 void computeDivergence(uint flatIdx) {
@@ -247,14 +293,16 @@ void computeDivergence(uint flatIdx) {
 
 void computePressure(int phase, uint flatIdx) {
   ivec2 center = ivec2(flatIdxToCoord(flatIdx));
-  float pL = readPressure(phase, center + ivec2(-2, 0));
-  float pR = readPressure(phase, center + ivec2(2, 0));
-  float pU = readPressure(phase, center + ivec2(0, -2));
-  float pD = readPressure(phase, center + ivec2(0, 2));
+  float pL = readPressure(phase, center + ivec2(-1, 0));
+  float pR = readPressure(phase, center + ivec2(1, 0));
+  float pU = readPressure(phase, center + ivec2(0, -1));
+  float pD = readPressure(phase, center + ivec2(0, 1));
 
   float div = readDivergence(flatIdx);
 
-  float p = 0.25 * (pL + pR + pU + pD - div * H * H);
+  uvec2 seed = flatIdxToCoord(flatIdx) * uvec2(uniforms.frameCount, uniforms.frameCount + 1);
+  float jitter = (rng(seed) - 0.5) * PRESSURE_JITTER * MAX_PRESSURE;
+  float p = 0.25 * (pL + pR + pU + pD - div * H * H) + jitter;
   writePressure(phase, flatIdx, p);
 }
 
@@ -268,11 +316,7 @@ void resolveVelocity(uint flatIdx) {
 
   v -= 0.5 / H * vec2(pR - pL, pD - pU);
   
-  uint vpacked = quantizeVelocity(v);
-  vpacked |= subgroupShuffleDown(vpacked, 1) << 16;
-  if ((flatIdx & 1) == 0) {
-    velocityField[flatIdx >> 1].u = vpacked;
-  }
+  writeVelocity(flatIdx, v);
 }
 
 void advectColor(uint flatIdx) {
@@ -282,6 +326,10 @@ void advectColor(uint flatIdx) {
   pos -= v * DELTA_TIME;
 
   ExtraFields fields = bilerpFields(pos).fields;
-  fields.color.xyz *= vec3(0.997, 0.992, 0.98);
+  fields.color.xyz *= vec3(0.998, 0.992, 0.98);
+  // float a = length(fields.color.xyz);
+  // v = readVelocity(flatIdx) + vec2(0, -10.0 * a);
+  // writeVelocity(flatIdx, v);
+  
   advectedExtraFields[flatIdx] = fields;
 }

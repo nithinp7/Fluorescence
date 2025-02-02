@@ -1,13 +1,13 @@
 #version 460 core
 
-#define SCREEN_WIDTH 2560
-#define SCREEN_HEIGHT 1334
-#define CELLS_X 2560
-#define CELLS_Y 1334
-#define CELLS_COUNT 3415040
-#define HALF_CELLS_COUNT 1707520
-#define QUARTER_CELLS_COUNT 853760
-#define H 0.000391
+#define SCREEN_WIDTH 1440
+#define SCREEN_HEIGHT 1280
+#define CELLS_X 1440
+#define CELLS_Y 1280
+#define CELLS_COUNT 1843200
+#define HALF_CELLS_COUNT 921600
+#define QUARTER_CELLS_COUNT 460800
+#define H 0.000694
 #define DELTA_TIME 0.033333
 
 struct GlobalState {
@@ -24,20 +24,25 @@ struct Uint { uint u; };
 
 struct Float { float f; };
 
+struct U16x2 { uint packed; };
+
 layout(set=1,binding=1) buffer BUFFER_globalStateBuffer {  GlobalState globalStateBuffer[]; };
 layout(set=1,binding=2) buffer BUFFER_velocityField {  Uint velocityField[]; };
 layout(set=1,binding=3) buffer BUFFER_advectedVelocityField {  Uint advectedVelocityField[]; };
 layout(set=1,binding=4) buffer BUFFER_extraFields {  ExtraFields extraFields[]; };
 layout(set=1,binding=5) buffer BUFFER_advectedExtraFields {  ExtraFields advectedExtraFields[]; };
 layout(set=1,binding=6) buffer BUFFER_divergenceField {  Float divergenceField[]; };
-layout(set=1,binding=7) buffer BUFFER_pressureFieldA {  Float pressureFieldA[]; };
-layout(set=1,binding=8) buffer BUFFER_pressureFieldB {  Float pressureFieldB[]; };
+layout(set=1,binding=7) buffer BUFFER_pressureFieldA {  U16x2 pressureFieldA[]; };
+layout(set=1,binding=8) buffer BUFFER_pressureFieldB {  U16x2 pressureFieldB[]; };
 
 layout(set=1, binding=9) uniform _UserUniforms {
 	uint CLAMP_MODE;
 	uint RENDER_MODE;
+	float VEL_DAMPING;
 	float JITTER;
+	float PRESSURE_JITTER;
 	float MAX_VELOCITY;
+	float MAX_PRESSURE;
 };
 
 #include <Fluorescence.glsl>
