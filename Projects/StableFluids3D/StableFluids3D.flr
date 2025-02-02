@@ -1,6 +1,7 @@
-uint CELLS_X: SCREEN_WIDTH
-uint CELLS_Y: SCREEN_HEIGHT
-uint CELLS_COUNT: CELLS_X * CELLS_Y
+uint CELLS_X: 100
+uint CELLS_Y: 100
+uint CELLS_Z: 100
+uint CELLS_COUNT: CELLS_X * CELLS_Y * CELLS_Z
 uint HALF_CELLS_COUNT: CELLS_COUNT / 2
 uint QUARTER_CELLS_COUNT: CELLS_COUNT / 4
 
@@ -35,8 +36,8 @@ struct_size: 4
 struct U16x2 { uint packed; }
 struct_size: 4
 
-structured_buffer velocityField: Uint HALF_CELLS_COUNT
-structured_buffer advectedVelocityField: Uint HALF_CELLS_COUNT
+structured_buffer velocityField: Uint CELLS_COUNT
+structured_buffer advectedVelocityField: Uint CELLS_COUNT
 
 structured_buffer extraFields: ExtraFields CELLS_COUNT
 structured_buffer advectedExtraFields: ExtraFields CELLS_COUNT
