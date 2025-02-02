@@ -62,7 +62,7 @@ vec3 readVelocity(ivec3 coord) {
 
 void writeVelocity(uint flatIdx, vec3 v) {
   uint vpacked = quantizeVelocity(v);
-  velocityField[flatIdx >> 1].u = vpacked;
+  velocityField[flatIdx].u = vpacked;
 }
 
 vec3 readAdvectedVelocity(uint flatIdx) {
@@ -80,7 +80,7 @@ vec3 readAdvectedVelocity(ivec3 coord) {
 
 void writeAdvectedVelocity(uint flatIdx, vec3 v) {
   uint vpacked = quantizeVelocity(v);
-  advectedVelocityField[flatIdx >> 1].u = vpacked;
+  advectedVelocityField[flatIdx].u = vpacked;
 }
 
 // TODO quantize divergence
@@ -300,7 +300,7 @@ void initVelocity(uint flatIdx) {
         coord.x > (CELLS_X / 2 - 1) && coord.x < (CELLS_X / 2 + 1) &&
         coord.z > (CELLS_Z / 2 - 1) && coord.z < (CELLS_Z / 2 + 1)) {
       uint vpacked = quantizeVelocity(vec3(0.0, -MAX_VELOCITY, 0.0));
-      velocityField[flatIdx >> 1].u = vpacked;
+      velocityField[flatIdx].u = vpacked;
       extraFields[flatIdx].color = vec4(1.0, 0.1 * wave(10, 5) + 0.2, 0.05 * wave(32, 1), 1.0);
     } else {
       // TODO 

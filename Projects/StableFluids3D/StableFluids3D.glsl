@@ -130,9 +130,9 @@ layout(location = 0) out vec4 outColor;
 
 void PS_Display() {
   uvec2 coord = uvec2(inScreenUv * vec2(CELLS_X, CELLS_Y) - 0.05.xx);
-  uint flatIdx = coordToFlatIdx(uvec3(coord, CELLS_Z));
+  uint flatIdx = coordToFlatIdx(uvec3(coord, SLICE_IDX));
   if (RENDER_MODE == 0) {
-    outColor = extraFields[flatIdx].color;
+    outColor = 10.0 * extraFields[flatIdx].color;
   } else if (RENDER_MODE == 1) {
     vec3 v = readVelocity(flatIdx);
     outColor = vec4(length(v).xxx / MAX_VELOCITY, 1.0);
