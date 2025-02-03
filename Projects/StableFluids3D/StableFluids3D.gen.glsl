@@ -1,19 +1,17 @@
 #version 460 core
 
-#define SCREEN_WIDTH 1440
-#define SCREEN_HEIGHT 1280
-#define CELLS_X 100
-#define CELLS_Y 100
-#define CELLS_Z 100
-#define CELLS_COUNT 1000000
-#define HALF_CELLS_COUNT 500000
-#define QUARTER_CELLS_COUNT 250000
-#define H 0.000694
+#define SCREEN_WIDTH 1276
+#define SCREEN_HEIGHT 1321
+#define CELLS_X 200
+#define CELLS_Y 150
+#define CELLS_Z 200
+#define CELLS_COUNT 6000000
+#define HALF_CELLS_COUNT 3000000
+#define QUARTER_CELLS_COUNT 1500000
+#define H 0.000784
 #define DELTA_TIME 0.033333
 
 struct GlobalState {
-  vec2 pan;
-  float zoom;
   uint initialized;
 };
 
@@ -40,14 +38,24 @@ layout(set=1, binding=9) uniform _UserUniforms {
 	uint SLICE_IDX;
 	uint CLAMP_MODE;
 	uint RENDER_MODE;
+	uint BACKGROUND;
+	uint LIGHT_ITERS;
 	float VEL_DAMPING;
 	float JITTER;
 	float PRESSURE_JITTER;
 	float MAX_VELOCITY;
 	float MAX_PRESSURE;
+	float RAYMARCH_ITERS;
+	float RAYMARCH_STEP_SIZE;
+	float DENSITY_CUTOFF;
+	float DENSITY_MULT;
+	float LIGHT_THETA;
+	float LIGHT_STRENGTH;
 };
 
 #include <Fluorescence.glsl>
+
+layout(set=1, binding=10) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 #include "StableFluids3D.glsl"
 

@@ -189,8 +189,8 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
       m_pProject->tick(app, frame);
     }
 
-    // static GraphEditor::Graph graph;
-    // graph.draw();
+    //static GraphEditor::Graph graph;
+    //graph.draw();
 
     Gui::finishRecordingImgui();
   }

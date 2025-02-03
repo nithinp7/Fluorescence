@@ -297,8 +297,8 @@ void initVelocity(uint flatIdx) {
     writePressure(1, flatIdx, 0.0);
   } else {
     if (coord.y > (CELLS_Y - 5) && 
-        coord.x > (CELLS_X / 2 - 1) && coord.x < (CELLS_X / 2 + 1) &&
-        coord.z > (CELLS_Z / 2 - 1) && coord.z < (CELLS_Z / 2 + 1)) {
+        coord.x > (CELLS_X / 2 - 4) && coord.x < (CELLS_X / 2 + 4) &&
+        coord.z > (CELLS_Z / 2 - 4) && coord.z < (CELLS_Z / 2 + 4)) {
       uint vpacked = quantizeVelocity(vec3(0.0, -MAX_VELOCITY, 0.0));
       velocityField[flatIdx].u = vpacked;
       extraFields[flatIdx].color = vec4(1.0, 0.1 * wave(10, 5) + 0.2, 0.05 * wave(32, 1), 1.0);
