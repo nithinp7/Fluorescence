@@ -1,8 +1,8 @@
 enable_feature: perspective_camera
 
-uint CELLS_X: 200
-uint CELLS_Y: 150
-uint CELLS_Z: 200
+uint CELLS_X: 150
+uint CELLS_Y: 200
+uint CELLS_Z: 150
 uint CELLS_COUNT: CELLS_X * CELLS_Y * CELLS_Z
 uint HALF_CELLS_COUNT: CELLS_COUNT / 2
 uint QUARTER_CELLS_COUNT: CELLS_COUNT / 4
@@ -14,23 +14,28 @@ slider_float VEL_DAMPING: 1.0 0.8 1.0
 slider_float JITTER: 8.5 0.01 10.0
 slider_float PRESSURE_JITTER: 0.1 0.001 1.0
 slider_uint CLAMP_MODE: 0 0 1
-slider_uint RENDER_MODE: 0 0 3
+slider_uint RENDER_MODE: 0 0 4
 slider_float MAX_VELOCITY: 330.0 100.0 4000.0
 slider_float MAX_PRESSURE: 0.01 0.001 1.0
 float DELTA_TIME: 1.0 / 30.0
-slider_uint BACKGROUND: 3 0 3
+slider_uint BACKGROUND: 0 0 3
 slider_float RAYMARCH_ITERS: 150 50 200
-slider_float RAYMARCH_STEP_SIZE: 1.0 0.01 2.0
+slider_float RAYMARCH_STEP_SIZE: 1.35 0.01 2.0
 slider_float DENSITY_CUTOFF: 0.13 0.01 2.0
-slider_float DENSITY_MULT: 1.0 0.1 10.0
-slider_uint LIGHT_ITERS: 5 1 50
-slider_float LIGHT_THETA: 0.0 0.0 4.0
-slider_float LIGHT_STRENGTH: 1.0 1.0 20.0
+slider_float DENSITY_MULT: 0.1 0.1 10.0
+slider_uint LIGHT_ITERS: 2 1 50
+slider_float LIGHT_THETA: 0.0 0.0 8.0
+slider_float LIGHT_PHI: 1.0 -2.0 2.0
+#slider_float LIGHT_STRENGTH: 10000.0 10000.0 2000000.0
+slider_float LIGHT_STRENGTH: 6.0 0.1 100.0
+slider_float BUOYANCY: 7.0 0.0 100.0
+slider_float G: 0.65 -1.0 1.0
 
 struct GlobalState {
   uint initialized;
+  uint accumulationFrames;
 }
-struct_size: 4
+struct_size: 8
 structured_buffer globalStateBuffer: GlobalState 1
 
 struct ExtraFields {
@@ -56,6 +61,9 @@ structured_buffer divergenceField: Float CELLS_COUNT
 structured_buffer pressureFieldA: U16x2 HALF_CELLS_COUNT
 structured_buffer pressureFieldB: U16x2 HALF_CELLS_COUNT
 
+image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
+texture_alias accumulationTexture
+
 compute_shader CS_HandleInput: 1 1 1
 compute_shader CS_InitVelocity: 32 1 1
 compute_shader CS_AdvectVelocity: 32 1 1
@@ -64,6 +72,7 @@ compute_shader CS_ComputeDivergence: 32 1 1
 compute_shader CS_ComputePressureA: 32 1 1
 compute_shader CS_ComputePressureB: 32 1 1
 compute_shader CS_ResolveVelocity: 32 1 1
+compute_shader CS_PathTrace: 32 32 1
 
 compute_dispatch: CS_HandleInput 1 1 1
 barrier: globalStateBuffer
@@ -91,6 +100,10 @@ compute_dispatch: CS_ResolveVelocity CELLS_COUNT 1 1
 barrier: velocityField
 compute_dispatch: CS_AdvectColor CELLS_COUNT 1 1
 barrier: advectedExtraFields, velocityField
+
+transition_layout: accumulationBuffer image
+compute_dispatch: CS_PathTrace SCREEN_WIDTH SCREEN_HEIGHT 1
+transition_layout: accumulationBuffer texture
 
 display_pass:
   draw: VS_Display PS_Display 3 1

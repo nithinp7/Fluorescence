@@ -277,7 +277,10 @@ vec3 bilerpVelocity(vec3 pos) {
 }
 
 void initVelocity(uint flatIdx) {
-  bool bInitRandom = globalStateBuffer[0].initialized <= 1 || (uniforms.inputMask & INPUT_BIT_SPACE) != 0;
+  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0)
+    return;
+
+  bool bInitRandom = globalStateBuffer[0].initialized <= 1 || (uniforms.inputMask & INPUT_BIT_R) != 0;
 
   uvec3 coord = flatIdxToCoord(flatIdx);
 
@@ -296,9 +299,10 @@ void initVelocity(uint flatIdx) {
     writePressure(0, flatIdx, 0.0);
     writePressure(1, flatIdx, 0.0);
   } else {
+    uint ventRadius = 10;
     if (coord.y > (CELLS_Y - 5) && 
-        coord.x > (CELLS_X / 2 - 4) && coord.x < (CELLS_X / 2 + 4) &&
-        coord.z > (CELLS_Z / 2 - 4) && coord.z < (CELLS_Z / 2 + 4)) {
+        coord.x > (CELLS_X / 2 - ventRadius) && coord.x < (CELLS_X / 2 + ventRadius) &&
+        coord.z > (CELLS_Z / 2 - ventRadius) && coord.z < (CELLS_Z / 2 + ventRadius)) {
       uint vpacked = quantizeVelocity(vec3(0.0, -MAX_VELOCITY, 0.0));
       velocityField[flatIdx].u = vpacked;
       extraFields[flatIdx].color = vec4(1.0, 0.1 * wave(10, 5) + 0.2, 0.05 * wave(32, 1), 1.0);
@@ -310,7 +314,7 @@ void initVelocity(uint flatIdx) {
 }
 
 void advectVelocity(uint flatIdx) {
-  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0) 
+  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0)
     return;
   
   uvec3 coord = flatIdxToCoord(flatIdx);
@@ -359,6 +363,9 @@ void computePressure(int phase, uint flatIdx) {
 }
 
 void resolveVelocity(uint flatIdx) {
+  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0)
+    return;
+  
   ivec3 center = ivec3(flatIdxToCoord(flatIdx));
   vec3 v = readAdvectedVelocity(flatIdx);
   float pL = readPressure(0, center + ivec3(-1, 0, 0));
@@ -381,9 +388,9 @@ void advectColor(uint flatIdx) {
 
   ExtraFields fields = bilerpFields(pos).fields;
   fields.color.xyz *= vec3(0.998, 0.992, 0.98);
-  // float a = length(fields.color.xyz);
-  // v = readVelocity(flatIdx) + vec2(0, -10.0 * a);
-  // writeVelocity(flatIdx, v);
+  float a = BUOYANCY * length(fields.color.xyz);
+  v += vec3(0.0, -a, 0.0);
+  writeVelocity(flatIdx, v);
   
   advectedExtraFields[flatIdx] = fields;
 }
