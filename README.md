@@ -8,6 +8,10 @@ The application is built on top of my rendering engine, [Althea](https://github.
 
 ## Demo Projects
 
+### Stable Fluids - 3D Implementation + Raymarched Lighting
+
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/StableFluids3D_Raymarched.gif" height=800px/>
+
 ### Stable Fluids - 2D Implementation
 
 <img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/StableFluids2D.gif" width=800px/>
