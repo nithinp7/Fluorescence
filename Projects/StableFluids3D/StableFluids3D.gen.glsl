@@ -1,14 +1,14 @@
 #version 460 core
 
-#define SCREEN_WIDTH 2560
-#define SCREEN_HEIGHT 1334
-#define CELLS_X 150
-#define CELLS_Y 200
-#define CELLS_Z 150
-#define CELLS_COUNT 4500000
-#define HALF_CELLS_COUNT 2250000
-#define QUARTER_CELLS_COUNT 1125000
-#define H 0.000391
+#define SCREEN_WIDTH 1440
+#define SCREEN_HEIGHT 1280
+#define CELLS_X 200
+#define CELLS_Y 400
+#define CELLS_Z 200
+#define CELLS_COUNT 16000000
+#define HALF_CELLS_COUNT 8000000
+#define QUARTER_CELLS_COUNT 4000000
+#define H 0.005000
 #define DELTA_TIME 0.033333
 
 struct GlobalState {
@@ -31,9 +31,9 @@ layout(set=1,binding=2) buffer BUFFER_velocityField {  Uint velocityField[]; };
 layout(set=1,binding=3) buffer BUFFER_advectedVelocityField {  Uint advectedVelocityField[]; };
 layout(set=1,binding=4) buffer BUFFER_extraFields {  ExtraFields extraFields[]; };
 layout(set=1,binding=5) buffer BUFFER_advectedExtraFields {  ExtraFields advectedExtraFields[]; };
-layout(set=1,binding=6) buffer BUFFER_divergenceField {  Float divergenceField[]; };
-layout(set=1,binding=7) buffer BUFFER_pressureFieldA {  U16x2 pressureFieldA[]; };
-layout(set=1,binding=8) buffer BUFFER_pressureFieldB {  U16x2 pressureFieldB[]; };
+layout(set=1,binding=6) buffer BUFFER_scratchField {  Uint scratchField[]; };
+layout(set=1,binding=7) buffer BUFFER_pressureFieldA {  Float pressureFieldA[]; };
+layout(set=1,binding=8) buffer BUFFER_pressureFieldB {  Float pressureFieldB[]; };
 layout(set=1,binding=9, rgba32f) uniform image2D accumulationBuffer;
 layout(set=1,binding=10) uniform sampler2D accumulationTexture;
 
@@ -57,6 +57,7 @@ layout(set=1, binding=11) uniform _UserUniforms {
 	float LIGHT_STRENGTH;
 	float BUOYANCY;
 	float G;
+	float VORT;
 };
 
 #include <Fluorescence.glsl>
@@ -74,6 +75,10 @@ void main() { CS_HandleInput(); }
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 void main() { CS_InitVelocity(); }
 #endif // _ENTRY_POINT_CS_InitVelocity
+#ifdef _ENTRY_POINT_CS_ComputeCurl
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+void main() { CS_ComputeCurl(); }
+#endif // _ENTRY_POINT_CS_ComputeCurl
 #ifdef _ENTRY_POINT_CS_AdvectVelocity
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 void main() { CS_AdvectVelocity(); }

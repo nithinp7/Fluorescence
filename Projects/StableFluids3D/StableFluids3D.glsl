@@ -11,7 +11,6 @@ float phaseFunction(float cosTheta, float g) {
       (8 * PI * (2.0 + g2) * pow(1.0 + g2 - 2.0 * g * cosTheta, 1.5));
 }
 
-
 // TODO move into some sort of utilities...
 vec3 computeDir(vec2 uv) {
 	vec2 d = uv * 2.0 - 1.0;
@@ -43,7 +42,7 @@ vec3 sampleDensityField(vec3 pos) {
   // float d = length(bilerpFields(mod(pos, vec3(CELLS_X, CELLS_Y, CELLS_X))).fields.color.rgb);
   if (pos.x < 0.0 || pos.x > CELLS_X ||
       pos.y < 0.0 || pos.y > CELLS_Y ||
-      pos.z < 0.0 || pos.z > CELLS_Z)
+      pos.z < SLICE_IDX || pos.z > CELLS_Z)
     return 0.0.xxx;
   pos.y = CELLS_Y - pos.y;
   vec3 d = (bilerpFields(pos).fields.color.rgb);
@@ -53,17 +52,21 @@ vec3 sampleDensityField(vec3 pos) {
 }
 
 vec3 raymarch_pathTraceEnv(vec3 pos, vec3 dir, inout uvec2 seed) {
+  pos *= 10.0;
   vec3 lpos = vec3(CELLS_X, CELLS_Y, CELLS_Z) * vec3(cos(LIGHT_THETA), 1.0, sin(LIGHT_THETA));
   vec3 outLight = 0.0.xxx;
   float depth = 0.0;
   vec3 throughput = 1.0.xxx;
   vec3 accumDensity = 0.0.xxx;
+  float stepSize = 4.0 * RAYMARCH_STEP_SIZE;
   for (uint iter = 0; iter < RAYMARCH_ITERS; iter++) {
-    depth += RAYMARCH_STEP_SIZE;
+    depth += stepSize;
     vec3 samplePos = pos + dir * depth;
     vec3 density = sampleDensityField(samplePos);
+    if (length(density) >= DENSITY_CUTOFF)
+      stepSize = RAYMARCH_STEP_SIZE;
 
-    seed += uvec2(iter, iter + 1);
+    // seed *= uvec2(iter, iter + 1);
     vec3 lightRayPos = samplePos;
     vec3 lightDir = normalize(randVec3(seed) - 0.5.xxx);
     float lightStepSize = RAYMARCH_STEP_SIZE;//lightDist / LIGHT_ITERS;
@@ -157,6 +160,15 @@ void CS_InitVelocity() {
   }
 
   initVelocity(flatIdx);
+}
+
+void CS_ComputeCurl() {
+  uint flatIdx = gl_GlobalInvocationID.x; 
+  if (flatIdx >= CELLS_COUNT) {
+    return;
+  }
+
+  computeCurl(flatIdx);  
 }
 
 void CS_AdvectVelocity() {

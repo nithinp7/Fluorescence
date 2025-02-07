@@ -1,35 +1,36 @@
 enable_feature: perspective_camera
 
-uint CELLS_X: 150
-uint CELLS_Y: 200
-uint CELLS_Z: 150
+uint CELLS_X: 200
+uint CELLS_Y: 400
+uint CELLS_Z: 200
 uint CELLS_COUNT: CELLS_X * CELLS_Y * CELLS_Z
 uint HALF_CELLS_COUNT: CELLS_COUNT / 2
 uint QUARTER_CELLS_COUNT: CELLS_COUNT / 4
 
-float H: 1.0 / SCREEN_WIDTH
+float H: 1.0 / CELLS_X
 
-slider_uint SLICE_IDX: 100 0 199
+slider_uint SLICE_IDX: 0 0 199
 slider_float VEL_DAMPING: 1.0 0.8 1.0
-slider_float JITTER: 8.5 0.01 10.0
-slider_float PRESSURE_JITTER: 0.1 0.001 1.0
+slider_float JITTER: 0.0 0.0 10.0
+slider_float PRESSURE_JITTER: 0.0 0.0 1.0
 slider_uint CLAMP_MODE: 0 0 1
 slider_uint RENDER_MODE: 0 0 4
 slider_float MAX_VELOCITY: 330.0 100.0 4000.0
-slider_float MAX_PRESSURE: 0.01 0.001 1.0
+slider_float MAX_PRESSURE: 0.1 0.001 1.0
 float DELTA_TIME: 1.0 / 30.0
 slider_uint BACKGROUND: 0 0 3
 slider_float RAYMARCH_ITERS: 150 50 200
 slider_float RAYMARCH_STEP_SIZE: 1.35 0.01 2.0
-slider_float DENSITY_CUTOFF: 0.13 0.01 2.0
-slider_float DENSITY_MULT: 0.1 0.1 10.0
+slider_float DENSITY_CUTOFF: 0.001 0.001 2.0
+slider_float DENSITY_MULT: 0.01 0.01 2.0
 slider_uint LIGHT_ITERS: 2 1 50
 slider_float LIGHT_THETA: 0.0 0.0 8.0
 slider_float LIGHT_PHI: 1.0 -2.0 2.0
 #slider_float LIGHT_STRENGTH: 10000.0 10000.0 2000000.0
-slider_float LIGHT_STRENGTH: 6.0 0.1 100.0
+slider_float LIGHT_STRENGTH: 65.0 0.1 100.0
 slider_float BUOYANCY: 7.0 0.0 100.0
 slider_float G: 0.65 -1.0 1.0
+slider_float VORT: 0.0 0.0 1.0
 
 struct GlobalState {
   uint initialized;
@@ -56,16 +57,19 @@ structured_buffer advectedVelocityField: Uint CELLS_COUNT
 structured_buffer extraFields: ExtraFields CELLS_COUNT
 structured_buffer advectedExtraFields: ExtraFields CELLS_COUNT
 
-# TODO quantize divergence and pressure
-structured_buffer divergenceField: Float CELLS_COUNT
-structured_buffer pressureFieldA: U16x2 HALF_CELLS_COUNT
-structured_buffer pressureFieldB: U16x2 HALF_CELLS_COUNT
+structured_buffer scratchField: Uint CELLS_COUNT
+
+#structured_buffer pressureFieldA: U16x2 HALF_CELLS_COUNT
+#structured_buffer pressureFieldB: U16x2 HALF_CELLS_COUNT
+structured_buffer pressureFieldA: Float CELLS_COUNT
+structured_buffer pressureFieldB: Float CELLS_COUNT
 
 image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
 texture_alias accumulationTexture
 
 compute_shader CS_HandleInput: 1 1 1
 compute_shader CS_InitVelocity: 32 1 1
+compute_shader CS_ComputeCurl: 32 1 1
 compute_shader CS_AdvectVelocity: 32 1 1
 compute_shader CS_AdvectColor: 32 1 1
 compute_shader CS_ComputeDivergence: 32 1 1
@@ -78,10 +82,12 @@ compute_dispatch: CS_HandleInput 1 1 1
 barrier: globalStateBuffer
 compute_dispatch: CS_InitVelocity CELLS_COUNT 1 1
 barrier: velocityField, advectedVelocityField, extraFields, advectedExtraFields, pressureFieldA, pressureFieldB
+compute_dispatch: CS_ComputeCurl CELLS_COUNT 1 1
+barrier: scratchField
 compute_dispatch: CS_AdvectVelocity CELLS_COUNT 1 1
 barrier: velocityField, advectedVelocityField
 compute_dispatch: CS_ComputeDivergence CELLS_COUNT 1 1
-barrier: divergenceField
+barrier: scratchField
 
 compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
 barrier: pressureFieldB
