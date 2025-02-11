@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Shared/CommonStructures.h"
+#include "SimpleObjLoader.h"
 
 #include <Althea/Application.h>
 #include <Althea/BindlessHandle.h>
@@ -133,6 +134,12 @@ struct ParsedFlr {
   };
   std::vector<Barrier> m_barriers;
 
+  struct ObjMesh {
+    std::string name;
+    std::string path;
+  };
+  std::vector<ObjMesh> m_objModels;
+
   enum LayoutTransitionTarget : uint8_t { LTT_TEXTURE = 0, LTT_IMAGE_RW, LTT_ATTACHMENT };
   static constexpr char* TRANSITION_TARGET_NAMES[] = {
     "texture",
@@ -151,6 +158,8 @@ struct ParsedFlr {
     std::string pixelShader;
     uint32_t vertexCount;
     uint32_t instanceCount;
+    int32_t objMeshIdx; // if >= 0, pulls vertex count from loaded file
+    bool bDisableDepth;
   };
 
   struct RenderPass {
@@ -206,9 +215,12 @@ struct ParsedFlr {
     I_COMPUTE_SHADER,
     I_COMPUTE_DISPATCH,
     I_BARRIER,
+    I_OBJ_MODEL,
     I_DISPLAY_PASS,
     I_RENDER_PASS,
+    I_DISABLE_DEPTH,
     I_DRAW,
+    I_DRAW_OBJ,
     I_FEATURE,
     I_IMAGE,
     I_TEXTURE_ALIAS,
@@ -230,9 +242,12 @@ struct ParsedFlr {
       "compute_shader",
       "compute_dispatch",
       "barrier",
+      "obj_model",
       "display_pass",
       "render_pass",
+      "disable_depth",
       "draw",
+      "draw_obj",
       "enable_feature",
       "image",
       "texture_alias",
@@ -288,6 +303,7 @@ private:
 
   struct DrawPass {
     ImageResource m_target;
+    ImageResource m_depth;
     RenderPass m_renderPass;
     FrameBuffer m_frameBuffer;
   };
@@ -300,6 +316,8 @@ private:
   CameraController m_cameraController;
   TransientUniforms<PerspectiveCamera> m_perspectiveCamera;
   TransientUniforms<AudioInput> m_audioInput;
+
+  std::vector<SimpleObjLoader::LoadedObj> m_objModels;
 
   std::unique_ptr<Audio> m_pAudio;
 

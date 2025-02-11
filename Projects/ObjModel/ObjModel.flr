@@ -1,0 +1,8 @@
+
+enable_feature: perspective_camera
+
+obj_model Test: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/head.obj"
+
+display_pass:
+# draw: VS_Background PS_Background 3 1
+  draw_obj: Test VS_Obj PS_Obj

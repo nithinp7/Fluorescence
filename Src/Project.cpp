@@ -89,6 +89,16 @@ Project::Project(
     rsc.sampler = Sampler(app, samplerOptions);
   }
 
+  m_objModels.reserve(m_parsed.m_objModels.size());
+  for (const auto& m : m_parsed.m_objModels) {
+    auto& obj = m_objModels.emplace_back();
+    if (!SimpleObjLoader::loadObj(app, commandBuffer, m.path.c_str(), obj)) {
+      m_parsed.m_failed = true;
+      sprintf(m_parsed.m_errMsg, "Failed to load obj mesh %s", m.path.c_str());
+      return;
+    }
+  }
+
   m_bHasDynamicData =
       !m_parsed.m_sliderUints.empty() || !m_parsed.m_sliderInts.empty() ||
       !m_parsed.m_sliderFloats.empty() || !m_parsed.m_checkboxes.empty();
@@ -380,12 +390,36 @@ Project::Project(
     std::vector<SubpassBuilder> subpassBuilders;
     subpassBuilders.reserve(pass.draws.size());
 
+    bool bAnyDrawsUseDepth = false;
+
     for (const auto& draw : pass.draws) {
       SubpassBuilder& subpass = subpassBuilders.emplace_back();
       subpass.colorAttachments = {0};
 
       GraphicsPipelineBuilder& builder = subpass.pipelineBuilder;
-      builder.setCullMode(VK_CULL_MODE_FRONT_BIT).setDepthTesting(false);
+
+      if (!draw.bDisableDepth) {
+        subpass.depthAttachment = 1;
+        bAnyDrawsUseDepth = true;
+      } else {
+        builder.setDepthTesting(false);
+      }
+
+      if (draw.objMeshIdx >= 0) {
+        builder.addVertexInputBinding<SimpleObjLoader::ObjVert>();
+        builder.addVertexAttribute(
+            VertexAttributeType::VEC3,
+            offsetof(SimpleObjLoader::ObjVert, position));
+        builder.addVertexAttribute(
+            VertexAttributeType::VEC3,
+            offsetof(SimpleObjLoader::ObjVert, normal));
+        builder.addVertexAttribute(
+            VertexAttributeType::VEC2,
+            offsetof(SimpleObjLoader::ObjVert, uv));
+      } else {
+        builder.setCullMode(VK_CULL_MODE_FRONT_BIT); // ??
+      }
+
       {
         ShaderDefines defs{};
         defs.emplace("IS_VERTEX_SHADER", "");
@@ -434,8 +468,18 @@ Project::Project(
         false,
         true}};
 
-    DrawPass& pass = m_drawPasses.emplace_back();
-    pass.m_renderPass = RenderPass(
+    if (bAnyDrawsUseDepth) {
+      attachments.push_back(Attachment{
+          ATTACHMENT_FLAG_DEPTH,
+          app.getDepthImageFormat(),
+          depthClear,
+          false,
+          false,
+          false});
+    }
+
+    DrawPass& drawPass = m_drawPasses.emplace_back();
+    drawPass.m_renderPass = RenderPass(
         app,
         extent,
         std::move(attachments),
@@ -447,18 +491,44 @@ Project::Project(
     imageOptions.height = extent.height;
     imageOptions.usage =
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    pass.m_target.image = Image(app, imageOptions);
+    drawPass.m_target.image = Image(app, imageOptions);
 
     ImageViewOptions viewOptions{};
     viewOptions.format = imageOptions.format;
-    pass.m_target.view = ImageView(app, pass.m_target.image, viewOptions);
+    drawPass.m_target.view =
+        ImageView(app, drawPass.m_target.image, viewOptions);
 
-    pass.m_target.sampler = Sampler(app, {});
+    drawPass.m_target.sampler = Sampler(app, {});
 
-    pass.m_frameBuffer =
-        FrameBuffer(app, pass.m_renderPass, extent, {pass.m_target.view});
+    if (bAnyDrawsUseDepth) {
+      ImageOptions depthOptions{};
+      depthOptions.format = app.getDepthImageFormat();
+      depthOptions.width = extent.width;
+      depthOptions.height = extent.height;
+      depthOptions.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+      depthOptions.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+      drawPass.m_depth.image = Image(app, depthOptions);
 
-    pass.m_target.registerToTextureHeap(heap);
+      ImageViewOptions depthViewOptions{};
+      depthViewOptions.format = depthOptions.format;
+      depthViewOptions.aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+      drawPass.m_depth.view =
+          ImageView(app, drawPass.m_depth.image, depthViewOptions);
+
+      drawPass.m_depth.sampler = Sampler(app, {});
+
+      drawPass.m_frameBuffer = FrameBuffer(
+          app,
+          drawPass.m_renderPass,
+          extent,
+          {drawPass.m_target.view, drawPass.m_depth.view});
+    } else {
+      drawPass.m_frameBuffer = FrameBuffer(
+          app,
+          drawPass.m_renderPass,
+          extent,
+          {drawPass.m_target.view});
+    }
   }
 
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
@@ -607,6 +677,14 @@ void Project::draw(
           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
+      if ((VkImage)drawPass.m_depth.image != VK_NULL_HANDLE) {
+        drawPass.m_depth.image.transitionLayout(
+            commandBuffer,
+            VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
+      }
+
       {
         ActiveRenderPass pass = drawPass.m_renderPass.begin(
             app,
@@ -616,7 +694,15 @@ void Project::draw(
         pass.setGlobalDescriptorSets(gsl::span(sets, 2));
         pass.getDrawContext().bindDescriptorSets();
         for (const auto& draw : m_parsed.m_renderPasses[task.idx].draws) {
-          pass.getDrawContext().draw(draw.vertexCount, draw.instanceCount);
+          if (draw.objMeshIdx >= 0) {
+            for (SimpleObjLoader::ObjMesh& mesh :
+                 m_objModels[draw.objMeshIdx].m_meshes) {
+              pass.getDrawContext().bindVertexBuffer(mesh.m_vertices);
+              pass.getDrawContext().draw(mesh.m_vertices.getVertexCount(), 1);
+            }
+          } else {
+            pass.getDrawContext().draw(draw.vertexCount, draw.instanceCount);
+          }
           if (!pass.isLastSubpass())
             pass.nextSubpass();
         }
@@ -627,6 +713,7 @@ void Project::draw(
           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
           VK_ACCESS_SHADER_READ_BIT,
           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
       break;
     }
 
@@ -1110,6 +1197,17 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       m_renderPasses.push_back({{}, *width, *height, false});
       break;
     }
+    case I_DISABLE_DEPTH: {
+      PARSER_VERIFY(
+          m_renderPasses.size() > 0,
+          "Expected render-pass or display-pass declaration to precede "
+          "disable-depth.");
+      PARSER_VERIFY(
+          m_renderPasses.back().draws.size() > 0,
+          "Expected draw-call to precede disable-depth");
+      m_renderPasses.back().draws.back().bDisableDepth = true;
+      break;
+    }
     case I_DRAW: {
       // TODO: have re-usable subpasses that can be drawn multiple times?
       PARSER_VERIFY(
@@ -1142,7 +1240,49 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           {std::string(*vertShader),
            std::string(*pixelShader),
            *vertexCount,
-           *instanceCount});
+           *instanceCount,
+           -1,
+           false});
+      break;
+    }
+    case I_DRAW_OBJ: {
+
+      // TODO: have re-usable subpasses that can be drawn multiple times?
+      PARSER_VERIFY(
+          m_renderPasses.size(),
+          "Expected render-pass or display-pass declaration to precede "
+          "draw-call.");
+
+      auto objName = p.parseName();
+      PARSER_VERIFY(
+          objName,
+          "Could not parse obj name in draw-call declaration.");
+      p.parseWhitespace();
+
+      auto idx = findIndexByName(m_objModels, *objName);
+      PARSER_VERIFY(
+          idx,
+          "Could not find referenced obj mesh specified in draw-call "
+          "declaration.");
+
+      auto vertShader = p.parseName();
+      PARSER_VERIFY(
+          vertShader,
+          "Could not parse vertex shader name in draw-call declaration.");
+      p.parseWhitespace();
+      auto pixelShader = p.parseName();
+      PARSER_VERIFY(
+          pixelShader,
+          "Could not parse pixel shader name in draw-call declaration.");
+
+      uint32_t renderPassIdx = m_renderPasses.size() - 1;
+      m_renderPasses.back().draws.push_back(
+          {std::string(*vertShader),
+           std::string(*pixelShader),
+           0,
+           1,
+           (int)*idx,
+           false});
       break;
     }
     case I_FEATURE: {
@@ -1224,6 +1364,16 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
 
       m_taskList.push_back({(uint32_t)m_transitions.size(), TT_TRANSITION});
       m_transitions.push_back({*imageIdx, (LayoutTransitionTarget)*modeIdx});
+
+      break;
+    };
+    case I_OBJ_MODEL: {
+      PARSER_VERIFY(name, "Could not parse obj model name.");
+
+      auto path = p.parseStringLiteral();
+      PARSER_VERIFY(path, "Could not parse obj model path");
+
+      m_objModels.push_back({std::string(*name), std::string(*path)});
 
       break;
     };
