@@ -416,8 +416,6 @@ Project::Project(
         builder.addVertexAttribute(
             VertexAttributeType::VEC2,
             offsetof(SimpleObjLoader::ObjVert, uv));
-      } else {
-        builder.setCullMode(VK_CULL_MODE_FRONT_BIT); // ??
       }
 
       {
@@ -511,7 +509,7 @@ Project::Project(
 
       ImageViewOptions depthViewOptions{};
       depthViewOptions.format = depthOptions.format;
-      depthViewOptions.aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+      depthViewOptions.aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT;
       drawPass.m_depth.view =
           ImageView(app, drawPass.m_depth.image, depthViewOptions);
 
@@ -528,6 +526,14 @@ Project::Project(
           drawPass.m_renderPass,
           extent,
           {drawPass.m_target.view});
+    }
+  }
+
+  for (int i = 0; i < m_parsed.m_renderPasses.size(); i++) {
+    if (m_parsed.m_renderPasses[i].bIsDisplayPass) {
+      m_displayPassIdx = i;
+      m_drawPasses[i].m_target.registerToTextureHeap(heap);
+      break;
     }
   }
 
@@ -681,7 +687,7 @@ void Project::draw(
         drawPass.m_depth.image.transitionLayout(
             commandBuffer,
             VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
       }
 

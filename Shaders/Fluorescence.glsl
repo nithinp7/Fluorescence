@@ -11,7 +11,7 @@ layout(set = 1, binding = 0) uniform _FlrUniforms{
 #ifdef IS_VERTEX_SHADER
 
 vec2 VS_FullScreen() {
-  vec2 screenPos = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
+  vec2 screenPos = vec2(gl_VertexIndex & 2, (gl_VertexIndex << 1) & 2);
   gl_Position = vec4(screenPos * 2.0f - 1.0f, 0.0f, 1.0f);
   return screenPos;
 }
