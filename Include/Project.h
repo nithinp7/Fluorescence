@@ -15,6 +15,7 @@
 #include <Althea/RenderPass.h>
 #include <Althea/StructuredBuffer.h>
 #include <Althea/TransientUniforms.h>
+#include <Althea/Utilities.h>
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
@@ -107,9 +108,16 @@ struct ParsedFlr {
   };
   std::vector<ImageDesc> m_images;
 
+  struct TextureFile {
+    ImageOptions createOptions;
+    Utilities::ImageFile loadedImage;
+  };
+  std::vector<TextureFile> m_textureFiles;
+
   struct TextureDesc {
     std::string name;
-    uint32_t imageIdx; // TODO: allow for textures loaded from files
+    int imageIdx; 
+    int texFileIdx; // image idx or texfile idx, but not both
   };
   std::vector<TextureDesc> m_textures;
 
@@ -224,6 +232,7 @@ struct ParsedFlr {
     I_FEATURE,
     I_IMAGE,
     I_TEXTURE_ALIAS,
+    I_TEXTURE_FILE,
     I_TRANSITION,
     I_COUNT
   };
@@ -251,6 +260,7 @@ struct ParsedFlr {
       "enable_feature",
       "image",
       "texture_alias",
+      "texture_file",
       "transition_layout"};
 };
 
@@ -292,6 +302,7 @@ private:
 
   std::vector<BufferAllocation> m_buffers;
   std::vector<ImageResource> m_images;
+  std::vector<ImageResource> m_textureFiles;
   std::vector<ComputePipeline> m_computePipelines;
 
   struct DrawTask {

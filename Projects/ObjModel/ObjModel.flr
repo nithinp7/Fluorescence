@@ -1,9 +1,11 @@
 
 enable_feature: perspective_camera
 
-obj_model Test: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/head.obj"
+obj_model HeadModel: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/head.obj"
+texture_file HeadBumpTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/bump.png"
+#texture_file HeadBumpTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/bump-lowRes.png"
 
 display_pass:
   draw: VS_Background PS_Background 3 1
   disable_depth
-  draw_obj: Test VS_Obj PS_Obj
+  draw_obj: HeadModel VS_Obj PS_Obj

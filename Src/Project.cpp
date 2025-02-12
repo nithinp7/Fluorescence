@@ -89,6 +89,19 @@ Project::Project(
     rsc.sampler = Sampler(app, samplerOptions);
   }
 
+  m_textureFiles.reserve(m_parsed.m_textureFiles.size());
+  for (ParsedFlr::TextureFile& tex : m_parsed.m_textureFiles) {
+    ImageResource& rsc = m_textureFiles.emplace_back();
+    
+    rsc.image = Image(app, (VkCommandBuffer)commandBuffer, tex.loadedImage.data, tex.createOptions);
+
+    ImageViewOptions viewOptions{};
+    rsc.view = ImageView(app, rsc.image, viewOptions);
+
+    SamplerOptions samplerOptions{};
+    rsc.sampler = Sampler(app, samplerOptions);
+  }
+
   m_objModels.reserve(m_parsed.m_objModels.size());
   for (const auto& m : m_parsed.m_objModels) {
     auto& obj = m_objModels.emplace_back();
@@ -244,9 +257,17 @@ Project::Project(
 
     for (int i = 0; i < m_parsed.m_textures.size(); ++i) {
       const auto& txDesc = m_parsed.m_textures[i];
-      const auto& rsc = m_images[txDesc.imageIdx];
 
-      assign.bindTexture(rsc);
+      if (txDesc.imageIdx >= 0) {
+        const auto& rsc = m_images[txDesc.imageIdx];
+        assign.bindTexture(rsc);
+      } else if (txDesc.texFileIdx >= 0) {
+        const auto& rsc = m_textureFiles[txDesc.texFileIdx];
+        assign.bindTexture(rsc);
+      }
+      else {
+        assert(false);
+      }
       CODE_APPEND(
           "layout(set=1,binding=%u) uniform sampler2D %s;\n",
           slot++,
@@ -504,7 +525,8 @@ Project::Project(
       depthOptions.width = extent.width;
       depthOptions.height = extent.height;
       depthOptions.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-      depthOptions.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+      depthOptions.aspectMask =
+          VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
       drawPass.m_depth.image = Image(app, depthOptions);
 
       ImageViewOptions depthViewOptions{};
@@ -687,7 +709,8 @@ void Project::draw(
         drawPass.m_depth.image.transitionLayout(
             commandBuffer,
             VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
       }
 
@@ -1337,9 +1360,36 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           "Could not find preceding image declaration before texture_alias "
           "declaration.");
 
-      uint32_t imageIdx = m_images.size() - 1;
+      int imageIdx = m_images.size() - 1;
       m_images[imageIdx].createOptions.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-      m_textures.push_back({std::string(*name), imageIdx});
+      m_textures.push_back({std::string(*name), imageIdx, -1});
+
+      break;
+    }
+    case I_TEXTURE_FILE: {
+      PARSER_VERIFY(name, "Could not parse texture name.");
+
+      auto path = p.parseStringLiteral();
+      PARSER_VERIFY(path, "Could not parse texture file path.");
+
+      std::string pathStr(*path);
+      PARSER_VERIFY(
+          Utilities::checkFileExists(pathStr),
+          "Could not find specified texture file.");
+
+      int texFileIdx = m_textureFiles.size();
+      auto& texFile = m_textureFiles.emplace_back();
+      Utilities::loadPng(pathStr, texFile.loadedImage);
+      PARSER_VERIFY(texFile.loadedImage.data.size() > 0, "Could not load specified texture file.");
+
+      texFile.createOptions = ImageOptions{};
+      texFile.createOptions.width = texFile.loadedImage.width;
+      texFile.createOptions.height = texFile.loadedImage.height;
+
+      assert(texFile.loadedImage.channels == 4);
+      assert(texFile.loadedImage.bytesPerChannel == 1);
+
+      m_textures.push_back({std::string(*name), -1, texFileIdx});
 
       break;
     }
