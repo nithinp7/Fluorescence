@@ -4,9 +4,10 @@
 #define SCREEN_HEIGHT 1280
 
 layout(set=1,binding=1) uniform sampler2D HeadBumpTexture;
+layout(set=1,binding=2) uniform sampler2D HeadLambertianTexture;
 #include <Fluorescence.glsl>
 
-layout(set=1, binding=2) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=3) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 #include "ObjModel.glsl"
 

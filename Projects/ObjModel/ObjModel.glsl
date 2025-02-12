@@ -43,7 +43,8 @@ void PS_Background() {
 }
 
 void PS_Obj() {
-  outColor = vec4(texture(HeadBumpTexture, vec2(inUv.x, 1.0 - inUv.y)).xx, 0.0, 1.0);
+  // outColor = vec4(texture(HeadBumpTexture, vec2(inUv.x, 1.0 - inUv.y)).xx, 0.0, 1.0);
+  outColor = vec4(texture(HeadLambertianTexture, vec2(inUv.x, 1.0 - inUv.y)).rgb, 1.0);
 }
 #endif // IS_PIXEL_SHADER
 

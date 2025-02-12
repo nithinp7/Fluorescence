@@ -1379,7 +1379,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
 
       int texFileIdx = m_textureFiles.size();
       auto& texFile = m_textureFiles.emplace_back();
-      Utilities::loadPng(pathStr, texFile.loadedImage);
+      Utilities::loadImage(pathStr, texFile.loadedImage);
       PARSER_VERIFY(texFile.loadedImage.data.size() > 0, "Could not load specified texture file.");
 
       texFile.createOptions = ImageOptions{};
