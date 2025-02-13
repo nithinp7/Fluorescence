@@ -1,7 +1,7 @@
 #version 460 core
 
-#define SCREEN_WIDTH 1440
-#define SCREEN_HEIGHT 1280
+#define SCREEN_WIDTH 2560
+#define SCREEN_HEIGHT 1334
 
 layout(set=1,binding=1) uniform sampler2D HeadBumpTexture;
 layout(set=1,binding=2) uniform sampler2D HeadLambertianTexture;
