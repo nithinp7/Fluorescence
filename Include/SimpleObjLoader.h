@@ -14,6 +14,7 @@ namespace flr {
 namespace SimpleObjLoader {
 
 struct ObjVert {
+  ObjVert() : position(0.0f), normal(0.0f), uv(0.0f) {}
   glm::vec3 position;
   glm::vec3 normal;
   glm::vec2 uv;
@@ -21,13 +22,14 @@ struct ObjVert {
 
 struct ObjMesh {
   char name[128] = {0};
-  VertexBuffer<ObjVert> m_vertices;
+  IndexBuffer m_indices;
   int m_albedo = -1;
   int m_normal = -1;
   int m_metallicRoughness = -1;
 };
 
 struct LoadedObj {
+  VertexBuffer<ObjVert> m_vertices;
   std::vector<ImageResource> m_images;
   std::vector<ObjMesh> m_meshes;
 };

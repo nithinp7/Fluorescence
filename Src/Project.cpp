@@ -724,10 +724,11 @@ void Project::draw(
         pass.getDrawContext().bindDescriptorSets();
         for (const auto& draw : m_parsed.m_renderPasses[task.idx].draws) {
           if (draw.objMeshIdx >= 0) {
-            for (SimpleObjLoader::ObjMesh& mesh :
-                 m_objModels[draw.objMeshIdx].m_meshes) {
-              pass.getDrawContext().bindVertexBuffer(mesh.m_vertices);
-              pass.getDrawContext().draw(mesh.m_vertices.getVertexCount(), 1);
+            SimpleObjLoader::LoadedObj& obj = m_objModels[draw.objMeshIdx];
+            for (SimpleObjLoader::ObjMesh& mesh : obj.m_meshes) {
+              pass.getDrawContext().bindIndexBuffer(mesh.m_indices);
+              pass.getDrawContext().bindVertexBuffer(obj.m_vertices);
+              pass.getDrawContext().drawIndexed(mesh.m_indices.getIndexCount(), 1);
             }
           } else {
             pass.getDrawContext().draw(draw.vertexCount, draw.instanceCount);
