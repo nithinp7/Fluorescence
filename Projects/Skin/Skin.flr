@@ -1,0 +1,16 @@
+
+enable_feature: perspective_camera
+
+slider_uint BACKGROUND: 0 0 3
+slider_uint RENDER_MODE: 0 0 3
+slider_float BUMP_STRENGTH: 0.0 0.0 100.0
+
+obj_model HeadModel: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/head.obj"
+texture_file HeadBumpTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/bump.png"
+#texture_file HeadBumpTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/bump-lowRes.png"
+texture_file HeadLambertianTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/lambertian.jpg"
+
+display_pass:
+  draw: VS_Background PS_Background 3 1
+  disable_depth
+  draw_obj: HeadModel VS_Obj PS_Obj
