@@ -9,7 +9,14 @@ layout(set=1,binding=2) uniform sampler2D HeadLambertianTexture;
 layout(set=1, binding=3) uniform _UserUniforms {
 	uint BACKGROUND;
 	uint RENDER_MODE;
+	uint SAMPLE_COUNT;
 	float BUMP_STRENGTH;
+	float ROUGHNESS;
+	float METALLIC;
+	float SSS;
+	float LIGHT_THETA;
+	float LIGHT_PHI;
+	float LIGHT_STRENGTH;
 };
 
 #include <Fluorescence.glsl>

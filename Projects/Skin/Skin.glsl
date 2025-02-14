@@ -1,3 +1,4 @@
+#include <PathTracing/BRDF.glsl>
 
 #include <Misc/Sampling.glsl>
 
@@ -12,7 +13,11 @@ vec3 sampleEnv(vec3 dir) {
   float c = 5.0;
   vec3 n = 0.5 * normalize(dir) + 0.5.xxx;
   if (BACKGROUND == 0) {
-    return round(n * c) / c;
+    float cosphi = cos(LIGHT_PHI); float sinphi = sin(LIGHT_PHI);
+    float costheta = cos(LIGHT_THETA); float sintheta = sin(LIGHT_THETA);
+    float x = 0.5 + 0.5 * dot(dir, normalize(vec3(costheta * cosphi, sinphi, sintheta * cosphi)));
+    x = pow(x, 10.0) + 0.01;
+    return LIGHT_STRENGTH * x * round(n * c) / c;
   } else if (BACKGROUND == 1) {
     return round(fract(n * c));
   } else if (BACKGROUND == 2) {
@@ -31,7 +36,7 @@ vec3 sampleEnv(vec3 dir) {
 ////////////////////////// VERTEX SHADERS //////////////////////////
 
 #ifdef IS_VERTEX_SHADER
-layout(location = 0) out vec3 outPosition;
+layout(location = 0) out vec3 outScreenPos;
 layout(location = 1) out vec3 outNormal;
 layout(location = 2) out vec2 outUv;
 
@@ -48,8 +53,9 @@ layout(location = 2) in vec2 inUv;
 
 void VS_Obj() {
   vec4 worldPos = camera.view * vec4(inPosition, 1.0);
-  gl_Position = camera.projection * worldPos;
-  outPosition = worldPos.xyz;
+  vec4 projPos = camera.projection * worldPos;
+  gl_Position = projPos;
+  outScreenPos = projPos.xyw;
   outNormal = inNormal;
   outUv = vec2(inUv.x, 1.0 - inUv.y);
 }
@@ -59,7 +65,7 @@ void VS_Obj() {
 ////////////////////////// PIXEL SHADERS //////////////////////////
 
 #ifdef IS_PIXEL_SHADER
-layout(location = 0) in vec3 inPos;
+layout(location = 0) in vec3 inScreenPos;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inUv;
 
@@ -71,22 +77,43 @@ void PS_Background() {
 }
 
 void PS_Obj() {
+  vec3 dir = computeDir(inUv);
   mat3 tangentSpace = LocalToWorld(inNormal);
 
   float bump = texture(HeadBumpTexture, inUv).x;
   vec2 bumpGrad = vec2(dFdx(bump), dFdy(bump)); 
   vec3 bumpNormal = vec3(BUMP_STRENGTH * bumpGrad, 1.0);
-  vec3 normal = tangentSpace * normalize(bumpNormal);
+  vec3 normal = normalize(tangentSpace * bumpNormal);
+
+  vec3 diffuse = texture(HeadLambertianTexture, inUv).rgb;
+
+  uvec2 seed = uvec2((0.5 * inScreenPos.xy / inScreenPos.z + 0.5.xx) * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
+  seed *= uvec2(uniforms.frameCount, uniforms.frameCount + 1);
+
+  vec3 Lo = 0.0.xxx;
+  for (int sampleIdx = 0; sampleIdx < SAMPLE_COUNT; sampleIdx++) {
+    vec3 reflDir;
+    float pdf;
+    vec3 f = sampleMicrofacetBrdf(
+      randVec2(seed), -dir, normal,
+      diffuse, METALLIC, ROUGHNESS, 
+      reflDir, pdf);
+    if (pdf > 0.00001)
+      Lo += sampleEnv(reflDir) * diffuse * f / pdf / SAMPLE_COUNT;
+  }
+
+  Lo += SSS * sampleEnv(dir) * diffuse;
 
   if (RENDER_MODE == 0) {
-    outColor = vec4(texture(HeadLambertianTexture, inUv).rgb, 1.0);
+    outColor = vec4(Lo, 1.0);
   } else if (RENDER_MODE == 1) {
-    outColor = vec4(0.5 * normal + 0.5.xxx, 1.0);
+    outColor = vec4(diffuse, 1.0);
   } else if (RENDER_MODE == 2) {
-    outColor = vec4(bump.xxx, 1.0);
+    outColor = vec4(0.5 * normal + 0.5.xxx, 1.0);
   } else {
-    outColor = vec4(0.0.xxx, 1.0);
+    outColor = vec4(bump.xxx, 1.0);
   }
+
 }
 #endif // IS_PIXEL_SHADER
 
