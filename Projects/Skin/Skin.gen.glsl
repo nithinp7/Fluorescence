@@ -7,16 +7,25 @@ layout(set=1,binding=1) uniform sampler2D HeadBumpTexture;
 layout(set=1,binding=2) uniform sampler2D HeadLambertianTexture;
 
 layout(set=1, binding=3) uniform _UserUniforms {
+	uint BRDF_MODE;
 	uint BACKGROUND;
 	uint RENDER_MODE;
 	uint SAMPLE_COUNT;
+	float EPI_DEPTH;
+	float IOR_EPI;
+	float IOR_DERM;
+	float EPI_ABS_RED;
+	float EPI_ABS_GREEN;
+	float EPI_ABS_BLUE;
+	float HEMOGLOBIN_SCALE;
 	float BUMP_STRENGTH;
 	float ROUGHNESS;
 	float METALLIC;
-	float SSS;
 	float LIGHT_THETA;
 	float LIGHT_PHI;
 	float LIGHT_STRENGTH;
+	bool ENABLE_SSS;
+	bool ENABLE_REFL;
 };
 
 #include <Fluorescence.glsl>

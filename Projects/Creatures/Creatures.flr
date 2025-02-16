@@ -1,0 +1,91 @@
+uint CELLS_X: SCREEN_WIDTH
+uint CELLS_Y: SCREEN_HEIGHT
+uint CELLS_COUNT: CELLS_X * CELLS_Y
+uint HALF_CELLS_COUNT: CELLS_COUNT / 2
+uint QUARTER_CELLS_COUNT: CELLS_COUNT / 4
+
+float H: 1.0 / SCREEN_WIDTH
+
+slider_float VEL_DAMPING: 1.0 0.8 1.0
+slider_float JITTER: 8.5 0.01 10.0
+slider_uint CLAMP_MODE: 0 0 1
+slider_uint RENDER_MODE: 0 0 3
+slider_float MAX_VELOCITY: 330.0 100.0 4000.0
+float DELTA_TIME: 1.0 / 30.0
+
+struct GlobalState {
+  vec2 pan;
+  float zoom;
+  uint initialized;
+}
+struct_size: 16
+structured_buffer globalStateBuffer: GlobalState 1
+
+struct ExtraFields {
+  vec4 color; // TODO: turn into id or quantized color
+};
+struct_size: 16
+
+struct Uint { uint u; }
+struct_size: 4
+struct Float { float f; }
+struct_size: 4
+struct U16x2 { uint packed; }
+struct_size: 4
+
+structured_buffer velocityField: Uint HALF_CELLS_COUNT
+structured_buffer advectedVelocityField: Uint HALF_CELLS_COUNT
+
+structured_buffer extraFields: ExtraFields CELLS_COUNT
+structured_buffer advectedExtraFields: ExtraFields CELLS_COUNT
+
+# TODO quantize divergence and pressure
+structured_buffer divergenceField: Float CELLS_COUNT
+structured_buffer pressureFieldA: Float CELLS_COUNT
+structured_buffer pressureFieldB: Float CELLS_COUNT
+
+uint PARTICLE_COUNT: 1000
+
+struct Particle {
+  vec3 position;
+};
+structured_buffer particlesBuffer: Particle PARTICLE_COUNT
+
+compute_shader CS_Tick: 1 1 1
+compute_shader CS_UpdateVelocity: 32 1 1
+compute_shader CS_AdvectVelocity: 32 1 1
+compute_shader CS_AdvectColor: 32 1 1
+compute_shader CS_ComputeDivergence: 32 1 1
+compute_shader CS_ComputePressureA: 32 1 1
+compute_shader CS_ComputePressureB: 32 1 1
+compute_shader CS_ResolveVelocity: 32 1 1
+
+compute_dispatch: CS_Tick 1 1 1
+barrier: globalStateBuffer
+compute_dispatch: CS_UpdateVelocity CELLS_COUNT 1 1
+barrier: velocityField, advectedVelocityField, extraFields, advectedExtraFields, pressureFieldA, pressureFieldB
+compute_dispatch: CS_AdvectVelocity CELLS_COUNT 1 1
+barrier: velocityField, advectedVelocityField
+compute_dispatch: CS_ComputeDivergence CELLS_COUNT 1 1
+barrier: divergenceField
+
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+compute_dispatch: CS_ComputePressureA CELLS_COUNT 1 1
+barrier: pressureFieldB
+compute_dispatch: CS_ComputePressureB CELLS_COUNT 1 1
+barrier: pressureFieldA
+
+compute_dispatch: CS_ResolveVelocity CELLS_COUNT 1 1
+barrier: velocityField
+compute_dispatch: CS_AdvectColor CELLS_COUNT 1 1
+barrier: advectedExtraFields, velocityField
+
+display_pass:
+  draw: VS_Display PS_Display 3 1

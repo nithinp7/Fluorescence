@@ -1,14 +1,25 @@
 
 enable_feature: perspective_camera
 
-slider_uint BACKGROUND: 0 0 3
+checkbox ENABLE_SSS: true
+checkbox ENABLE_REFL: true
+slider_float EPI_DEPTH: 0.01 0.001 10.0
+slider_float IOR_EPI: 1.4 0.1 2.0
+slider_float IOR_DERM: 1.38 0.1 2.0
+#TODO slider_color ....
+slider_float EPI_ABS_RED: 0.1 0.0 10.0
+slider_float EPI_ABS_GREEN: 0.14 0.0 10.0
+slider_float EPI_ABS_BLUE: 0.18 0.0 10.0
+
+slider_float HEMOGLOBIN_SCALE: 1.0 0.0 40.0
+slider_uint BRDF_MODE: 0 0 2
+slider_uint BACKGROUND: 0 0 4
 slider_uint RENDER_MODE: 0 0 3
 slider_float BUMP_STRENGTH: 0.0 0.0 100.0
 
 slider_uint SAMPLE_COUNT: 10 1 100
 slider_float ROUGHNESS: 0.4 0.01 1.0
 slider_float METALLIC: 0.0 0.0 1.0
-slider_float SSS: 0.0 0.0 1.0
 
 slider_float LIGHT_THETA: 0.0 0.0 8.0
 slider_float LIGHT_PHI: 1.0 -2.0 2.0

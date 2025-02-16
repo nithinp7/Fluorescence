@@ -16,15 +16,21 @@ vec3 sampleEnv(vec3 dir) {
     float cosphi = cos(LIGHT_PHI); float sinphi = sin(LIGHT_PHI);
     float costheta = cos(LIGHT_THETA); float sintheta = sin(LIGHT_THETA);
     float x = 0.5 + 0.5 * dot(dir, normalize(vec3(costheta * cosphi, sinphi, sintheta * cosphi)));
-    x = pow(x, 10.0) + 0.01;
-    return LIGHT_STRENGTH * x * round(n * c) / c;
+    x = LIGHT_STRENGTH * pow(x, LIGHT_STRENGTH * 10.0) + 0.01;
+    return x.xxx;
   } else if (BACKGROUND == 1) {
     return round(fract(n * c));
   } else if (BACKGROUND == 2) {
     return round(n);
-  } else {
+  } else if (BACKGROUND == 3) {
     float f = n.x + n.y + n.z;
     return max(round(fract(f * c)), 0.2).xxx;
+  } else {
+    float cosphi = cos(LIGHT_PHI); float sinphi = sin(LIGHT_PHI);
+    float costheta = cos(LIGHT_THETA); float sintheta = sin(LIGHT_THETA);
+    float x = 0.5 + 0.5 * dot(dir, normalize(vec3(costheta * cosphi, sinphi, sintheta * cosphi)));
+    x = pow(x, LIGHT_STRENGTH) + 0.01;
+    return LIGHT_STRENGTH * x * round(n * c) / c;
   }
 }
 
@@ -77,7 +83,7 @@ void PS_Background() {
 }
 
 void PS_Obj() {
-  vec3 dir = computeDir(inUv);
+  vec3 dir = normalize(computeDir(inUv));
   mat3 tangentSpace = LocalToWorld(inNormal);
 
   float bump = texture(HeadBumpTexture, inUv).x;
@@ -92,17 +98,63 @@ void PS_Obj() {
 
   vec3 Lo = 0.0.xxx;
   for (int sampleIdx = 0; sampleIdx < SAMPLE_COUNT; sampleIdx++) {
-    vec3 reflDir;
-    float pdf;
-    vec3 f = sampleMicrofacetBrdf(
-      randVec2(seed), -dir, normal,
-      diffuse, METALLIC, ROUGHNESS, 
-      reflDir, pdf);
-    if (pdf > 0.00001)
-      Lo += sampleEnv(reflDir) * diffuse * f / pdf / SAMPLE_COUNT;
-  }
+    float W = 0.0;
+    if (ENABLE_SSS)
+      W += 1.0;
+    if (ENABLE_REFL)
+      W += 1.0;
 
-  Lo += SSS * sampleEnv(dir) * diffuse;
+    if (ENABLE_SSS && (!ENABLE_REFL || (rng(seed) < 0.5))) {
+      vec3 refrDir = refract(dir, normal, 1.0/IOR_EPI);
+
+      float cosRefrDirNormal = -dot(normal, refrDir);
+      float epidermisPathLength = EPI_DEPTH / cosRefrDirNormal;
+
+      vec3 epiAbs = vec3(EPI_ABS_RED, EPI_ABS_GREEN, EPI_ABS_BLUE);
+      vec3 sssThroughput = exp(-epiAbs * epidermisPathLength);
+
+      vec3 HEMOGLOBIN_DIFFUSE = vec3(0.8, 0.3, 0.4) * HEMOGLOBIN_SCALE;
+      vec3 refrReflDir;
+      if (BRDF_MODE == 0) {
+        float pdf;
+        vec3 refrReflDirLocal = sampleHemisphereCosine(seed, pdf);
+        refrReflDir = LocalToWorld(normal) * refrReflDirLocal;
+        sssThroughput *= HEMOGLOBIN_DIFFUSE /* refrReflDirLocal.z / refrReflDirLocal.z */;
+        // the pdf cancels out with part of the brdf, in the lambertian brdf
+      } else {
+        float pdfRefrRefl;
+        vec3 fRefrRefl = sampleMicrofacetBrdf(
+          randVec2(seed), -refrDir, normal,
+          HEMOGLOBIN_DIFFUSE, METALLIC, ROUGHNESS, 
+          refrReflDir, pdfRefrRefl);
+        sssThroughput *= fRefrRefl / pdfRefrRefl;
+      }
+
+      float cosRefrReflDirNormal = dot(normal, refrReflDir);
+      epidermisPathLength = EPI_DEPTH / cosRefrReflDirNormal;
+      sssThroughput *= exp(-epiAbs * epidermisPathLength);
+
+      Lo += W * sssThroughput * sampleEnv(refrReflDir) / SAMPLE_COUNT;
+    } else {
+      vec3 reflDir;
+      vec3 f;
+      float pdf;
+      if (BRDF_MODE == 0) {
+        vec3 reflDirLocal = sampleHemisphereCosine(seed, pdf);
+        reflDir = LocalToWorld(normal) * reflDirLocal;
+        f = diffuse * reflDirLocal.z;
+        pdf = reflDirLocal.z;
+      } else {
+        f = sampleMicrofacetBrdf(
+          randVec2(seed), -dir, normal,
+          diffuse, METALLIC, ROUGHNESS, 
+          reflDir, pdf);
+      }
+
+      vec3 throughput = f / pdf;
+      Lo += W * sampleEnv(reflDir) * throughput / SAMPLE_COUNT;
+    }
+  }
 
   if (RENDER_MODE == 0) {
     outColor = vec4(Lo, 1.0);
