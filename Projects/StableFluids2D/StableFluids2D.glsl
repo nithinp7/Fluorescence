@@ -139,7 +139,7 @@ void PS_Display() {
   } else if (RENDER_MODE == 2) {
     outColor = vec4((100. * readDivergence(flatIdx) * 0.1).xxx, 1.0);
   } else {
-    outColor = vec4(abs(readPressure(0, flatIdx)).xxx / MAX_PRESSURE, 1.0);
+    outColor = vec4(0.0.xxx, 1.0);// vec4(abs(readPressure(0, flatIdx)).xxx / MAX_PRESSURE, 1.0);
   }
 }
 #endif // IS_PIXEL_SHADER

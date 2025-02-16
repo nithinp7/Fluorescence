@@ -8,6 +8,8 @@
 #define HALF_CELLS_COUNT 921600
 #define QUARTER_CELLS_COUNT 460800
 #define H 0.000694
+#define PRESSURE_JITTER 0.000000
+#define MAX_PRESSURE 0.000000
 #define DELTA_TIME 0.033333
 
 struct GlobalState {
@@ -32,17 +34,15 @@ layout(set=1,binding=3) buffer BUFFER_advectedVelocityField {  Uint advectedVelo
 layout(set=1,binding=4) buffer BUFFER_extraFields {  ExtraFields extraFields[]; };
 layout(set=1,binding=5) buffer BUFFER_advectedExtraFields {  ExtraFields advectedExtraFields[]; };
 layout(set=1,binding=6) buffer BUFFER_divergenceField {  Float divergenceField[]; };
-layout(set=1,binding=7) buffer BUFFER_pressureFieldA {  U16x2 pressureFieldA[]; };
-layout(set=1,binding=8) buffer BUFFER_pressureFieldB {  U16x2 pressureFieldB[]; };
+layout(set=1,binding=7) buffer BUFFER_pressureFieldA {  Float pressureFieldA[]; };
+layout(set=1,binding=8) buffer BUFFER_pressureFieldB {  Float pressureFieldB[]; };
 
 layout(set=1, binding=9) uniform _UserUniforms {
 	uint CLAMP_MODE;
 	uint RENDER_MODE;
 	float VEL_DAMPING;
 	float JITTER;
-	float PRESSURE_JITTER;
 	float MAX_VELOCITY;
-	float MAX_PRESSURE;
 };
 
 #include <Fluorescence.glsl>

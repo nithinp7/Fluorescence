@@ -8,11 +8,13 @@ float H: 1.0 / SCREEN_WIDTH
 
 slider_float VEL_DAMPING: 1.0 0.8 1.0
 slider_float JITTER: 8.5 0.01 10.0
-slider_float PRESSURE_JITTER: 0.1 0.001 1.0
+#slider_float PRESSURE_JITTER: 0.1 0.001 1.0
+float PRESSURE_JITTER: 0.0
 slider_uint CLAMP_MODE: 0 0 1
 slider_uint RENDER_MODE: 0 0 3
 slider_float MAX_VELOCITY: 330.0 100.0 4000.0
-slider_float MAX_PRESSURE: 0.01 0.001 1.0
+#slider_float MAX_PRESSURE: 0.01 0.001 1.0
+float MAX_PRESSURE: 0.0
 float DELTA_TIME: 1.0 / 30.0
 
 struct GlobalState {
@@ -43,8 +45,10 @@ structured_buffer advectedExtraFields: ExtraFields CELLS_COUNT
 
 # TODO quantize divergence and pressure
 structured_buffer divergenceField: Float CELLS_COUNT
-structured_buffer pressureFieldA: U16x2 HALF_CELLS_COUNT
-structured_buffer pressureFieldB: U16x2 HALF_CELLS_COUNT
+#structured_buffer pressureFieldA: U16x2 HALF_CELLS_COUNT
+#structured_buffer pressureFieldB: U16x2 HALF_CELLS_COUNT
+structured_buffer pressureFieldA: Float CELLS_COUNT
+structured_buffer pressureFieldB: Float CELLS_COUNT
 
 compute_shader CS_HandleInput: 1 1 1
 compute_shader CS_InitVelocity: 32 1 1

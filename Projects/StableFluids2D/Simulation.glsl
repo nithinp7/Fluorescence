@@ -4,7 +4,7 @@
 #extension GL_KHR_shader_subgroup_shuffle_relative : enable
 
 // #define PACKED_PRESSURE
-#define QUANTIZED_PRESSURE 
+// #define QUANTIZED_PRESSURE 
 
 uint coordToFlatIdx(uvec2 coord) {
   return coord.y * CELLS_X + coord.x;
@@ -128,16 +128,16 @@ void writePressure(int phase, uint flatIdx, float pressure) {
 float readPressure(int phase, uint flatIdx) {
 #ifdef PACKED_PRESSURE
   if (phase == 0)
-    return unpackHalf2x16(pressureFieldB[flatIdx >> 1].packed)[flatIdx & 1];
-  else 
     return unpackHalf2x16(pressureFieldA[flatIdx >> 1].packed)[flatIdx & 1];
+  else 
+    return unpackHalf2x16(pressureFieldB[flatIdx >> 1].packed)[flatIdx & 1];
 #elif defined(QUANTIZED_PRESSURE)
   uint bitoffs = (flatIdx & 1) << 4;
   uint packed;
   if (phase == 0)
-    packed = (pressureFieldB[flatIdx >> 1].packed >> bitoffs) & 0xFFFF;
-  else
     packed = (pressureFieldA[flatIdx >> 1].packed >> bitoffs) & 0xFFFF;
+  else
+    packed = (pressureFieldB[flatIdx >> 1].packed >> bitoffs) & 0xFFFF;
   float qoffs = -MAX_PRESSURE;
   float qscale = 2.0 * MAX_PRESSURE;
   return dequantizeU16ToFloat(packed, qoffs, qscale);
