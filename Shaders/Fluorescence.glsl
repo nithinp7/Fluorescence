@@ -8,6 +8,8 @@ layout(set = 1, binding = 0) uniform _FlrUniforms{
   FlrUniforms uniforms;
 };
 
+#define IS_ENTRY_POINT(NAME) _ENTRY_POINT_##NAME
+
 #ifdef IS_VERTEX_SHADER
 
 vec2 VS_FullScreen() {

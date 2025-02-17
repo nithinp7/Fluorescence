@@ -42,28 +42,32 @@ vec3 sampleEnv(vec3 dir) {
 ////////////////////////// VERTEX SHADERS //////////////////////////
 
 #ifdef IS_VERTEX_SHADER
-layout(location = 0) out vec3 outScreenPos;
-layout(location = 1) out vec3 outNormal;
-layout(location = 2) out vec2 outUv;
+VertexOutput VS_Background() {
+  VertexOutput OUT;
 
-void VS_Background() {
-  vec2 uv = VS_FullScreen();
-  gl_Position = vec4(uv * 2.0 - 1.0, 0.0, 1.0);
-  outUv = uv;
+  OUT.uv = VS_FullScreen();
+  gl_Position = vec4(OUT.uv * 2.0 - 1.0, 0.0, 1.0);
+
+  return OUT;
 }
 
 #ifdef _ENTRY_POINT_VS_Obj
+// TODO automate...
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inUv;
 
-void VS_Obj() {
+VertexOutput VS_Obj() {
+  VertexOutput OUT;
+
   vec4 worldPos = camera.view * vec4(inPosition, 1.0);
   vec4 projPos = camera.projection * worldPos;
   gl_Position = projPos;
-  outScreenPos = projPos.xyw;
-  outNormal = inNormal;
-  outUv = vec2(inUv.x, 1.0 - inUv.y);
+  OUT.position = projPos.xyw;
+  OUT.normal = inNormal;
+  OUT.uv = vec2(inUv.x, 1.0 - inUv.y);
+
+  return OUT;
 }
 #endif // _ENTRY_POINT_VS_Obj
 #endif // IS_VERTEX_SHADER
@@ -71,29 +75,27 @@ void VS_Obj() {
 ////////////////////////// PIXEL SHADERS //////////////////////////
 
 #ifdef IS_PIXEL_SHADER
-layout(location = 0) in vec3 inScreenPos;
-layout(location = 1) in vec3 inNormal;
-layout(location = 2) in vec2 inUv;
 
+// TODO 
 layout(location = 0) out vec4 outColor;
 
-void PS_Background() {
-  vec3 dir = computeDir(inUv);
+void PS_Background(VertexOutput IN) {
+  vec3 dir = computeDir(IN.uv);
   outColor = vec4(sampleEnv(dir), 1.0);
 }
 
-void PS_Obj() {
-  vec3 dir = normalize(computeDir(inUv));
-  mat3 tangentSpace = LocalToWorld(inNormal);
+void PS_Obj(VertexOutput IN) {
+  vec3 dir = normalize(computeDir(IN.uv));
+  mat3 tangentSpace = LocalToWorld(IN.normal);
 
-  float bump = texture(HeadBumpTexture, inUv).x;
+  float bump = texture(HeadBumpTexture, IN.uv).x;
   vec2 bumpGrad = vec2(dFdx(bump), dFdy(bump)); 
   vec3 bumpNormal = vec3(BUMP_STRENGTH * bumpGrad, 1.0);
   vec3 normal = normalize(tangentSpace * bumpNormal);
 
-  vec3 diffuse = texture(HeadLambertianTexture, inUv).rgb;
+  vec3 diffuse = texture(HeadLambertianTexture, IN.uv).rgb;
 
-  uvec2 seed = uvec2((0.5 * inScreenPos.xy / inScreenPos.z + 0.5.xx) * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
+  uvec2 seed = uvec2((0.5 * IN.position.xy / IN.position.z + 0.5.xx) * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
   seed *= uvec2(uniforms.frameCount, uniforms.frameCount + 1);
 
   vec3 Lo = 0.0.xxx;

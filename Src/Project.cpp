@@ -92,8 +92,12 @@ Project::Project(
   m_textureFiles.reserve(m_parsed.m_textureFiles.size());
   for (ParsedFlr::TextureFile& tex : m_parsed.m_textureFiles) {
     ImageResource& rsc = m_textureFiles.emplace_back();
-    
-    rsc.image = Image(app, (VkCommandBuffer)commandBuffer, tex.loadedImage.data, tex.createOptions);
+
+    rsc.image = Image(
+        app,
+        (VkCommandBuffer)commandBuffer,
+        tex.loadedImage.data,
+        tex.createOptions);
 
     ImageViewOptions viewOptions{};
     rsc.view = ImageView(app, rsc.image, viewOptions);
@@ -264,8 +268,7 @@ Project::Project(
       } else if (txDesc.texFileIdx >= 0) {
         const auto& rsc = m_textureFiles[txDesc.texFileIdx];
         assign.bindTexture(rsc);
-      }
-      else {
+      } else {
         assert(false);
       }
       CODE_APPEND(
@@ -351,7 +354,16 @@ Project::Project(
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
         CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", draw.vertexShader.c_str());
-        CODE_APPEND("void main() { %s(); }\n", draw.vertexShader.c_str());
+        if (draw.vertexOutputStructIdx >= 0) {
+          CODE_APPEND(
+              "layout(location = 0) out %s _VERTEX_OUTPUT;\n",
+              m_parsed.m_structDefs[draw.vertexOutputStructIdx].name.c_str());
+          CODE_APPEND(
+              "void main() { _VERTEX_OUTPUT = %s(); }\n",
+              draw.vertexShader.c_str());
+        } else {
+          CODE_APPEND("void main() { %s(); }\n", draw.vertexShader.c_str());
+        }
         CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.vertexShader.c_str());
       }
     }
@@ -364,7 +376,16 @@ Project::Project(
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
         CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
-        CODE_APPEND("void main() { %s(); }\n", draw.pixelShader.c_str());
+        if (draw.vertexOutputStructIdx >= 0) {
+          CODE_APPEND(
+              "layout(location = 0) in %s _VERTEX_INPUT;\n",
+              m_parsed.m_structDefs[draw.vertexOutputStructIdx].name.c_str());
+          CODE_APPEND(
+              "void main() { %s(_VERTEX_INPUT); }\n",
+              draw.pixelShader.c_str());
+        } else {
+          CODE_APPEND("void main() { %s(); }\n", draw.pixelShader.c_str());
+        }
         CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
       }
     }
@@ -728,7 +749,9 @@ void Project::draw(
             for (SimpleObjLoader::ObjMesh& mesh : obj.m_meshes) {
               pass.getDrawContext().bindIndexBuffer(mesh.m_indices);
               pass.getDrawContext().bindVertexBuffer(obj.m_vertices);
-              pass.getDrawContext().drawIndexed(mesh.m_indices.getIndexCount(), 1);
+              pass.getDrawContext().drawIndexed(
+                  mesh.m_indices.getIndexCount(),
+                  1);
             }
           } else {
             pass.getDrawContext().draw(draw.vertexCount, draw.instanceCount);

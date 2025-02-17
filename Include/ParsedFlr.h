@@ -103,6 +103,12 @@ struct ParsedFlr {
   };
   std::vector<TextureDesc> m_textures;
 
+  struct AttachmentDesc {
+    std::string name;
+    int imageIdx;
+  };
+  std::vector<AttachmentDesc> m_attachments;
+
   struct ComputeShader {
     std::string name;
     uint32_t groupSizeX;
@@ -151,14 +157,16 @@ struct ParsedFlr {
     std::string pixelShader;
     uint32_t vertexCount;
     uint32_t instanceCount;
-    int32_t objMeshIdx; // if >= 0, pulls vertex count from loaded file
+    int objMeshIdx; // if >= 0, pulls vertex count from loaded file
+    int vertexOutputStructIdx;
     bool bDisableDepth;
   };
 
   struct RenderPass {
     std::vector<Draw> draws;
-    uint32_t width;
-    uint32_t height;
+    std::vector<int> colorAttachments;
+    int width;
+    int height;
     bool bIsDisplayPass;
   };
   std::vector<RenderPass> m_renderPasses;
@@ -212,29 +220,47 @@ struct ParsedFlr {
     I_DISPLAY_PASS,
     I_RENDER_PASS,
     I_DISABLE_DEPTH,
+    I_COLOR_ATTACHMENTS,
     I_DRAW,
     I_DRAW_OBJ,
+    I_VERTEX_OUTPUT,
     I_FEATURE,
     I_IMAGE,
     I_TEXTURE_ALIAS,
+    I_ATTACHMENT_ALIAS,
     I_TEXTURE_FILE,
     I_TRANSITION,
     I_COUNT
   };
 
   static constexpr char* INSTR_NAMES[I_COUNT] = {
-      "uint",           "int",
-      "float",          "slider_uint",
-      "slider_int",     "slider_float",
-      "checkbox",       "struct",
-      "struct_size",    "structured_buffer",
-      "compute_shader", "compute_dispatch",
-      "barrier",        "obj_model",
-      "display_pass",   "render_pass",
-      "disable_depth",  "draw",
-      "draw_obj",       "enable_feature",
-      "image",          "texture_alias",
-      "texture_file",   "transition_layout"};
+      "uint",
+      "int",
+      "float",
+      "slider_uint",
+      "slider_int",
+      "slider_float",
+      "checkbox",
+      "struct",
+      "struct_size",
+      "structured_buffer",
+      "compute_shader",
+      "compute_dispatch",
+      "barrier",
+      "obj_model",
+      "display_pass",
+      "render_pass",
+      "disable_depth",
+      "color_attachments",
+      "draw",
+      "draw_obj",
+      "vertex_output",
+      "enable_feature",
+      "image",
+      "texture_alias",
+      "attachment_alias",
+      "texture_file",
+      "transition_layout"};
 };
 
 } // namespace flr

@@ -30,7 +30,16 @@ texture_file HeadBumpTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshea
 #texture_file HeadBumpTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/bump-lowRes.png"
 texture_file HeadLambertianTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/lambertian.jpg"
 
+struct VertexOutput {
+  vec3 position;
+  vec3 normal;
+  vec2 uv;
+};
+struct_size: 32
+
 display_pass:
   draw: VS_Background PS_Background 3 1
-  disable_depth
+    vertex_output: VertexOutput
+    disable_depth
   draw_obj: HeadModel VS_Obj PS_Obj
+    vertex_output: VertexOutput

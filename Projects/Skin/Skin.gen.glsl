@@ -3,6 +3,12 @@
 #define SCREEN_WIDTH 1440
 #define SCREEN_HEIGHT 1280
 
+struct VertexOutput {
+  vec3 position;
+  vec3 normal;
+  vec2 uv;
+};;
+
 layout(set=1,binding=1) uniform sampler2D HeadBumpTexture;
 layout(set=1,binding=2) uniform sampler2D HeadLambertianTexture;
 
@@ -40,19 +46,23 @@ layout(set=1, binding=4) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 #ifdef IS_VERTEX_SHADER
 #ifdef _ENTRY_POINT_VS_Background
-void main() { VS_Background(); }
+layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
+void main() { _VERTEX_OUTPUT = VS_Background(); }
 #endif // _ENTRY_POINT_VS_Background
 #ifdef _ENTRY_POINT_VS_Obj
-void main() { VS_Obj(); }
+layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
+void main() { _VERTEX_OUTPUT = VS_Obj(); }
 #endif // _ENTRY_POINT_VS_Obj
 #endif // IS_VERTEX_SHADER
 
 
 #ifdef IS_PIXEL_SHADER
 #ifdef _ENTRY_POINT_PS_Background
-void main() { PS_Background(); }
+layout(location = 0) in VertexOutput _VERTEX_INPUT;
+void main() { PS_Background(_VERTEX_INPUT); }
 #endif // _ENTRY_POINT_PS_Background
 #ifdef _ENTRY_POINT_PS_Obj
-void main() { PS_Obj(); }
+layout(location = 0) in VertexOutput _VERTEX_INPUT;
+void main() { PS_Obj(_VERTEX_INPUT); }
 #endif // _ENTRY_POINT_PS_Obj
 #endif // IS_PIXEL_SHADER

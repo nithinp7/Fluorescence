@@ -413,20 +413,23 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       // PARSER_VERIFY(name, "Could not parse display-pass name.");
 
       m_taskList.push_back({(uint32_t)m_renderPasses.size(), TT_RENDER});
-      m_renderPasses.push_back({{}, 0, 0, true});
+      m_renderPasses.push_back({ {}, {}, 0, 0, true });
       break;
     }
     case I_RENDER_PASS: {
       // PARSER_VERIFY(name, "Could not parse render-pass name.");
 
-      auto width = parseUintOrVar();
-      PARSER_VERIFY(width, "Could not parse render-pass target width.");
-      p.parseWhitespace();
-      auto height = parseUintOrVar();
-      PARSER_VERIFY(height, "Could not parse render-pass target height.");
-
       m_taskList.push_back({(uint32_t)m_renderPasses.size(), TT_RENDER});
-      m_renderPasses.push_back({{}, *width, *height, false});
+      m_renderPasses.push_back({ {}, {}, -1, -1, false });
+
+      if (auto width = parseUintOrVar()) {
+        m_renderPasses.back().width = *width;
+        p.parseWhitespace();
+        auto height = parseUintOrVar();
+        PARSER_VERIFY(height, "Could not parse render-pass target height.");
+        m_renderPasses.back().height = *height;
+      }
+
       break;
     }
     case I_DISABLE_DEPTH: {
@@ -438,6 +441,21 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           m_renderPasses.back().draws.size() > 0,
           "Expected draw-call to precede disable-depth");
       m_renderPasses.back().draws.back().bDisableDepth = true;
+      break;
+    }
+    case I_COLOR_ATTACHMENTS: {
+      PARSER_VERIFY(m_renderPasses.size() > 0, "Expected render-pass or display-pass declaratino to precede bind_attachment instruction.");
+
+      do {
+        auto attachmentName = p.parseName();
+        PARSER_VERIFY(attachmentName, "Could not parse attachment name in bind_attachment instruction.");
+        auto attachmentIdx = findIndexByName(m_attachments, *attachmentName);
+        PARSER_VERIFY(attachmentIdx, "Could not find specified attachment in bind_attachment instruction.");
+        p.parseWhitespace();
+
+        m_renderPasses.back().colorAttachments.push_back(*attachmentIdx);
+      } while (*p.c != 0);
+
       break;
     }
     case I_DRAW: {
@@ -514,7 +532,19 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
            0,
            1,
            (int)*idx,
+           -1,
            false});
+      break;
+    }
+    case I_VERTEX_OUTPUT: {
+      PARSER_VERIFY(m_renderPasses.size() > 0, "vertex_output declaration must follow draw-call.");
+      PARSER_VERIFY(m_renderPasses.back().draws.size() > 0, "vertex_output declaration must follow draw-call.");
+
+      auto structIdx = parseStructRef();
+      PARSER_VERIFY(structIdx, "Could not parse struct reference in vertex_output declaration.");
+
+      m_renderPasses.back().draws.back().vertexOutputStructIdx = *structIdx;
+
       break;
     }
     case I_FEATURE: {
@@ -566,6 +596,20 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       int imageIdx = m_images.size() - 1;
       m_images[imageIdx].createOptions.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
       m_textures.push_back({std::string(*name), imageIdx, -1});
+
+      break;
+    }
+    case I_ATTACHMENT_ALIAS: {
+      PARSER_VERIFY(name, "Could not parse attachment name.");
+
+      PARSER_VERIFY(
+        m_images.size() > 0,
+        "Could not find preceding image declaration before attachment_alias "
+        "declaration.");
+
+      int imageIdx = m_images.size() - 1;
+      m_images[imageIdx].createOptions.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+      m_attachments.push_back({ std::string(*name), imageIdx });
 
       break;
     }
