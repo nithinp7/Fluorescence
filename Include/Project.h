@@ -47,7 +47,7 @@ public:
       const FrameContext& frame);
 
   TextureHandle getOutputTexture() const {
-    return m_drawPasses[m_displayPassIdx].m_target.textureHandle;
+    return m_images[m_parsed.m_displayImageIdx].textureHandle;
   }
 
   bool isReady() const { return !hasFailed() && !hasRecompileFailed(); }
@@ -78,8 +78,6 @@ private:
   };
 
   struct DrawPass {
-    ImageResource m_target;
-    ImageResource m_depth;
     RenderPass m_renderPass;
     FrameBuffer m_frameBuffer;
   };
@@ -97,7 +95,7 @@ private:
 
   std::unique_ptr<Audio> m_pAudio;
 
-  uint32_t m_displayPassIdx;
+  uint32_t m_displayImageIdx;
 
   bool m_bHasDynamicData;
 

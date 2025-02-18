@@ -1,5 +1,6 @@
 
 #include "ParsedFlr.h"
+
 #include <Althea/Parser.h>
 
 #include <filesystem>
@@ -56,7 +57,7 @@ findIndexByName(char* const (&names)[N], std::string_view n) {
 } // namespace
 
 ParsedFlr::ParsedFlr(Application& app, const char* filename)
-    : m_featureFlags(FF_NONE), m_failed(true), m_errMsg() {
+    : m_featureFlags(FF_NONE), m_displayImageIdx(-1), m_failed(true), m_errMsg() {
 
   m_constUints.push_back({"SCREEN_WIDTH", app.getSwapChainExtent().width});
   m_constUints.push_back({"SCREEN_HEIGHT", app.getSwapChainExtent().height});
@@ -130,6 +131,19 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           [&](std::string_view n) -> std::optional<uint32_t> {
             return findIndexByName(m_structDefs, n);
           });
+    };
+
+    auto findVkFormat =
+        [&](std::string_view glslFormat) -> std::optional<VkFormat> {
+      for (const auto& entry : IMAGE_FORMAT_TABLE) {
+        if (glslFormat.size() == strlen(entry.glslFormatName) &&
+            !strncmp(
+                glslFormat.data(),
+                entry.glslFormatName,
+                glslFormat.size()))
+          return entry.vkFormat;
+      }
+      return std::nullopt;
     };
 
     p.parseWhitespace();
@@ -409,18 +423,30 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
 
       break;
     }
-    case I_DISPLAY_PASS: {
-      // PARSER_VERIFY(name, "Could not parse display-pass name.");
+    case I_DISPLAY_IMAGE: {
+      PARSER_VERIFY(m_displayImageIdx == -1, "Only one display_image is allowed.");
 
-      m_taskList.push_back({(uint32_t)m_renderPasses.size(), TT_RENDER});
-      m_renderPasses.push_back({ {}, {}, 0, 0, true });
+      PARSER_VERIFY(name, "Could not parse display_image name.");
+
+      m_displayImageIdx = m_images.size();
+
+      ImageDesc& desc = m_images.emplace_back();
+      desc.name = std::string(*name);
+      desc.format = "";
+      desc.createOptions = ImageOptions{};
+      desc.createOptions.width = app.getSwapChainExtent().width;
+      desc.createOptions.height = app.getSwapChainExtent().height;
+      desc.createOptions.format = app.getSwapChainImageFormat();
+      desc.createOptions.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+      desc.createOptions.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
       break;
     }
     case I_RENDER_PASS: {
       // PARSER_VERIFY(name, "Could not parse render-pass name.");
 
       m_taskList.push_back({(uint32_t)m_renderPasses.size(), TT_RENDER});
-      m_renderPasses.push_back({ {}, {}, -1, -1, false });
+      m_renderPasses.push_back({{}, {}, -1, -1});
 
       if (auto width = parseUintOrVar()) {
         m_renderPasses.back().width = *width;
@@ -443,17 +469,124 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       m_renderPasses.back().draws.back().bDisableDepth = true;
       break;
     }
-    case I_COLOR_ATTACHMENTS: {
-      PARSER_VERIFY(m_renderPasses.size() > 0, "Expected render-pass or display-pass declaratino to precede bind_attachment instruction.");
+    case I_LOAD_ATTACHMENTS: {
+      PARSER_VERIFY(
+          m_renderPasses.size() > 0,
+          "Expected render-pass or display-pass declaratino to precede "
+          "load_attachments instruction.");
 
       do {
-        auto attachmentName = p.parseName();
-        PARSER_VERIFY(attachmentName, "Could not parse attachment name in bind_attachment instruction.");
-        auto attachmentIdx = findIndexByName(m_attachments, *attachmentName);
-        PARSER_VERIFY(attachmentIdx, "Could not find specified attachment in bind_attachment instruction.");
+        auto aliasName = p.parseName();
+        PARSER_VERIFY(aliasName, "Could not parse attachment alias name.");
+        PARSER_VERIFY(p.parseChar('='), "Attachments must be specified as <alias-name>=<image-name>.")
+
+        auto imageName = p.parseName();
+        PARSER_VERIFY(
+            imageName,
+            "Could not parse image name in load_attachments instruction.");
+        auto imageIdx = findIndexByName(m_images, *imageName);
+        PARSER_VERIFY(
+            imageIdx,
+            "Could not find specified image in load_attachments "
+            "instruction.");
         p.parseWhitespace();
 
-        m_renderPasses.back().colorAttachments.push_back(*attachmentIdx);
+        m_renderPasses.back().attachments.push_back(
+            { std::string(*aliasName), (int)*imageIdx, true, false});
+        m_renderPasses.back().width = m_images[*imageIdx].createOptions.width;
+        m_renderPasses.back().height = m_images[*imageIdx].createOptions.height;
+
+        bool bIsDepth = (m_images[*imageIdx].createOptions.aspectMask &
+                         VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
+        if (bIsDepth) {
+          m_images[*imageIdx].createOptions.usage |=
+              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        } else {
+          m_images[*imageIdx].createOptions.usage |=
+              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        }
+      } while (*p.c != 0);
+
+      break;
+    }
+    case I_STORE_ATTACHMENTS: {
+      PARSER_VERIFY(
+          m_renderPasses.size() > 0,
+          "Expected render-pass or display-pass declaratino to precede "
+          "store_attachments instruction.");
+
+      do {
+        auto aliasName = p.parseName();
+        PARSER_VERIFY(aliasName, "Could not parse attachment alias name.");
+        PARSER_VERIFY(p.parseChar('='), "Attachments must be specified as <alias-name>=<image-name>.")
+
+        auto imageName = p.parseName();
+        PARSER_VERIFY(
+            imageName,
+            "Could not parse image name in store_attachments "
+            "instruction.");
+        auto imageIdx = findIndexByName(m_images, *imageName);
+        PARSER_VERIFY(
+            imageIdx,
+            "Could not find specified image in store_attachments "
+            "instruction.");
+        p.parseWhitespace();
+
+        m_renderPasses.back().attachments.push_back(
+            { std::string(*aliasName), (int)*imageIdx, false, true});
+        m_renderPasses.back().width = m_images[*imageIdx].createOptions.width;
+        m_renderPasses.back().height = m_images[*imageIdx].createOptions.height;
+
+        bool bIsDepth = (m_images[*imageIdx].createOptions.aspectMask &
+                         VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
+        if (bIsDepth) {
+          m_images[*imageIdx].createOptions.usage |=
+              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        } else {
+          m_images[*imageIdx].createOptions.usage |=
+              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        }
+      } while (*p.c != 0);
+
+      break;
+    }
+    case I_LOADSTORE_ATTACHMENTS: {
+      PARSER_VERIFY(
+          m_renderPasses.size() > 0,
+          "Expected render-pass or display-pass declaratino to precede "
+          "loadstore_attachments instruction.");
+
+      do {
+        auto aliasName = p.parseName();
+        PARSER_VERIFY(aliasName, "Could not parse attachment alias name.");
+        PARSER_VERIFY(p.parseChar('='), "Attachments must be specified as <alias-name>=<image-name>.")
+
+        auto imageName = p.parseName();
+        PARSER_VERIFY(
+            imageName,
+            "Could not parse image name in loadstore_attachments "
+            "instruction.");
+        auto imageIdx = findIndexByName(m_images, *imageName);
+        PARSER_VERIFY(
+            imageIdx,
+            "Could not find specified image in loadstore_attachments "
+            "instruction.");
+        p.parseWhitespace();
+
+        m_renderPasses.back().attachments.push_back(
+            {std::string(*aliasName), (int)*imageIdx, true, true});
+        m_renderPasses.back().width = m_images[*imageIdx].createOptions.width;
+        m_renderPasses.back().height = m_images[*imageIdx].createOptions.height;
+
+        bool bIsDepth = (m_images[*imageIdx].createOptions.aspectMask &
+                         VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
+        if (bIsDepth) {
+          m_images[*imageIdx].createOptions.usage |=
+              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        } else {
+          m_images[*imageIdx].createOptions.usage |=
+              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        }
       } while (*p.c != 0);
 
       break;
@@ -537,11 +670,17 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       break;
     }
     case I_VERTEX_OUTPUT: {
-      PARSER_VERIFY(m_renderPasses.size() > 0, "vertex_output declaration must follow draw-call.");
-      PARSER_VERIFY(m_renderPasses.back().draws.size() > 0, "vertex_output declaration must follow draw-call.");
+      PARSER_VERIFY(
+          m_renderPasses.size() > 0,
+          "vertex_output declaration must follow draw-call.");
+      PARSER_VERIFY(
+          m_renderPasses.back().draws.size() > 0,
+          "vertex_output declaration must follow draw-call.");
 
       auto structIdx = parseStructRef();
-      PARSER_VERIFY(structIdx, "Could not parse struct reference in vertex_output declaration.");
+      PARSER_VERIFY(
+          structIdx,
+          "Could not parse struct reference in vertex_output declaration.");
 
       m_renderPasses.back().draws.back().vertexOutputStructIdx = *structIdx;
 
@@ -575,13 +714,45 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           format,
           "Could not parse format string for image declaration.");
 
+      auto vkFormat = findVkFormat(*format);
+      PARSER_VERIFY(
+          vkFormat,
+          "Could not find vulkan format for specified glsl format in image "
+          "declaration.");
+
       ImageDesc& desc = m_images.emplace_back();
       desc.name = std::string(*name);
       desc.format = std::string(*format);
       desc.createOptions = ImageOptions{};
       desc.createOptions.width = *width;
       desc.createOptions.height = *height;
+      desc.createOptions.format = *vkFormat;
       desc.createOptions.usage = VK_IMAGE_USAGE_STORAGE_BIT;
+
+      break;
+    }
+    case I_DEPTH_IMAGE: {
+      PARSER_VERIFY(name, "Could not parse depth image name.");
+
+      auto width = parseUintOrVar();
+      PARSER_VERIFY(width, "Could not parse image width.");
+
+      p.parseWhitespace();
+
+      auto height = parseUintOrVar();
+      PARSER_VERIFY(height, "Could not parse image height.");
+
+      ImageDesc& desc = m_images.emplace_back();
+      desc.name = std::string(*name);
+      desc.format = ""; // depth images can't be sampled as images so they don't
+                        // have a format string
+      desc.createOptions = ImageOptions{};
+      desc.createOptions.width = *width;
+      desc.createOptions.height = *height;
+      desc.createOptions.format = app.getDepthImageFormat();
+      desc.createOptions.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+      desc.createOptions.aspectMask =
+          VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 
       break;
     }
@@ -596,20 +767,6 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       int imageIdx = m_images.size() - 1;
       m_images[imageIdx].createOptions.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
       m_textures.push_back({std::string(*name), imageIdx, -1});
-
-      break;
-    }
-    case I_ATTACHMENT_ALIAS: {
-      PARSER_VERIFY(name, "Could not parse attachment name.");
-
-      PARSER_VERIFY(
-        m_images.size() > 0,
-        "Could not find preceding image declaration before attachment_alias "
-        "declaration.");
-
-      int imageIdx = m_images.size() - 1;
-      m_images[imageIdx].createOptions.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-      m_attachments.push_back({ std::string(*name), imageIdx });
 
       break;
     }
@@ -686,6 +843,50 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       PARSER_VERIFY(false, "Encountered unknown instruction.");
       continue;
     }
+  }
+
+  // post-process
+  PARSER_VERIFY(m_displayImageIdx >= 0, "Must specify a display_image");
+
+  // fill in missing depth resources for any passes that are missing depth and
+  // require it
+  for (auto& pass : m_renderPasses) {
+    bool bDisableDepth = false;
+    for (const auto& draw : pass.draws) {
+      if (bDisableDepth |= draw.bDisableDepth)
+        break;
+    }
+    if (bDisableDepth)
+      break;
+    bool bHasDepth = false;
+    for (const auto& a : pass.attachments) {
+      const auto& imageDesc = m_images[a.imageIdx];
+      if ((imageDesc.createOptions.usage &
+           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
+        bHasDepth = true;
+        break;
+      }
+    }
+    if (bHasDepth)
+      break;
+
+    AttachmentRef& ref = pass.attachments.emplace_back();
+    ref.imageIdx = m_images.size();
+    ref.bLoad = false;
+    ref.bStore = false;
+
+    ImageDesc& image = m_images.emplace_back();
+
+    // depth images can't be sampled as images
+    image.name = "";
+    image.format = "";
+    image.createOptions = ImageOptions{};
+    image.createOptions.width = pass.width;
+    image.createOptions.height = pass.height;
+    image.createOptions.format = app.getDepthImageFormat();
+    image.createOptions.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    image.createOptions.aspectMask =
+        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
   }
 
 #undef PARSER_VERIFY

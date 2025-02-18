@@ -103,12 +103,6 @@ struct ParsedFlr {
   };
   std::vector<TextureDesc> m_textures;
 
-  struct AttachmentDesc {
-    std::string name;
-    int imageIdx;
-  };
-  std::vector<AttachmentDesc> m_attachments;
-
   struct ComputeShader {
     std::string name;
     uint32_t groupSizeX;
@@ -162,12 +156,17 @@ struct ParsedFlr {
     bool bDisableDepth;
   };
 
+  struct AttachmentRef {
+    std::string aliasName;
+    int imageIdx;
+    bool bLoad;
+    bool bStore;
+  };
   struct RenderPass {
     std::vector<Draw> draws;
-    std::vector<int> colorAttachments;
+    std::vector<AttachmentRef> attachments;
     int width;
     int height;
-    bool bIsDisplayPass;
   };
   std::vector<RenderPass> m_renderPasses;
 
@@ -189,6 +188,8 @@ struct ParsedFlr {
     FF_SYSTEM_AUDIO_INPUT = (1 << 1)
   };
   uint32_t m_featureFlags;
+
+  int m_displayImageIdx;
 
   bool isFeatureEnabled(FeatureFlag feature) const {
     return (m_featureFlags & feature) != 0;
@@ -217,17 +218,19 @@ struct ParsedFlr {
     I_COMPUTE_DISPATCH,
     I_BARRIER,
     I_OBJ_MODEL,
-    I_DISPLAY_PASS,
+    I_DISPLAY_IMAGE,
     I_RENDER_PASS,
     I_DISABLE_DEPTH,
-    I_COLOR_ATTACHMENTS,
+    I_LOAD_ATTACHMENTS,
+    I_STORE_ATTACHMENTS,
+    I_LOADSTORE_ATTACHMENTS,
     I_DRAW,
     I_DRAW_OBJ,
     I_VERTEX_OUTPUT,
     I_FEATURE,
     I_IMAGE,
+    I_DEPTH_IMAGE,
     I_TEXTURE_ALIAS,
-    I_ATTACHMENT_ALIAS,
     I_TEXTURE_FILE,
     I_TRANSITION,
     I_COUNT
@@ -248,19 +251,48 @@ struct ParsedFlr {
       "compute_dispatch",
       "barrier",
       "obj_model",
-      "display_pass",
+      "display_image",
       "render_pass",
       "disable_depth",
-      "color_attachments",
+      "load_attachments",
+      "store_attachments",
+      "loadstore_attachments",
       "draw",
       "draw_obj",
       "vertex_output",
       "enable_feature",
       "image",
+      "depth_image",
       "texture_alias",
-      "attachment_alias",
       "texture_file",
       "transition_layout"};
+
+  struct ImageFormatTableEntry {
+    const char* glslFormatName;
+    VkFormat vkFormat;
+  };
+
+  static constexpr ImageFormatTableEntry IMAGE_FORMAT_TABLE[] = {
+    {"rgba8", VK_FORMAT_R8G8B8A8_UNORM},
+    {"rgba16", VK_FORMAT_R16G16B16A16_UNORM},
+    {"r8", VK_FORMAT_R8_UNORM},
+    {"r16", VK_FORMAT_R16_UNORM},
+    {"rg8", VK_FORMAT_R8G8_UNORM},
+    {"rg16", VK_FORMAT_R16G16_UNORM},
+    {"rgba8_snorm", VK_FORMAT_R8G8B8A8_SNORM},
+    {"rgba16_snorm", VK_FORMAT_R16G16B16A16_SNORM},
+    {"r8_snorm", VK_FORMAT_R8_SNORM},
+    {"r16_snorm", VK_FORMAT_R16_SNORM},
+    {"rg8_snorm", VK_FORMAT_R8G8_SNORM},
+    {"rg16_snorm", VK_FORMAT_R16G16_SNORM},
+    {"rgba32f", VK_FORMAT_R32G32B32A32_SFLOAT},
+    {"r32f", VK_FORMAT_R32_SFLOAT},
+    {"rg16f", VK_FORMAT_R16G16_SFLOAT},
+    {"rgba32i", VK_FORMAT_R32G32B32A32_SINT},
+    {"r32i", VK_FORMAT_R32_SINT},
+    {"rgba32ui", VK_FORMAT_R32G32B32A32_UINT},
+    {"r32ui", VK_FORMAT_R32_UINT}
+  };
 };
 
 } // namespace flr

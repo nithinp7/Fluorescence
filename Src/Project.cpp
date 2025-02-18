@@ -38,7 +38,6 @@ Project::Project(
       m_perspectiveCamera(),
       m_audioInput(),
       m_pAudio(nullptr),
-      m_displayPassIdx(0),
       m_bHasDynamicData(false),
       m_failedShaderCompile(false),
       m_shaderCompileErrMsg() {
@@ -181,6 +180,9 @@ Project::Project(
     dsBuilder.addStorageBufferBinding(VK_SHADER_STAGE_ALL);
   }
   for (const ImageResource& rsc : m_images) {
+    if ((rsc.image.getOptions().usage & VK_IMAGE_USAGE_STORAGE_BIT) == 0)
+      continue;
+
     dsBuilder.addStorageImageBinding(VK_SHADER_STAGE_ALL);
   }
   for (const auto& t : m_parsed.m_textures) {
@@ -250,6 +252,9 @@ Project::Project(
     for (int i = 0; i < m_images.size(); ++i) {
       const auto& desc = m_parsed.m_images[i];
       const auto& rsc = m_images[i];
+
+      if ((desc.createOptions.usage & VK_IMAGE_USAGE_STORAGE_BIT) == 0)
+        continue;
 
       assign.bindStorageImage(rsc.view, rsc.sampler);
       CODE_APPEND(
@@ -376,6 +381,18 @@ Project::Project(
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
         CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
+        uint32_t colorAttachmentIdx = 0;
+        for (const auto& attachmentRef : pass.attachments) {
+          const auto& img = m_images[attachmentRef.imageIdx];
+          if ((img.image.getOptions().usage &
+               VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
+            CODE_APPEND(
+                "layout(location = %d) out vec4 %s;\n",
+                colorAttachmentIdx++,
+                attachmentRef.aliasName.c_str());
+          }
+        }
+
         if (draw.vertexOutputStructIdx >= 0) {
           CODE_APPEND(
               "layout(location = 0) in %s _VERTEX_INPUT;\n",
@@ -432,20 +449,47 @@ Project::Project(
     std::vector<SubpassBuilder> subpassBuilders;
     subpassBuilders.reserve(pass.draws.size());
 
-    bool bAnyDrawsUseDepth = false;
+    VkClearValue colorClear;
+    colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    VkClearValue depthClear;
+    depthClear.depthStencil = {1.0f, 0};
+
+    std::vector<Attachment> attachments;
+    std::vector<uint32_t> colorAttachments;
+    std::optional<uint32_t> depthAttachment = std::nullopt;
+    std::vector<VkImageView> attachmentViews;
+    for (const auto& attachmentRef : pass.attachments) {
+      const auto& imageDesc = m_parsed.m_images[attachmentRef.imageIdx];
+      const auto& imageRsc = m_images[attachmentRef.imageIdx];
+
+      bool bIsDepth = (imageDesc.createOptions.usage &
+                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
+      if (bIsDepth)
+        depthAttachment = (uint32_t)attachments.size();
+      else
+        colorAttachments.push_back(attachments.size());
+      Attachment& attachment = attachments.emplace_back();
+      attachment.clearValue = colorClear;
+      attachment.flags =
+          bIsDepth ? ATTACHMENT_FLAG_DEPTH : ATTACHMENT_FLAG_COLOR;
+      attachment.format = imageDesc.createOptions.format;
+      attachment.forPresent = false;
+      attachment.load = attachmentRef.bLoad;
+      attachment.store = attachmentRef.bStore;
+
+      attachmentViews.push_back(imageRsc.view);
+    }
 
     for (const auto& draw : pass.draws) {
       SubpassBuilder& subpass = subpassBuilders.emplace_back();
-      subpass.colorAttachments = {0};
+      subpass.colorAttachments = colorAttachments;
 
       GraphicsPipelineBuilder& builder = subpass.pipelineBuilder;
 
-      if (!draw.bDisableDepth) {
-        subpass.depthAttachment = 1;
-        bAnyDrawsUseDepth = true;
-      } else {
+      if (!draw.bDisableDepth && depthAttachment)
+        subpass.depthAttachment = *depthAttachment;
+      else
         builder.setDepthTesting(false);
-      }
 
       if (draw.objMeshIdx >= 0) {
         builder.addVertexInputBinding<SimpleObjLoader::ObjVert>();
@@ -486,99 +530,21 @@ Project::Project(
           .addDescriptorSet(m_descriptorSets.getLayout());
     }
 
-    VkClearValue colorClear;
-    colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-    VkClearValue depthClear;
-    depthClear.depthStencil = {1.0f, 0};
-
-    VkExtent2D extent{};
-    if (pass.bIsDisplayPass) {
-      extent = app.getSwapChainExtent();
-    } else {
-      extent.width = pass.width;
-      extent.height = pass.height;
-    }
-
-    // TODO: custom attachment format?
-    std::vector<Attachment> attachments = {Attachment{
-        ATTACHMENT_FLAG_COLOR,
-        app.getSwapChainImageFormat(),
-        colorClear,
-        false,
-        false,
-        true}};
-
-    if (bAnyDrawsUseDepth) {
-      attachments.push_back(Attachment{
-          ATTACHMENT_FLAG_DEPTH,
-          app.getDepthImageFormat(),
-          depthClear,
-          false,
-          false,
-          false});
-    }
-
     DrawPass& drawPass = m_drawPasses.emplace_back();
     drawPass.m_renderPass = RenderPass(
         app,
-        extent,
+        {(uint32_t)pass.width, (uint32_t)pass.height},
         std::move(attachments),
         std::move(subpassBuilders));
 
-    ImageOptions imageOptions{};
-    imageOptions.format = app.getSwapChainImageFormat();
-    imageOptions.width = extent.width;
-    imageOptions.height = extent.height;
-    imageOptions.usage =
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    drawPass.m_target.image = Image(app, imageOptions);
-
-    ImageViewOptions viewOptions{};
-    viewOptions.format = imageOptions.format;
-    drawPass.m_target.view =
-        ImageView(app, drawPass.m_target.image, viewOptions);
-
-    drawPass.m_target.sampler = Sampler(app, {});
-
-    if (bAnyDrawsUseDepth) {
-      ImageOptions depthOptions{};
-      depthOptions.format = app.getDepthImageFormat();
-      depthOptions.width = extent.width;
-      depthOptions.height = extent.height;
-      depthOptions.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-      depthOptions.aspectMask =
-          VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-      drawPass.m_depth.image = Image(app, depthOptions);
-
-      ImageViewOptions depthViewOptions{};
-      depthViewOptions.format = depthOptions.format;
-      depthViewOptions.aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT;
-      drawPass.m_depth.view =
-          ImageView(app, drawPass.m_depth.image, depthViewOptions);
-
-      drawPass.m_depth.sampler = Sampler(app, {});
-
-      drawPass.m_frameBuffer = FrameBuffer(
-          app,
-          drawPass.m_renderPass,
-          extent,
-          {drawPass.m_target.view, drawPass.m_depth.view});
-    } else {
-      drawPass.m_frameBuffer = FrameBuffer(
-          app,
-          drawPass.m_renderPass,
-          extent,
-          {drawPass.m_target.view});
-    }
+    drawPass.m_frameBuffer = FrameBuffer(
+        app,
+        drawPass.m_renderPass,
+        {(uint32_t)pass.width, (uint32_t)pass.height},
+        std::move(attachmentViews));
   }
 
-  for (int i = 0; i < m_parsed.m_renderPasses.size(); i++) {
-    if (m_parsed.m_renderPasses[i].bIsDisplayPass) {
-      m_displayPassIdx = i;
-      m_drawPasses[i].m_target.registerToTextureHeap(heap);
-      break;
-    }
-  }
+  m_images[m_parsed.m_displayImageIdx].registerToTextureHeap(heap);
 
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
     m_pAudio = std::make_unique<Audio>(true);
@@ -718,21 +684,26 @@ void Project::draw(
     }
 
     case ParsedFlr::TT_RENDER: {
+      const auto& passDesc = m_parsed.m_renderPasses[task.idx];
       auto& drawPass = m_drawPasses[task.idx];
 
-      drawPass.m_target.image.transitionLayout(
-          commandBuffer,
-          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-
-      if ((VkImage)drawPass.m_depth.image != VK_NULL_HANDLE) {
-        drawPass.m_depth.image.transitionLayout(
+      for (const auto& attachmentRef : passDesc.attachments) {
+        auto& imgRsc = m_images[attachmentRef.imageIdx];
+        if ((imgRsc.image.getOptions().aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0) {
+          imgRsc.image.transitionLayout(
             commandBuffer,
             VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
+        }
+        else {
+          imgRsc.image.transitionLayout(
+            commandBuffer,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        }
       }
 
       {
@@ -761,11 +732,24 @@ void Project::draw(
         }
       }
 
-      drawPass.m_target.image.transitionLayout(
-          commandBuffer,
-          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-          VK_ACCESS_SHADER_READ_BIT,
-          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+      for (const auto& attachmentRef : passDesc.attachments) {
+        auto& imgRsc = m_images[attachmentRef.imageIdx];
+        if ((imgRsc.image.getOptions().aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0) {
+          imgRsc.image.transitionLayout(
+            commandBuffer,
+            VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
+        }
+        else {
+          imgRsc.image.transitionLayout(
+            commandBuffer,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_ACCESS_SHADER_READ_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+        }
+      }
 
       break;
     }
