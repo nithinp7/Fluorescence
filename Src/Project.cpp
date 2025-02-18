@@ -487,7 +487,7 @@ Project::Project(
       else
         colorAttachments.push_back(attachments.size());
       Attachment& attachment = attachments.emplace_back();
-      attachment.clearValue = colorClear;
+      attachment.clearValue = bIsDepth ? depthClear : colorClear;
       attachment.flags =
           bIsDepth ? ATTACHMENT_FLAG_DEPTH : ATTACHMENT_FLAG_COLOR;
       attachment.format = imageDesc.createOptions.format;

@@ -45,4 +45,3 @@ render_pass:
     disable_depth
   draw_obj: HeadModel VS_Obj PS_Obj
     vertex_output: VertexOutput
-    disable_depth
