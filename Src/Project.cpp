@@ -80,8 +80,12 @@ Project::Project(
     ImageResource& rsc = m_images.emplace_back();
 
     rsc.image = Image(app, desc.createOptions);
+    bool bIsDepth = (rsc.image.getOptions().usage &
+      VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
 
     ImageViewOptions viewOptions{};
+    viewOptions.format = rsc.image.getOptions().format;
+    viewOptions.aspectFlags = bIsDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
     rsc.view = ImageView(app, rsc.image, viewOptions);
 
     SamplerOptions samplerOptions{};
@@ -99,6 +103,7 @@ Project::Project(
         tex.createOptions);
 
     ImageViewOptions viewOptions{};
+    viewOptions.format = rsc.image.getOptions().format;
     rsc.view = ImageView(app, rsc.image, viewOptions);
 
     SamplerOptions samplerOptions{};
@@ -333,10 +338,34 @@ Project::Project(
         slot++);
   }
 
+
+  // auto-gen pixel shader block, pre-include of user-file
+  {
+    CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
+    for (const auto& pass : m_parsed.m_renderPasses) {
+      for (const auto& draw : pass.draws) {
+        CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
+        uint32_t colorAttachmentIdx = 0;
+        for (const auto& attachmentRef : pass.attachments) {
+          const auto& img = m_images[attachmentRef.imageIdx];
+          if ((img.image.getOptions().usage &
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
+            CODE_APPEND(
+              "layout(location = %d) out vec4 %s;\n",
+              colorAttachmentIdx++,
+              attachmentRef.aliasName.c_str());
+          }
+        }
+        CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
+      }
+    }
+    CODE_APPEND("#endif // IS_PIXEL_SHADER\n");
+  }
+
   std::string userShaderName = shaderFileName.filename().string();
   CODE_APPEND("#include \"%s\"\n\n", userShaderName.c_str());
 
-  // auto-gen compute shader block
+  // auto-gen compute shader block, post-include of user-file
   {
     CODE_APPEND("#ifdef IS_COMP_SHADER\n");
     for (const auto& c : m_parsed.m_computeShaders) {
@@ -353,7 +382,7 @@ Project::Project(
     CODE_APPEND("#endif // IS_COMP_SHADER\n");
   }
 
-  // auto-gen vertex shader block
+  // auto-gen vertex shader block, post-include of user-file
   {
     CODE_APPEND("\n\n#ifdef IS_VERTEX_SHADER\n");
     for (const auto& pass : m_parsed.m_renderPasses) {
@@ -375,24 +404,13 @@ Project::Project(
     CODE_APPEND("#endif // IS_VERTEX_SHADER\n");
   }
 
-  // auto-gen pixel shader block
+  // auto-gen pixel shader block, post-include of user-file
   {
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
         CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
-        uint32_t colorAttachmentIdx = 0;
-        for (const auto& attachmentRef : pass.attachments) {
-          const auto& img = m_images[attachmentRef.imageIdx];
-          if ((img.image.getOptions().usage &
-               VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
-            CODE_APPEND(
-                "layout(location = %d) out vec4 %s;\n",
-                colorAttachmentIdx++,
-                attachmentRef.aliasName.c_str());
-          }
-        }
-
+        
         if (draw.vertexOutputStructIdx >= 0) {
           CODE_APPEND(
               "layout(location = 0) in %s _VERTEX_INPUT;\n",

@@ -76,9 +76,6 @@ VertexOutput VS_Obj() {
 
 #ifdef IS_PIXEL_SHADER
 
-// TODO 
-layout(location = 0) out vec4 outColor;
-
 void PS_Background(VertexOutput IN) {
   vec3 dir = computeDir(IN.uv);
   outColor = vec4(sampleEnv(dir), 1.0);

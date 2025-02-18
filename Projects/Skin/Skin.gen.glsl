@@ -38,6 +38,16 @@ layout(set=1, binding=3) uniform _UserUniforms {
 
 layout(set=1, binding=4) uniform _CameraUniforms { PerspectiveCamera camera; };
 
+
+
+#ifdef IS_PIXEL_SHADER
+#ifdef _ENTRY_POINT_PS_Background
+layout(location = 0) out vec4 outColor;
+#endif // _ENTRY_POINT_PS_Background
+#ifdef _ENTRY_POINT_PS_Obj
+layout(location = 0) out vec4 outColor;
+#endif // _ENTRY_POINT_PS_Obj
+#endif // IS_PIXEL_SHADER
 #include "Skin.glsl"
 
 #ifdef IS_COMP_SHADER

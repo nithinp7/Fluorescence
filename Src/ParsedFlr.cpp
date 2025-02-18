@@ -437,7 +437,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       desc.createOptions.width = app.getSwapChainExtent().width;
       desc.createOptions.height = app.getSwapChainExtent().height;
       desc.createOptions.format = app.getSwapChainImageFormat();
-      desc.createOptions.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+      desc.createOptions.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
       desc.createOptions.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
       break;
@@ -851,12 +851,14 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
   // fill in missing depth resources for any passes that are missing depth and
   // require it
   for (auto& pass : m_renderPasses) {
-    bool bDisableDepth = false;
+    bool bNeedDepth = false;
     for (const auto& draw : pass.draws) {
-      if (bDisableDepth |= draw.bDisableDepth)
+      if (!draw.bDisableDepth) {
+        bNeedDepth = true;
         break;
+      }
     }
-    if (bDisableDepth)
+    if (!bNeedDepth)
       break;
     bool bHasDepth = false;
     for (const auto& a : pass.attachments) {

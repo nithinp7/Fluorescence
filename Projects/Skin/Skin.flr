@@ -37,9 +37,12 @@ struct VertexOutput {
 };
 struct_size: 32
 
-display_pass:
+display_image DisplayImage
+render_pass:
+  store_attachments: outColor=DisplayImage
   draw: VS_Background PS_Background 3 1
     vertex_output: VertexOutput
     disable_depth
   draw_obj: HeadModel VS_Obj PS_Obj
     vertex_output: VertexOutput
+    disable_depth
