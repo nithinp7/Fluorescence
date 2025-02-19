@@ -37,10 +37,20 @@ vec3 sampleEnv(vec3 dir) {
 ////////////////////////// COMPUTE SHADERS //////////////////////////
 
 #ifdef IS_COMP_SHADER
+void CS_CopyDisplayImage() {
+  ivec2 pixelId = ivec2(gl_GlobalInvocationID.xy);
+  if (pixelId.x >= SCREEN_WIDTH || pixelId.y >= SCREEN_HEIGHT) {
+    return;
+  }
+
+  vec4 c = texelFetch(DisplayTexture, pixelId, 0);
+  imageStore(PrevDisplayImage, pixelId, c);
+}
 #endif // IS_COMP_SHADER
 
 ////////////////////////// VERTEX SHADERS //////////////////////////
 
+#ifdef DISPLAY_PASS
 #ifdef IS_VERTEX_SHADER
 VertexOutput VS_Background() {
   VertexOutput OUT;
@@ -64,6 +74,7 @@ VertexOutput VS_Obj() {
   vec4 projPos = camera.projection * worldPos;
   gl_Position = projPos;
   OUT.position = projPos.xyw;
+  OUT.prevPosition = (camera.projection * camera.prevView * vec4(inPosition, 1.0)).xyw;
   OUT.normal = inNormal;
   OUT.uv = vec2(inUv.x, 1.0 - inUv.y);
 
@@ -71,6 +82,7 @@ VertexOutput VS_Obj() {
 }
 #endif // _ENTRY_POINT_VS_Obj
 #endif // IS_VERTEX_SHADER
+#endif // DISPLAY_PASS
 
 ////////////////////////// PIXEL SHADERS //////////////////////////
 
@@ -165,6 +177,12 @@ void PS_Obj(VertexOutput IN) {
     outColor = vec4(bump.xxx, 1.0);
   }
 
+  float tsrSpeed = TSR_SPEED;
+  vec2 prevScreenUv = IN.prevPosition.xy / IN.prevPosition.z * 0.5 + 0.5.xx;
+  if (clamp(prevScreenUv, 0.0.xx, 1.0.xx) != prevScreenUv)
+    tsrSpeed = 1.0;
+  vec3 prevColor = texture(PrevDisplayTexture, prevScreenUv).rgb;
+  outColor.rgb = mix(prevColor, outColor.rgb, tsrSpeed);
 }
 #endif // IS_PIXEL_SHADER
 

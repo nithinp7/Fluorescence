@@ -3,6 +3,9 @@ enable_feature: perspective_camera
 
 checkbox ENABLE_SSS: true
 checkbox ENABLE_REFL: true
+
+slider_uint SAMPLE_COUNT: 1 1 100
+slider_float TSR_SPEED: 0.05 0.00 1.0
 slider_float EPI_DEPTH: 0.01 0.001 10.0
 slider_float IOR_EPI: 1.4 0.1 2.0
 slider_float IOR_DERM: 1.38 0.1 2.0
@@ -17,7 +20,6 @@ slider_uint BACKGROUND: 0 0 4
 slider_uint RENDER_MODE: 0 0 3
 slider_float BUMP_STRENGTH: 0.0 0.0 100.0
 
-slider_uint SAMPLE_COUNT: 10 1 100
 slider_float ROUGHNESS: 0.4 0.01 1.0
 slider_float METALLIC: 0.0 0.0 1.0
 
@@ -32,16 +34,31 @@ texture_file HeadLambertianTexture: "C:/Users/nithi/Documents/Data/Models/Heads/
 
 struct VertexOutput {
   vec3 position;
+  vec3 prevPosition;
   vec3 normal;
   vec2 uv;
 };
-struct_size: 32
+struct_size: 44
 
 display_image DisplayImage
-render_pass:
+  texture_alias DisplayTexture
+
+image PrevDisplayImage: SCREEN_WIDTH SCREEN_HEIGHT rgba8
+  texture_alias PrevDisplayTexture
+
+compute_shader CS_CopyDisplayImage: 32 32 1
+
+transition_layout: DisplayImage texture
+transition_layout: PrevDisplayImage image
+compute_dispatch: CS_CopyDisplayImage SCREEN_WIDTH SCREEN_HEIGHT 1
+transition_layout: PrevDisplayImage texture
+
+render_pass DISPLAY_PASS:
   store_attachments: outColor=DisplayImage
+
   draw: VS_Background PS_Background 3 1
     vertex_output: VertexOutput
     disable_depth
+
   draw_obj: HeadModel VS_Obj PS_Obj
     vertex_output: VertexOutput

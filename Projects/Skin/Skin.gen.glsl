@@ -5,18 +5,23 @@
 
 struct VertexOutput {
   vec3 position;
+  vec3 prevPosition;
   vec3 normal;
   vec2 uv;
 };;
 
-layout(set=1,binding=1) uniform sampler2D HeadBumpTexture;
-layout(set=1,binding=2) uniform sampler2D HeadLambertianTexture;
+layout(set=1,binding=1, rgba8) uniform image2D PrevDisplayImage;
+layout(set=1,binding=2) uniform sampler2D HeadBumpTexture;
+layout(set=1,binding=3) uniform sampler2D HeadLambertianTexture;
+layout(set=1,binding=4) uniform sampler2D DisplayTexture;
+layout(set=1,binding=5) uniform sampler2D PrevDisplayTexture;
 
-layout(set=1, binding=3) uniform _UserUniforms {
+layout(set=1, binding=6) uniform _UserUniforms {
+	uint SAMPLE_COUNT;
 	uint BRDF_MODE;
 	uint BACKGROUND;
 	uint RENDER_MODE;
-	uint SAMPLE_COUNT;
+	float TSR_SPEED;
 	float EPI_DEPTH;
 	float IOR_EPI;
 	float IOR_DERM;
@@ -36,7 +41,7 @@ layout(set=1, binding=3) uniform _UserUniforms {
 
 #include <Fluorescence.glsl>
 
-layout(set=1, binding=4) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=7) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 
@@ -51,6 +56,10 @@ layout(location = 0) out vec4 outColor;
 #include "Skin.glsl"
 
 #ifdef IS_COMP_SHADER
+#ifdef _ENTRY_POINT_CS_CopyDisplayImage
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+void main() { CS_CopyDisplayImage(); }
+#endif // _ENTRY_POINT_CS_CopyDisplayImage
 #endif // IS_COMP_SHADER
 
 
