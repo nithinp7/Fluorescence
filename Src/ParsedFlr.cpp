@@ -146,6 +146,24 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       return std::nullopt;
     };
 
+    auto bindAttachment = [&](std::string_view aliasName, uint32_t imageIdx, bool bLoad, bool bStore) {
+      m_renderPasses.back().attachments.push_back(
+        { std::string(aliasName), (int)imageIdx, bLoad, bStore });
+      m_renderPasses.back().width = m_images[imageIdx].createOptions.width;
+      m_renderPasses.back().height = m_images[imageIdx].createOptions.height;
+
+      bool bIsDepth = (m_images[imageIdx].createOptions.aspectMask &
+        VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
+      if (bIsDepth) {
+        m_images[imageIdx].createOptions.usage |=
+          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+      }
+      else {
+        m_images[imageIdx].createOptions.usage |=
+          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+      }
+    };
+
     p.parseWhitespace();
 
     // TODO: support comment within line
@@ -443,10 +461,10 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       break;
     }
     case I_RENDER_PASS: {
-      // PARSER_VERIFY(name, "Could not parse render-pass name.");
+       PARSER_VERIFY(name, "Could not parse render-pass name.");
 
       m_taskList.push_back({(uint32_t)m_renderPasses.size(), TT_RENDER});
-      m_renderPasses.push_back({{}, {}, -1, -1});
+      m_renderPasses.push_back({ std::string(*name), {}, {}, -1, -1 });
 
       if (auto width = parseUintOrVar()) {
         m_renderPasses.back().width = *width;
@@ -491,20 +509,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
             "instruction.");
         p.parseWhitespace();
 
-        m_renderPasses.back().attachments.push_back(
-            { std::string(*aliasName), (int)*imageIdx, true, false});
-        m_renderPasses.back().width = m_images[*imageIdx].createOptions.width;
-        m_renderPasses.back().height = m_images[*imageIdx].createOptions.height;
-
-        bool bIsDepth = (m_images[*imageIdx].createOptions.aspectMask &
-                         VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
-        if (bIsDepth) {
-          m_images[*imageIdx].createOptions.usage |=
-              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        } else {
-          m_images[*imageIdx].createOptions.usage |=
-              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        }
+        bindAttachment(*aliasName, *imageIdx, true, false);
       } while (*p.c != 0);
 
       break;
@@ -532,20 +537,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
             "instruction.");
         p.parseWhitespace();
 
-        m_renderPasses.back().attachments.push_back(
-            { std::string(*aliasName), (int)*imageIdx, false, true});
-        m_renderPasses.back().width = m_images[*imageIdx].createOptions.width;
-        m_renderPasses.back().height = m_images[*imageIdx].createOptions.height;
-
-        bool bIsDepth = (m_images[*imageIdx].createOptions.aspectMask &
-                         VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
-        if (bIsDepth) {
-          m_images[*imageIdx].createOptions.usage |=
-              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        } else {
-          m_images[*imageIdx].createOptions.usage |=
-              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        }
+        bindAttachment(*aliasName, *imageIdx, false, true);
       } while (*p.c != 0);
 
       break;
@@ -573,20 +565,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
             "instruction.");
         p.parseWhitespace();
 
-        m_renderPasses.back().attachments.push_back(
-            {std::string(*aliasName), (int)*imageIdx, true, true});
-        m_renderPasses.back().width = m_images[*imageIdx].createOptions.width;
-        m_renderPasses.back().height = m_images[*imageIdx].createOptions.height;
-
-        bool bIsDepth = (m_images[*imageIdx].createOptions.aspectMask &
-                         VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
-        if (bIsDepth) {
-          m_images[*imageIdx].createOptions.usage |=
-              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        } else {
-          m_images[*imageIdx].createOptions.usage |=
-              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        }
+        bindAttachment(*aliasName, *imageIdx, true, true);
       } while (*p.c != 0);
 
       break;

@@ -526,12 +526,14 @@ Project::Project(
         ShaderDefines defs{};
         defs.emplace("IS_VERTEX_SHADER", "");
         defs.emplace(std::string("_ENTRY_POINT_") + draw.vertexShader, "");
+        defs.emplace(pass.name, "");
         builder.addVertexShader(autoGenFileName.string(), defs);
       }
       {
         ShaderDefines defs{};
         defs.emplace("IS_PIXEL_SHADER", "");
         defs.emplace(std::string("_ENTRY_POINT_") + draw.pixelShader, "");
+        defs.emplace(pass.name, "");
         builder.addFragmentShader(autoGenFileName.string(), defs);
       }
 
@@ -647,12 +649,13 @@ void Project::tick(Application& app, const FrameContext& frame) {
 
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
     m_cameraController.tick(frame.deltaTime);
-    PerspectiveCamera camera{};
-    camera.view = m_cameraController.getCamera().computeView();
-    camera.inverseView = glm::inverse(camera.view);
-    camera.projection = m_cameraController.getCamera().getProjection();
-    camera.inverseProjection = glm::inverse(camera.projection);
-    m_perspectiveCamera.updateUniforms(camera, frame);
+    m_cameraArgs.prevView = m_cameraArgs.view;
+    m_cameraArgs.prevInverseView = m_cameraArgs.inverseView;
+    m_cameraArgs.view = m_cameraController.getCamera().computeView();
+    m_cameraArgs.inverseView = glm::inverse(m_cameraArgs.view);
+    m_cameraArgs.projection = m_cameraController.getCamera().getProjection();
+    m_cameraArgs.inverseProjection = glm::inverse(m_cameraArgs.projection);
+    m_perspectiveCamera.updateUniforms(m_cameraArgs, frame);
   }
 }
 

@@ -12,6 +12,8 @@ struct FlrUniforms {
 };
 
 struct PerspectiveCamera {
+  mat4 prevView;
+  mat4 prevInverseView;
   mat4 view;
   mat4 inverseView;
   mat4 projection;

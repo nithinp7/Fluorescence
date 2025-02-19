@@ -163,6 +163,7 @@ struct ParsedFlr {
     bool bStore;
   };
   struct RenderPass {
+    std::string name;
     std::vector<Draw> draws;
     std::vector<AttachmentRef> attachments;
     int width;

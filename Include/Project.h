@@ -88,6 +88,7 @@ private:
   std::vector<std::byte> m_dynamicDataBuffer;
 
   CameraController m_cameraController;
+  PerspectiveCamera m_cameraArgs;
   TransientUniforms<PerspectiveCamera> m_perspectiveCamera;
   TransientUniforms<AudioInput> m_audioInput;
 
