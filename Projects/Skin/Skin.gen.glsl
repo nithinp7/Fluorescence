@@ -4,8 +4,8 @@
 #define SCREEN_HEIGHT 1280
 
 struct VertexOutput {
-  vec3 position;
-  vec3 prevPosition;
+  vec4 position;
+  vec4 prevPosition;
   vec3 normal;
   vec2 uv;
 };;
@@ -25,6 +25,7 @@ layout(set=1, binding=9) uniform _UserUniforms {
 	uint BACKGROUND;
 	uint RENDER_MODE;
 	float TSR_SPEED;
+	float REPROJ_TOLERANCE;
 	float EPI_DEPTH;
 	float IOR_EPI;
 	float IOR_DERM;

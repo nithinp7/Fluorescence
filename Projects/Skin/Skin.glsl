@@ -77,8 +77,8 @@ VertexOutput VS_Obj() {
   vec4 worldPos = camera.view * vec4(inPosition, 1.0);
   vec4 projPos = camera.projection * worldPos;
   gl_Position = projPos;
-  OUT.position = projPos.xyw;
-  OUT.prevPosition = (camera.projection * camera.prevView * vec4(inPosition, 1.0)).xyw;
+  OUT.position = projPos;
+  OUT.prevPosition = camera.projection * camera.prevView * vec4(inPosition, 1.0);
   OUT.normal = inNormal;
   OUT.uv = vec2(inUv.x, 1.0 - inUv.y);
 
@@ -98,6 +98,20 @@ void PS_Background(VertexOutput IN) {
 }
 
 void PS_Obj(VertexOutput IN) {
+  // TODO - wrap this TAA part into a helper
+  float tsrSpeed = TSR_SPEED;
+  vec2 prevScreenUv = IN.prevPosition.xy / IN.prevPosition.w * 0.5 + 0.5.xx;
+  if (clamp(prevScreenUv, 0.0.xx, 1.0.xx) != prevScreenUv)
+    tsrSpeed = 1.0;
+
+  float dPrevRaw = texture(PrevDepthTexture, prevScreenUv).x;
+  float dPrev = reconstructLinearDepth(dPrevRaw);
+  float dPrev_expected = reconstructLinearDepth(IN.prevPosition.z / IN.prevPosition.w);
+
+  // TODO smooth out the effect of depth-rejection on the TSR speed
+  if (abs(dPrev_expected - dPrev) > REPROJ_TOLERANCE)
+    tsrSpeed = 1.0;
+  
   vec3 dir = normalize(computeDir(IN.uv));
   mat3 tangentSpace = LocalToWorld(IN.normal);
 
@@ -108,7 +122,8 @@ void PS_Obj(VertexOutput IN) {
 
   vec3 diffuse = texture(HeadLambertianTexture, IN.uv).rgb;
 
-  uvec2 seed = uvec2((0.5 * IN.position.xy / IN.position.z + 0.5.xx) * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
+  vec2 screenUv = 0.5 * IN.position.xy / IN.position.w + 0.5.xx;
+  uvec2 seed = uvec2(screenUv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
   seed *= uvec2(uniforms.frameCount, uniforms.frameCount + 1);
 
   vec3 Lo = 0.0.xxx;
@@ -180,18 +195,9 @@ void PS_Obj(VertexOutput IN) {
   } else {
     outColor = vec4(bump.xxx, 1.0);
   }
-
-  float tsrSpeed = TSR_SPEED;
-  vec2 prevScreenUv = IN.prevPosition.xy / IN.prevPosition.z * 0.5 + 0.5.xx;
-  if (clamp(prevScreenUv, 0.0.xx, 1.0.xx) != prevScreenUv)
-    tsrSpeed = 1.0;
+  
   vec3 prevColor = texture(PrevDisplayTexture, prevScreenUv).rgb;
   outColor.rgb = mix(prevColor, outColor.rgb, tsrSpeed);
-
-  float dRaw = texture(PrevDepthTexture, prevScreenUv).x;
-  vec3 prevWorldPos = reconstructPosition(prevScreenUv, dRaw, camera.inverseProjection, camera.prevInverseView);
-  
-  outColor.rgb = fract(prevWorldPos * 10.0);
 }
 #endif // IS_PIXEL_SHADER
 
