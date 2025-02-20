@@ -1,6 +1,7 @@
 #include <PathTracing/BRDF.glsl>
 
 #include <Misc/Sampling.glsl>
+#include <Misc/ReconstructPosition.glsl>
 
 vec3 computeDir(vec2 uv) {
 	vec2 d = uv * 2.0 - 1.0;
@@ -45,6 +46,9 @@ void CS_CopyDisplayImage() {
 
   vec4 c = texelFetch(DisplayTexture, pixelId, 0);
   imageStore(PrevDisplayImage, pixelId, c);
+
+  float d = texelFetch(DepthTexture, pixelId, 0).r;
+  imageStore(PrevDepthImage, pixelId, d.xxxx);
 }
 #endif // IS_COMP_SHADER
 
@@ -183,6 +187,11 @@ void PS_Obj(VertexOutput IN) {
     tsrSpeed = 1.0;
   vec3 prevColor = texture(PrevDisplayTexture, prevScreenUv).rgb;
   outColor.rgb = mix(prevColor, outColor.rgb, tsrSpeed);
+
+  float dRaw = texture(PrevDepthTexture, prevScreenUv).x;
+  vec3 prevWorldPos = reconstructPosition(prevScreenUv, dRaw, camera.inverseProjection, camera.prevInverseView);
+  
+  outColor.rgb = fract(prevWorldPos * 10.0);
 }
 #endif // IS_PIXEL_SHADER
 

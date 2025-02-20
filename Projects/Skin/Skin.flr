@@ -46,15 +46,22 @@ display_image DisplayImage
 image PrevDisplayImage: SCREEN_WIDTH SCREEN_HEIGHT rgba8
   texture_alias PrevDisplayTexture
 
+depth_image DepthImage: SCREEN_WIDTH SCREEN_HEIGHT
+  texture_alias DepthTexture
+image PrevDepthImage: SCREEN_WIDTH SCREEN_HEIGHT r32f
+  texture_alias PrevDepthTexture
+
 compute_shader CS_CopyDisplayImage: 32 32 1
 
-transition_layout: DisplayImage texture
 transition_layout: PrevDisplayImage image
+transition_layout: PrevDepthImage image
 compute_dispatch: CS_CopyDisplayImage SCREEN_WIDTH SCREEN_HEIGHT 1
 transition_layout: PrevDisplayImage texture
+transition_layout: PrevDepthImage texture
 
 render_pass DISPLAY_PASS:
   store_attachments: outColor=DisplayImage
+  store_depth: DepthImage
 
   draw: VS_Background PS_Background 3 1
     vertex_output: VertexOutput
