@@ -10,16 +10,18 @@ struct VertexOutput {
   vec2 uv;
 };;
 
-layout(set=1,binding=1, rgba8) uniform image2D PrevDisplayImage;
-layout(set=1,binding=2, r32f) uniform image2D PrevDepthImage;
-layout(set=1,binding=3) uniform sampler2D HeadBumpTexture;
-layout(set=1,binding=4) uniform sampler2D HeadLambertianTexture;
-layout(set=1,binding=5) uniform sampler2D DisplayTexture;
-layout(set=1,binding=6) uniform sampler2D PrevDisplayTexture;
-layout(set=1,binding=7) uniform sampler2D DepthTexture;
-layout(set=1,binding=8) uniform sampler2D PrevDepthTexture;
+layout(set=1,binding=1, rgba32f) uniform image2D DisplayImage;
+layout(set=1,binding=2, rgba32f) uniform image2D PrevDisplayImage;
+layout(set=1,binding=3, r32f) uniform image2D PrevDepthImage;
+layout(set=1,binding=4) uniform sampler2D HeadBumpTexture;
+layout(set=1,binding=5) uniform sampler2D HeadLambertianTexture;
+layout(set=1,binding=6) uniform sampler2D HeadSpecTexture;
+layout(set=1,binding=7) uniform sampler2D DisplayTexture;
+layout(set=1,binding=8) uniform sampler2D PrevDisplayTexture;
+layout(set=1,binding=9) uniform sampler2D DepthTexture;
+layout(set=1,binding=10) uniform sampler2D PrevDepthTexture;
 
-layout(set=1, binding=9) uniform _UserUniforms {
+layout(set=1, binding=11) uniform _UserUniforms {
 	uint SAMPLE_COUNT;
 	uint BRDF_MODE;
 	uint BACKGROUND;
@@ -41,20 +43,23 @@ layout(set=1, binding=9) uniform _UserUniforms {
 	float LIGHT_STRENGTH;
 	bool ENABLE_SSS;
 	bool ENABLE_REFL;
+	bool OVERRIDE_BRDF;
 };
 
 #include <Fluorescence.glsl>
 
-layout(set=1, binding=10) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=12) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 
 #ifdef IS_PIXEL_SHADER
 #ifdef _ENTRY_POINT_PS_Background
-layout(location = 0) out vec4 outColor;
+layout(location = 0) out vec4 outDisplay;
+layout(location = 1) out vec4 outColor;
 #endif // _ENTRY_POINT_PS_Background
 #ifdef _ENTRY_POINT_PS_Obj
-layout(location = 0) out vec4 outColor;
+layout(location = 0) out vec4 outDisplay;
+layout(location = 1) out vec4 outColor;
 #endif // _ENTRY_POINT_PS_Obj
 #endif // IS_PIXEL_SHADER
 #include "Skin.glsl"

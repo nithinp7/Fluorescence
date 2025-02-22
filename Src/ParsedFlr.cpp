@@ -845,6 +845,15 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       auto path = p.parseStringLiteral();
       PARSER_VERIFY(path, "Could not parse texture file path.");
 
+      p.parseWhitespace();
+
+      // TODO: formalize options here
+      bool bSrgb = false;
+      if (auto option = p.parseName()) {
+        PARSER_VERIFY(!option->compare("srgb"), "Unknown option provided with texture_file instruction.");
+        bSrgb = true;
+      }
+
       std::string pathStr(*path);
       PARSER_VERIFY(
           Utilities::checkFileExists(pathStr),
@@ -860,6 +869,10 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       texFile.createOptions = ImageOptions{};
       texFile.createOptions.width = texFile.loadedImage.width;
       texFile.createOptions.height = texFile.loadedImage.height;
+      if (bSrgb)
+      {
+        texFile.createOptions.format = VK_FORMAT_R8G8B8A8_SRGB;
+      }
 
       assert(texFile.loadedImage.channels == 4);
       assert(texFile.loadedImage.bytesPerChannel == 1);

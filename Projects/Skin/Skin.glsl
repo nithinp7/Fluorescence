@@ -17,8 +17,8 @@ vec3 sampleEnv(vec3 dir) {
     float cosphi = cos(LIGHT_PHI); float sinphi = sin(LIGHT_PHI);
     float costheta = cos(LIGHT_THETA); float sintheta = sin(LIGHT_THETA);
     float x = 0.5 + 0.5 * dot(dir, normalize(vec3(costheta * cosphi, sinphi, sintheta * cosphi)));
-    x = LIGHT_STRENGTH * pow(x, LIGHT_STRENGTH * 10.0) + 0.01;
-    return x.xxx;
+    // x = LIGHT_STRENGTH * pow(x, LIGHT_STRENGTH * 10.0) + 0.01;
+    return LIGHT_STRENGTH * pow(x, 4.0).xxx;
   } else if (BACKGROUND == 1) {
     return round(fract(n * c));
   } else if (BACKGROUND == 2) {
@@ -30,7 +30,7 @@ vec3 sampleEnv(vec3 dir) {
     float cosphi = cos(LIGHT_PHI); float sinphi = sin(LIGHT_PHI);
     float costheta = cos(LIGHT_THETA); float sintheta = sin(LIGHT_THETA);
     float x = 0.5 + 0.5 * dot(dir, normalize(vec3(costheta * cosphi, sinphi, sintheta * cosphi)));
-    x = pow(x, LIGHT_STRENGTH) + 0.01;
+    // x = pow(x, LIGHT_STRENGTH) + 0.01;
     return LIGHT_STRENGTH * x * round(n * c) / c;
   }
 }
@@ -44,10 +44,14 @@ void CS_CopyDisplayImage() {
     return;
   }
 
-  vec4 c = texelFetch(DisplayTexture, pixelId, 0);
+  vec4 c = vec4(texelFetch(DisplayTexture, pixelId, 0).rgb, 1.0);
+  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0)
+    c = vec4(0.0.xxx, 1.0);
   imageStore(PrevDisplayImage, pixelId, c);
 
   float d = texelFetch(DepthTexture, pixelId, 0).r;
+  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0)
+    d = 0.0;
   imageStore(PrevDepthImage, pixelId, d.xxxx);
 }
 #endif // IS_COMP_SHADER
@@ -93,8 +97,11 @@ VertexOutput VS_Obj() {
 #ifdef IS_PIXEL_SHADER
 
 void PS_Background(VertexOutput IN) {
-  vec3 dir = computeDir(IN.uv);
-  outColor = vec4(sampleEnv(dir), 1.0);
+  vec3 dir = normalize(computeDir(IN.uv));
+  vec4 color = vec4(sampleEnv(dir), 1.0);
+  
+  outColor = color;
+  outDisplay = color;
 }
 
 void PS_Obj(VertexOutput IN) {
@@ -112,17 +119,26 @@ void PS_Obj(VertexOutput IN) {
   if (abs(dPrev_expected - dPrev) > REPROJ_TOLERANCE)
     tsrSpeed = 1.0;
   
-  vec3 dir = normalize(computeDir(IN.uv));
-  mat3 tangentSpace = LocalToWorld(IN.normal);
+  vec2 screenUv = 0.5 * IN.position.xy / IN.position.w + 0.5.xx;
+  vec3 dir = normalize(computeDir(screenUv));
+  mat3 tangentSpace = LocalToWorld(normalize(IN.normal));
 
   float bump = texture(HeadBumpTexture, IN.uv).x;
   vec2 bumpGrad = vec2(dFdx(bump), dFdy(bump)); 
   vec3 bumpNormal = vec3(BUMP_STRENGTH * bumpGrad, 1.0);
   vec3 normal = normalize(tangentSpace * bumpNormal);
 
+  uint brdf = uniforms.frameCount & 1;
+  float spec = texture(HeadSpecTexture, IN.uv).x;
+  float roughness = ROUGHNESS * (0.5 - spec);
+  if (OVERRIDE_BRDF) 
+  {
+    brdf = BRDF_MODE;
+    // roughness = ROUGHNESS;
+  }
+  
   vec3 diffuse = texture(HeadLambertianTexture, IN.uv).rgb;
 
-  vec2 screenUv = 0.5 * IN.position.xy / IN.position.w + 0.5.xx;
   uvec2 seed = uvec2(screenUv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
   seed *= uvec2(uniforms.frameCount, uniforms.frameCount + 1);
 
@@ -138,30 +154,37 @@ void PS_Obj(VertexOutput IN) {
       vec3 refrDir = refract(dir, normal, 1.0/IOR_EPI);
 
       float cosRefrDirNormal = -dot(normal, refrDir);
-      float epidermisPathLength = EPI_DEPTH / cosRefrDirNormal;
+      float epidermisPathLength = EPI_DEPTH;// / cosRefrDirNormal;
 
       vec3 epiAbs = vec3(EPI_ABS_RED, EPI_ABS_GREEN, EPI_ABS_BLUE);
       vec3 sssThroughput = exp(-epiAbs * epidermisPathLength);
 
       vec3 HEMOGLOBIN_DIFFUSE = vec3(0.8, 0.3, 0.4) * HEMOGLOBIN_SCALE;
       vec3 refrReflDir;
-      if (BRDF_MODE == 0) {
+      if (brdf == 0) {
         float pdf;
         vec3 refrReflDirLocal = sampleHemisphereCosine(seed, pdf);
-        refrReflDir = LocalToWorld(normal) * refrReflDirLocal;
-        sssThroughput *= HEMOGLOBIN_DIFFUSE /* refrReflDirLocal.z / refrReflDirLocal.z */;
-        // the pdf cancels out with part of the brdf, in the lambertian brdf
+        refrReflDir = normalize(LocalToWorld(normal) * refrReflDirLocal);
+        if (pdf > 0.01) {
+          sssThroughput *= HEMOGLOBIN_DIFFUSE / PI * max(dot(refrDir, -refrReflDir), 0.0) / pdf;
+        } else {
+          sssThroughput = 0.0.xxx;
+        }
       } else {
         float pdfRefrRefl;
         vec3 fRefrRefl = sampleMicrofacetBrdf(
           randVec2(seed), -refrDir, normal,
-          HEMOGLOBIN_DIFFUSE, METALLIC, ROUGHNESS, 
+          HEMOGLOBIN_DIFFUSE, METALLIC, roughness, 
           refrReflDir, pdfRefrRefl);
-        sssThroughput *= fRefrRefl / pdfRefrRefl;
+        if (pdfRefrRefl > 0.1) {
+          sssThroughput *= fRefrRefl * max(dot(refrDir, -refrReflDir), 0.0) / pdfRefrRefl;
+        } else { 
+          sssThroughput = 0.0.xxx;
+        }
       }
 
-      float cosRefrReflDirNormal = dot(normal, refrReflDir);
-      epidermisPathLength = EPI_DEPTH / cosRefrReflDirNormal;
+      float cosRefrReflDirNormal = abs(dot(normal, refrReflDir));
+      epidermisPathLength = EPI_DEPTH;// / cosRefrReflDirNormal;
       sssThroughput *= exp(-epiAbs * epidermisPathLength);
 
       Lo += W * sssThroughput * sampleEnv(refrReflDir) / SAMPLE_COUNT;
@@ -169,35 +192,50 @@ void PS_Obj(VertexOutput IN) {
       vec3 reflDir;
       vec3 f;
       float pdf;
-      if (BRDF_MODE == 0) {
+      if (brdf == 0) {
         vec3 reflDirLocal = sampleHemisphereCosine(seed, pdf);
-        reflDir = LocalToWorld(normal) * reflDirLocal;
-        f = diffuse * reflDirLocal.z;
-        pdf = reflDirLocal.z;
+        reflDir = normalize(LocalToWorld(normal) * reflDirLocal);
+        f = diffuse / PI;
+        if (pdf < 0.1) {
+          f = 0.0.xxx;
+          pdf = 1.0;
+        }
       } else {
         f = sampleMicrofacetBrdf(
           randVec2(seed), -dir, normal,
-          diffuse, METALLIC, ROUGHNESS, 
+          diffuse, METALLIC, roughness, 
           reflDir, pdf);
+        if (pdf < 0.1) 
+        {
+          f = 0.0.xxx;
+          pdf = 1.0;
+        }
       }
 
-      vec3 throughput = f / pdf;
+      vec3 throughput = f * max(dot(reflDir, -dir), 0.0) / pdf;
       Lo += W * sampleEnv(reflDir) * throughput / SAMPLE_COUNT;
     }
   }
 
+  vec4 color;// = vec4(0.0.xxx, 1.0);
   if (RENDER_MODE == 0) {
-    outColor = vec4(Lo, 1.0);
+    color = vec4(Lo, 1.0);
   } else if (RENDER_MODE == 1) {
-    outColor = vec4(diffuse, 1.0);
+    color = vec4(diffuse, 1.0);
   } else if (RENDER_MODE == 2) {
-    outColor = vec4(0.5 * normal + 0.5.xxx, 1.0);
+    color = vec4(0.5 * normal + 0.5.xxx, 1.0);
+  } else if (RENDER_MODE == 3) {
+    color = vec4(bump * bump.xxx, 1.0);//ec4(10.0 * bumpGrad, 0.0, 1.0);
   } else {
-    outColor = vec4(bump.xxx, 1.0);
+    color = vec4(roughness.xxx, 1.0);
   }
+ vec3(1.0, 0.0, 0.0);
   
   vec3 prevColor = texture(PrevDisplayTexture, prevScreenUv).rgb;
-  outColor.rgb = mix(prevColor, outColor.rgb, tsrSpeed);
+  if (tsrSpeed != 1.0)
+    color.rgb = mix(prevColor, vec3(color.rgb), tsrSpeed);
+  outColor = vec4(color.rgb, 1.0);
+  outDisplay = vec4(vec3(1.0) - exp(-color.rgb * 0.3), 1.0);
 }
 #endif // IS_PIXEL_SHADER
 

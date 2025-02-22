@@ -96,8 +96,6 @@ private:
 
   std::unique_ptr<Audio> m_pAudio;
 
-  uint32_t m_displayImageIdx;
-
   bool m_bHasDynamicData;
 
   bool m_failedShaderCompile;
