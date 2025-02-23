@@ -61,6 +61,14 @@ struct ParsedFlr {
   };
   std::vector<SliderFloat> m_sliderFloats;
 
+  struct ColorPicker {
+    std::string name;
+    glm::vec4 defaultValue;
+    uint32_t uiIdx;
+    float* pValue;
+  };
+  std::vector<ColorPicker> m_colorPickers;
+
   struct Checkbox {
     std::string name;
     bool defaultValue;
@@ -211,6 +219,7 @@ struct ParsedFlr {
     I_SLIDER_UINT,
     I_SLIDER_INT,
     I_SLIDER_FLOAT,
+    I_COLOR_PICKER,
     I_CHECKBOX,
     I_STRUCT,
     I_STRUCT_SIZE,
@@ -247,6 +256,7 @@ struct ParsedFlr {
       "slider_uint",
       "slider_int",
       "slider_float",
+      "color_picker",
       "checkbox",
       "struct",
       "struct_size",

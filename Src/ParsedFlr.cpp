@@ -271,6 +271,29 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           {std::string(*name), *value, *min, *max, uiIdx++, nullptr});
       break;
     }
+    case I_COLOR_PICKER: {
+      PARSER_VERIFY(name, "Could not parse name for color_picker.");
+
+      auto r = p.parseFloat();
+      PARSER_VERIFY(r, "Could not parse default color component R for color_picker.");
+      p.parseWhitespace();
+
+      auto g = p.parseFloat();
+      PARSER_VERIFY(g, "Could not parse default color component G for color_picker.");
+      p.parseWhitespace();
+
+      auto b = p.parseFloat();
+      PARSER_VERIFY(b, "Could not parse default color component B for color_picker.");
+      p.parseWhitespace();
+
+      auto a = p.parseFloat();
+      PARSER_VERIFY(a, "Could not parse default color component A for color_picker.");
+
+      m_colorPickers.push_back(
+        { std::string(*name), glm::vec4(*r, *g, *b, *a), uiIdx++, nullptr});
+
+      break;
+    }
     case I_CHECKBOX: {
       PARSER_VERIFY(name, "Could not parse name for checkbox.");
 

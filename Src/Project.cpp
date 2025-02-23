@@ -122,9 +122,11 @@ Project::Project(
 
   m_bHasDynamicData =
       !m_parsed.m_sliderUints.empty() || !m_parsed.m_sliderInts.empty() ||
-      !m_parsed.m_sliderFloats.empty() || !m_parsed.m_checkboxes.empty();
+      !m_parsed.m_sliderFloats.empty() || !m_parsed.m_colorPickers.empty() ||
+      !m_parsed.m_checkboxes.empty();
   if (m_bHasDynamicData) {
     size_t size = 0;
+    size += 16 * m_parsed.m_colorPickers.size();
     size += 4 * m_parsed.m_sliderUints.size();
     size += 4 * m_parsed.m_sliderInts.size();
     size += 4 * m_parsed.m_sliderFloats.size();
@@ -136,6 +138,14 @@ Project::Project(
     size_t offset = 0;
 
     m_dynamicDataBuffer.resize(size);
+    for (auto& cpicker : m_parsed.m_colorPickers) {
+      cpicker.pValue = reinterpret_cast<float*>(m_dynamicDataBuffer.data() + offset);
+      cpicker.pValue[0] = cpicker.defaultValue.x;
+      cpicker.pValue[1] = cpicker.defaultValue.y;
+      cpicker.pValue[2] = cpicker.defaultValue.z;
+      cpicker.pValue[3] = cpicker.defaultValue.w;
+      offset += 16;
+    }
     for (auto& uslider : m_parsed.m_sliderUints) {
       uslider.pValue =
           reinterpret_cast<uint32_t*>(m_dynamicDataBuffer.data() + offset);
@@ -294,6 +304,9 @@ Project::Project(
           "\nlayout(set=1, binding=%u) uniform _UserUniforms {\n",
           slot++);
 
+      for (const auto& cpicker : m_parsed.m_colorPickers) {
+        CODE_APPEND("\tvec4 %s;\n", cpicker.name.c_str());
+      }
       for (const auto& uslider : m_parsed.m_sliderUints) {
         CODE_APPEND("\tuint %s;\n", uslider.name.c_str());
       }
@@ -620,6 +633,16 @@ void Project::tick(Application& app, const FrameContext& frame) {
                 fslider.pValue,
                 fslider.min,
                 fslider.max);
+            return true;
+          }
+        }
+        for (const auto& cpicker : m_parsed.m_colorPickers) {
+          if (cpicker.uiIdx == uiIdx) {
+            ImGui::Text(cpicker.name.c_str());
+            sprintf(nameBuf, "##%s_%u", cpicker.name.c_str(), uiIdx);
+            ImGui::ColorPicker4(
+              nameBuf,
+              cpicker.pValue);
             return true;
           }
         }
