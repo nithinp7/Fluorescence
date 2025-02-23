@@ -22,18 +22,15 @@ layout(set=1,binding=9) uniform sampler2D DepthTexture;
 layout(set=1,binding=10) uniform sampler2D PrevDepthTexture;
 
 layout(set=1, binding=11) uniform _UserUniforms {
+	vec4 HEMOGLOBIN_COLOR;
+	vec4 EPI_ABS_COLOR;
 	uint SAMPLE_COUNT;
-	uint BRDF_MODE;
 	uint BACKGROUND;
 	uint RENDER_MODE;
 	float TSR_SPEED;
 	float REPROJ_TOLERANCE;
-	float EPI_DEPTH;
 	float IOR_EPI;
-	float IOR_DERM;
-	float EPI_ABS_RED;
-	float EPI_ABS_GREEN;
-	float EPI_ABS_BLUE;
+	float EPI_DEPTH;
 	float HEMOGLOBIN_SCALE;
 	float BUMP_STRENGTH;
 	float ROUGHNESS;
@@ -41,9 +38,9 @@ layout(set=1, binding=11) uniform _UserUniforms {
 	float LIGHT_THETA;
 	float LIGHT_PHI;
 	float LIGHT_STRENGTH;
-	bool ENABLE_SSS;
 	bool ENABLE_REFL;
-	bool OVERRIDE_BRDF;
+	bool ENABLE_SSS;
+	bool ENABLE_SEE_THROUGH;
 };
 
 #include <Fluorescence.glsl>

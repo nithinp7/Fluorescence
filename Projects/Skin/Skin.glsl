@@ -11,25 +11,25 @@ vec3 computeDir(vec2 uv) {
 }
 
 vec3 sampleEnv(vec3 dir) {
+  float cosphi = cos(LIGHT_PHI); float sinphi = sin(LIGHT_PHI);
+  float costheta = cos(LIGHT_THETA); float sintheta = sin(LIGHT_THETA);
+  vec3 L = normalize(vec3(costheta * cosphi, sinphi, sintheta * cosphi));
+
   float c = 5.0;
   vec3 n = 0.5 * normalize(dir) + 0.5.xxx;
   if (BACKGROUND == 0) {
-    float cosphi = cos(LIGHT_PHI); float sinphi = sin(LIGHT_PHI);
-    float costheta = cos(LIGHT_THETA); float sintheta = sin(LIGHT_THETA);
-    float x = 0.5 + 0.5 * dot(dir, normalize(vec3(costheta * cosphi, sinphi, sintheta * cosphi)));
+    float x = 0.5 + 0.5 * dot(dir, L);
     // x = LIGHT_STRENGTH * pow(x, LIGHT_STRENGTH * 10.0) + 0.01;
     return LIGHT_STRENGTH * pow(x, 4.0).xxx;
   } else if (BACKGROUND == 1) {
-    return round(fract(n * c));
+    return round(fract(LocalToWorld(L) * n * c + 0.1 * uniforms.time));
   } else if (BACKGROUND == 2) {
     return round(n);
   } else if (BACKGROUND == 3) {
     float f = n.x + n.y + n.z;
     return max(round(fract(f * c)), 0.2).xxx;
   } else {
-    float cosphi = cos(LIGHT_PHI); float sinphi = sin(LIGHT_PHI);
-    float costheta = cos(LIGHT_THETA); float sintheta = sin(LIGHT_THETA);
-    float x = 0.5 + 0.5 * dot(dir, normalize(vec3(costheta * cosphi, sinphi, sintheta * cosphi)));
+    float x = 0.5 + 0.5 * dot(dir,L);
     // x = pow(x, LIGHT_STRENGTH) + 0.01;
     return LIGHT_STRENGTH * x * round(n * c) / c;
   }
@@ -106,6 +106,10 @@ void PS_Background(VertexOutput IN) {
 
 void PS_Obj(VertexOutput IN) {
   // TODO - wrap this TAA part into a helper
+  vec2 screenUv = 0.5 * IN.position.xy / IN.position.w + 0.5.xx;
+  uvec2 seed = uvec2(screenUv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
+  seed *= uvec2(uniforms.frameCount, uniforms.frameCount + 1);
+
   float tsrSpeed = TSR_SPEED;
   vec2 prevScreenUv = IN.prevPosition.xy / IN.prevPosition.w * 0.5 + 0.5.xx;
   if (clamp(prevScreenUv, 0.0.xx, 1.0.xx) != prevScreenUv)
@@ -119,7 +123,6 @@ void PS_Obj(VertexOutput IN) {
   if (abs(dPrev_expected - dPrev) > REPROJ_TOLERANCE)
     tsrSpeed = 1.0;
   
-  vec2 screenUv = 0.5 * IN.position.xy / IN.position.w + 0.5.xx;
   vec3 dir = normalize(computeDir(screenUv));
   mat3 tangentSpace = LocalToWorld(normalize(IN.normal));
 
@@ -128,96 +131,78 @@ void PS_Obj(VertexOutput IN) {
   vec3 bumpNormal = vec3(BUMP_STRENGTH * bumpGrad, 1.0);
   vec3 normal = normalize(tangentSpace * bumpNormal);
 
-  uint brdf = uniforms.frameCount & 1;
   float spec = texture(HeadSpecTexture, IN.uv).x;
   float roughness = ROUGHNESS * (0.5 - spec);
-  if (OVERRIDE_BRDF) 
-  {
-    brdf = BRDF_MODE;
-    // roughness = ROUGHNESS;
-  }
   
   vec3 diffuse = texture(HeadLambertianTexture, IN.uv).rgb;
 
-  uvec2 seed = uvec2(screenUv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
-  seed *= uvec2(uniforms.frameCount, uniforms.frameCount + 1);
-
   vec3 Lo = 0.0.xxx;
   for (int sampleIdx = 0; sampleIdx < SAMPLE_COUNT; sampleIdx++) {
-    float W = 0.0;
-    if (ENABLE_SSS)
-      W += 1.0;
-    if (ENABLE_REFL)
-      W += 1.0;
+    float F0 = (IOR_EPI - 1.0) / (IOR_EPI + 1.0);
+    F0 *= F0;
+    vec3 F = vec3(0.0);
+    vec3 H = normal;
 
-    if (ENABLE_SSS && (!ENABLE_REFL || (rng(seed) < 0.5))) {
-      vec3 refrDir = refract(dir, normal, 1.0/IOR_EPI);
-
-      float cosRefrDirNormal = -dot(normal, refrDir);
-      float epidermisPathLength = EPI_DEPTH;// / cosRefrDirNormal;
-
-      vec3 epiAbs = vec3(EPI_ABS_RED, EPI_ABS_GREEN, EPI_ABS_BLUE);
-      vec3 sssThroughput = exp(-epiAbs * epidermisPathLength);
-
-      vec3 HEMOGLOBIN_DIFFUSE = vec3(0.8, 0.3, 0.4) * HEMOGLOBIN_SCALE;
-      vec3 refrReflDir;
-      if (brdf == 0) {
-        float pdf;
-        vec3 refrReflDirLocal = sampleHemisphereCosine(seed, pdf);
-        refrReflDir = normalize(LocalToWorld(normal) * refrReflDirLocal);
-        if (pdf > 0.01) {
-          sssThroughput *= HEMOGLOBIN_DIFFUSE / PI * max(dot(refrDir, -refrReflDir), 0.0) / pdf;
-        } else {
-          sssThroughput = 0.0.xxx;
-        }
-      } else {
-        float pdfRefrRefl;
-        vec3 fRefrRefl = sampleMicrofacetBrdf(
-          randVec2(seed), -refrDir, normal,
-          HEMOGLOBIN_DIFFUSE, METALLIC, roughness, 
-          refrReflDir, pdfRefrRefl);
-        if (pdfRefrRefl > 0.1) {
-          sssThroughput *= fRefrRefl * max(dot(refrDir, -refrReflDir), 0.0) / pdfRefrRefl;
-        } else { 
-          sssThroughput = 0.0.xxx;
-        }
-      }
-
-      float cosRefrReflDirNormal = abs(dot(normal, refrReflDir));
-      epidermisPathLength = EPI_DEPTH;// / cosRefrReflDirNormal;
-      sssThroughput *= exp(-epiAbs * epidermisPathLength);
-
-      Lo += W * sssThroughput * sampleEnv(refrReflDir) / SAMPLE_COUNT;
-    } else {
+    {
       vec3 reflDir;
       vec3 f;
       float pdf;
-      if (brdf == 0) {
-        vec3 reflDirLocal = sampleHemisphereCosine(seed, pdf);
-        reflDir = normalize(LocalToWorld(normal) * reflDirLocal);
-        f = diffuse / PI;
-        if (pdf < 0.1) {
-          f = 0.0.xxx;
-          pdf = 1.0;
-        }
-      } else {
+      {
         f = sampleMicrofacetBrdf(
           randVec2(seed), -dir, normal,
           diffuse, METALLIC, roughness, 
           reflDir, pdf);
-        if (pdf < 0.1) 
-        {
+        if (pdf < 0.1) {
           f = 0.0.xxx;
           pdf = 1.0;
+        } else {
+          H = (normalize(reflDir + -dir));
+          float NdotH = abs(dot(normal, H));
+          F = fresnelSchlick(NdotH, F0.xxx, roughness);
         }
       }
 
       vec3 throughput = f * max(dot(reflDir, -dir), 0.0) / pdf;
-      Lo += W * sampleEnv(reflDir) * throughput / SAMPLE_COUNT;
+      if (ENABLE_REFL) 
+        Lo += sampleEnv(reflDir) * throughput / SAMPLE_COUNT;
+    }
+
+    vec3 refrDir = refract(dir, H, 1.0/IOR_EPI);
+    float refrDotH = dot(refrDir, H);
+    if (refrDotH < 0.0) {
+      if (ENABLE_SSS) {
+        
+        // float cosRefrDirNormal = -dot(normal, refrDir);
+        float epidermisPathLength = EPI_DEPTH;// / cosRefrDirNormal;
+
+        vec3 epiAbs = EPI_ABS_COLOR.rgb;
+        vec3 sssThroughput = exp(-epiAbs * epidermisPathLength);
+
+        vec3 HEMOGLOBIN_DIFFUSE = HEMOGLOBIN_COLOR.rgb * HEMOGLOBIN_SCALE;
+        vec3 refrReflDir;
+        {
+          float pdf;
+          vec3 refrReflDirLocal = sampleHemisphereCosine(seed, pdf);
+          refrReflDir = normalize(LocalToWorld(H) * refrReflDirLocal);
+          if (pdf > 0.01) {
+            sssThroughput *= HEMOGLOBIN_DIFFUSE / PI * max(dot(refrDir, -refrReflDir), 0.0) / pdf;
+          } else {
+            sssThroughput = 0.0.xxx;
+          }
+        }
+
+        // float cosRefrReflDirNormal = abs(dot(normal, refrReflDir));
+        epidermisPathLength = EPI_DEPTH;// / cosRefrReflDirNormal;
+        sssThroughput *= exp(-epiAbs * epidermisPathLength);
+
+        Lo += max(1.0.xxx - F, 0.0.xxx) * sssThroughput * sampleEnv(refrReflDir) / SAMPLE_COUNT;
+      } else if (ENABLE_SEE_THROUGH) {
+        Lo += max(1.0.xxx - F, 0.0.xxx) * sampleEnv(refrDir) / SAMPLE_COUNT;
+      }  
     }
   }
 
-  vec4 color;// = vec4(0.0.xxx, 1.0);
+  vec4 color;
   if (RENDER_MODE == 0) {
     color = vec4(Lo, 1.0);
   } else if (RENDER_MODE == 1) {
@@ -229,13 +214,12 @@ void PS_Obj(VertexOutput IN) {
   } else {
     color = vec4(roughness.xxx, 1.0);
   }
- vec3(1.0, 0.0, 0.0);
   
   vec3 prevColor = texture(PrevDisplayTexture, prevScreenUv).rgb;
   if (tsrSpeed != 1.0)
     color.rgb = mix(prevColor, vec3(color.rgb), tsrSpeed);
   outColor = vec4(color.rgb, 1.0);
-  outDisplay = vec4(vec3(1.0) - exp(-color.rgb * 0.3), 1.0);
+  outDisplay = vec4(vec3(1.0) - exp(-color.rgb * 0.5), 1.0);
 }
 #endif // IS_PIXEL_SHADER
 

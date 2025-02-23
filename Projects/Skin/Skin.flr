@@ -1,23 +1,20 @@
 
 enable_feature: perspective_camera
 
-checkbox ENABLE_SSS: true
 checkbox ENABLE_REFL: true
+checkbox ENABLE_SSS: true
+checkbox ENABLE_SEE_THROUGH: false
 
-slider_uint SAMPLE_COUNT: 12 1 100
+slider_uint SAMPLE_COUNT: 2 1 100
 slider_float TSR_SPEED: 0.15 0.00 1.0
 slider_float REPROJ_TOLERANCE: 0.05 0.0 0.5
-slider_float EPI_DEPTH: 0.92 0.001 10.0
 slider_float IOR_EPI: 1.4 0.1 2.0
-slider_float IOR_DERM: 1.38 0.1 2.0
-#TODO slider_color ....
-slider_float EPI_ABS_RED: 0.195 0.0 10.0
-slider_float EPI_ABS_GREEN: 0.439 0.0 10.0
-slider_float EPI_ABS_BLUE: 0.683 0.0 10.0
+color_picker HEMOGLOBIN_COLOR: 0.8 0.3 0.4 1.0
+
+slider_float EPI_DEPTH: 0.92 0.001 10.0
+color_picker EPI_ABS_COLOR: 0.195 0.439 0.683 1.0
 
 slider_float HEMOGLOBIN_SCALE: 1.7 0.0 40.0
-checkbox OVERRIDE_BRDF: false
-slider_uint BRDF_MODE: 1 0 2
 slider_uint BACKGROUND: 0 0 4
 slider_uint RENDER_MODE: 0 0 4
 slider_float BUMP_STRENGTH: 15.0 0.0 100.0
@@ -27,7 +24,7 @@ slider_float METALLIC: 0.0 0.0 1.0
 
 slider_float LIGHT_THETA: 0.0 0.0 8.0
 slider_float LIGHT_PHI: 1.0 -2.0 2.0
-slider_float LIGHT_STRENGTH: 1.0 0.25 10.0
+slider_float LIGHT_STRENGTH: 1.8 0.25 10.0
 
 obj_model HeadModel: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/head.obj"
 texture_file HeadBumpTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/bump.png"
