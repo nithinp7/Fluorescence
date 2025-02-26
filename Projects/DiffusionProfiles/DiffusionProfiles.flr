@@ -1,0 +1,28 @@
+
+slider_uint MODE: 0 0 1
+
+slider_float RED_0: 1.0 -1.0 1.0
+slider_float RED_1: 0.495 0.0 2.0
+
+slider_float BLUE_0: 0.579 -1.0 1.0
+slider_float BLUE_1: 0.232 0.0 2.0
+
+slider_float GREEN_0: 1.0 -1.0 1.0
+slider_float GREEN_1: 0.305 0.0 2.0
+
+
+struct VertexOutput {
+  vec2 uv;
+};
+struct_size: 8
+
+display_image DisplayImage
+
+image SaveImage: SCREEN_WIDTH SCREEN_HEIGHT rgba8
+save_image_button: SaveImage 
+
+render_pass DISPLAY_PASS:
+  store_attachments: outDisplay=DisplayImage outSave=SaveImage
+
+  draw: VS_DrawProfile PS_DrawProfile 3 1
+    vertex_output: VertexOutput

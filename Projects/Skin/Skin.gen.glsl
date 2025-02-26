@@ -29,9 +29,9 @@ layout(set=1, binding=11) uniform _UserUniforms {
 	uint RENDER_MODE;
 	float TSR_SPEED;
 	float REPROJ_TOLERANCE;
-	float IOR_EPI;
-	float EPI_DEPTH;
+	float IOR;
 	float HEMOGLOBIN_SCALE;
+	float EPI_DEPTH;
 	float BUMP_STRENGTH;
 	float ROUGHNESS;
 	float METALLIC;
@@ -39,7 +39,8 @@ layout(set=1, binding=11) uniform _UserUniforms {
 	float LIGHT_PHI;
 	float LIGHT_STRENGTH;
 	bool ENABLE_REFL;
-	bool ENABLE_SSS;
+	bool ENABLE_SSS_EPI;
+	bool ENABLE_SSS_DER;
 	bool ENABLE_SEE_THROUGH;
 };
 

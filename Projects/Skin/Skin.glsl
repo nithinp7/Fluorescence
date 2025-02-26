@@ -138,7 +138,7 @@ void PS_Obj(VertexOutput IN) {
 
   vec3 Lo = 0.0.xxx;
   for (int sampleIdx = 0; sampleIdx < SAMPLE_COUNT; sampleIdx++) {
-    float F0 = (IOR_EPI - 1.0) / (IOR_EPI + 1.0);
+    float F0 = (IOR - 1.0) / (IOR + 1.0);
     F0 *= F0;
     vec3 F = vec3(0.0);
     vec3 H = normal;
@@ -167,13 +167,12 @@ void PS_Obj(VertexOutput IN) {
         Lo += sampleEnv(reflDir) * throughput / SAMPLE_COUNT;
     }
 
-    vec3 refrDir = refract(dir, H, 1.0/IOR_EPI);
+    vec3 refrDir = refract(dir, H, 1.0/IOR);
     float refrDotH = dot(refrDir, H);
     if (refrDotH < 0.0) {
-      if (ENABLE_SSS) {
-        
-        // float cosRefrDirNormal = -dot(normal, refrDir);
-        float epidermisPathLength = EPI_DEPTH;// / cosRefrDirNormal;
+      if (ENABLE_SSS_EPI) {
+        float cosRefrDirNormal = -dot(H, refrDir);
+        float epidermisPathLength = EPI_DEPTH / cosRefrDirNormal;
 
         vec3 epiAbs = EPI_ABS_COLOR.rgb;
         vec3 sssThroughput = exp(-epiAbs * epidermisPathLength);
@@ -191,8 +190,8 @@ void PS_Obj(VertexOutput IN) {
           }
         }
 
-        // float cosRefrReflDirNormal = abs(dot(normal, refrReflDir));
-        epidermisPathLength = EPI_DEPTH;// / cosRefrReflDirNormal;
+        float cosRefrReflDirNormal = abs(dot(H, refrReflDir));
+        epidermisPathLength = EPI_DEPTH / cosRefrReflDirNormal;
         sssThroughput *= exp(-epiAbs * epidermisPathLength);
 
         Lo += max(1.0.xxx - F, 0.0.xxx) * sssThroughput * sampleEnv(refrReflDir) / SAMPLE_COUNT;
