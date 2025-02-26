@@ -11,6 +11,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -38,6 +41,7 @@ Project::Project(
       m_perspectiveCamera(),
       m_audioInput(),
       m_pAudio(nullptr),
+      m_pendingSaveImage(std::nullopt),
       m_bHasDynamicData(false),
       m_failedShaderCompile(false),
       m_shaderCompileErrMsg() {
@@ -656,6 +660,37 @@ void Project::tick(Application& app, const FrameContext& frame) {
             return true;
           }
         }
+        for (const auto& saveImageButton : m_parsed.m_saveImageButtons) 
+        {
+          if (saveImageButton.uiIdx == uiIdx)
+          {
+            char buf[256];
+            sprintf(buf, "Save Image %s", m_parsed.m_images[saveImageButton.imageIdx].name.c_str());
+            if (ImGui::Button(buf))
+            {
+              OPENFILENAME ofn{};
+              memset(&ofn, 0, sizeof(OPENFILENAME));
+
+              char filename[512] = { 0 };
+
+              ofn.lStructSize = sizeof(ofn);
+              ofn.hwndOwner = glfwGetWin32Window(app.getWindow());
+              ofn.lpstrFile = filename;
+              ofn.lpstrFile[0] = '\0';
+              ofn.nMaxFile = sizeof(filename);
+              ofn.lpstrFilter = "PNG\0*.png\0\0";
+              ofn.nFilterIndex = 1;
+              ofn.lpstrFileTitle = NULL;
+              ofn.nMaxFileTitle = 0;
+              ofn.lpstrInitialDir = NULL;
+              ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+              if (GetSaveFileName(&ofn)) {
+                m_pendingSaveImage = { std::string(filename), saveImageButton.imageIdx };
+              }
+            }
+          }
+        }
         return false;
       };
       while (drawUiElem()) {
@@ -687,6 +722,29 @@ void Project::draw(
     VkCommandBuffer commandBuffer,
     const GlobalHeap& heap,
     const FrameContext& frame) {
+
+  if (m_pendingSaveImage)
+  {
+    auto& img = m_images[m_pendingSaveImage->imageIdx].image;
+    // TODO: assumes r8g8b8a8_unorm, generalize
+    uint32_t width = img.getOptions().width;
+    uint32_t height = img.getOptions().height;
+    size_t byteSize = width * height * 4;
+    BufferAllocation* pStaging = new BufferAllocation(BufferUtilities::createStagingBuffer(byteSize));
+    
+    img.copyMipToBuffer(commandBuffer, pStaging->getBuffer(), 0, 0);
+
+    app.addDeletiontask({ 
+      [pStaging, width, height, byteSize, fileName = m_pendingSaveImage->m_saveFileName]() {
+        const std::byte* mapped = reinterpret_cast<const std::byte*>(pStaging->mapMemory());
+        Utilities::savePng(fileName, width, height, gsl::span(mapped, byteSize));
+        pStaging->unmapMemory();
+        delete pStaging;
+      }, 
+      app.getCurrentFrameRingBufferIndex() });
+    
+    m_pendingSaveImage = std::nullopt;
+  }
 
   VkDescriptorSet sets[] = {
       heap.getDescriptorSet(),

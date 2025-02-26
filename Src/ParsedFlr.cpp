@@ -275,22 +275,30 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       PARSER_VERIFY(name, "Could not parse name for color_picker.");
 
       auto r = p.parseFloat();
-      PARSER_VERIFY(r, "Could not parse default color component R for color_picker.");
+      PARSER_VERIFY(
+          r,
+          "Could not parse default color component R for color_picker.");
       p.parseWhitespace();
 
       auto g = p.parseFloat();
-      PARSER_VERIFY(g, "Could not parse default color component G for color_picker.");
+      PARSER_VERIFY(
+          g,
+          "Could not parse default color component G for color_picker.");
       p.parseWhitespace();
 
       auto b = p.parseFloat();
-      PARSER_VERIFY(b, "Could not parse default color component B for color_picker.");
+      PARSER_VERIFY(
+          b,
+          "Could not parse default color component B for color_picker.");
       p.parseWhitespace();
 
       auto a = p.parseFloat();
-      PARSER_VERIFY(a, "Could not parse default color component A for color_picker.");
+      PARSER_VERIFY(
+          a,
+          "Could not parse default color component A for color_picker.");
 
       m_colorPickers.push_back(
-        { std::string(*name), glm::vec4(*r, *g, *b, *a), uiIdx++, nullptr});
+          {std::string(*name), glm::vec4(*r, *g, *b, *a), uiIdx++, nullptr});
 
       break;
     }
@@ -301,6 +309,28 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       PARSER_VERIFY(value, "Could not parse default value for checkbox.");
 
       m_checkboxes.push_back({std::string(*name), *value, uiIdx++, nullptr});
+
+      break;
+    }
+    case I_SAVE_IMAGE_BUTTON: {
+      auto imageName = p.parseName();
+      PARSER_VERIFY(
+          imageName,
+          "Could not parse image name in save_image_button instruction.");
+      auto imageIdx = findIndexByName(m_images, *imageName);
+      PARSER_VERIFY(
+          imageIdx,
+          "Could not find specified image in save_image_button "
+          "instruction.");
+
+      VkFormat format = m_images[*imageIdx].createOptions.format;
+      PARSER_VERIFY(
+          format == VK_FORMAT_R8G8B8A8_UNORM,
+          "Saving images is only supported for VK_FORMAT_R8G8B8A8_UNORM "
+          "currently.");
+      m_images[*imageIdx].createOptions.usage |=
+          VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+      m_saveImageButtons.push_back({*imageIdx, uiIdx++});
 
       break;
     }
@@ -873,7 +903,9 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       // TODO: formalize options here
       bool bSrgb = false;
       if (auto option = p.parseName()) {
-        PARSER_VERIFY(!option->compare("srgb"), "Unknown option provided with texture_file instruction.");
+        PARSER_VERIFY(
+            !option->compare("srgb"),
+            "Unknown option provided with texture_file instruction.");
         bSrgb = true;
       }
 
@@ -892,8 +924,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       texFile.createOptions = ImageOptions{};
       texFile.createOptions.width = texFile.loadedImage.width;
       texFile.createOptions.height = texFile.loadedImage.height;
-      if (bSrgb)
-      {
+      if (bSrgb) {
         texFile.createOptions.format = VK_FORMAT_R8G8B8A8_SRGB;
       }
 

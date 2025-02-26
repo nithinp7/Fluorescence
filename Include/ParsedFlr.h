@@ -77,6 +77,12 @@ struct ParsedFlr {
   };
   std::vector<Checkbox> m_checkboxes;
 
+  struct SaveImageButton {
+    uint32_t imageIdx;
+    uint32_t uiIdx;
+  };
+  std::vector<SaveImageButton> m_saveImageButtons;
+
   struct StructDef {
     std::string name;
     std::string body;
@@ -221,6 +227,7 @@ struct ParsedFlr {
     I_SLIDER_FLOAT,
     I_COLOR_PICKER,
     I_CHECKBOX,
+    I_SAVE_IMAGE_BUTTON,
     I_STRUCT,
     I_STRUCT_SIZE,
     I_STRUCTURED_BUFFER,
@@ -258,6 +265,7 @@ struct ParsedFlr {
       "slider_float",
       "color_picker",
       "checkbox",
+      "save_image_button",
       "struct",
       "struct_size",
       "structured_buffer",

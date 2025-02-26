@@ -21,8 +21,6 @@
 #include <vulkan/vulkan.h>
 
 #define GLFW_EXPOSE_NATIVE_WIN32
-// #define GLFW_EXPOSE_NATIVE_WGL
-// #define GLFW_NATIVE_INCLUDE_NONE
 #include <GLFW/glfw3native.h>
 #include <basetsd.h>
 #include <commdlg.h>

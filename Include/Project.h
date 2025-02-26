@@ -96,6 +96,12 @@ private:
 
   std::unique_ptr<Audio> m_pAudio;
 
+  struct PendingSaveImage {
+    std::string m_saveFileName;
+    uint32_t imageIdx;
+  };
+  std::optional<PendingSaveImage> m_pendingSaveImage;
+  
   bool m_bHasDynamicData;
 
   bool m_failedShaderCompile;
