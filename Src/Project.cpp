@@ -730,9 +730,10 @@ void Project::draw(
     uint32_t width = img.getOptions().width;
     uint32_t height = img.getOptions().height;
     size_t byteSize = width * height * 4;
-    BufferAllocation* pStaging = new BufferAllocation(BufferUtilities::createStagingBuffer(byteSize));
+    BufferAllocation* pStaging = new BufferAllocation(BufferUtilities::createStagingBufferForDownload(byteSize));
     
     img.copyMipToBuffer(commandBuffer, pStaging->getBuffer(), 0, 0);
+    img.transitionLayout(commandBuffer, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_NONE, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
 
     app.addDeletiontask({ 
       [pStaging, width, height, byteSize, fileName = m_pendingSaveImage->m_saveFileName]() {
@@ -789,7 +790,7 @@ void Project::draw(
       const auto& passDesc = m_parsed.m_renderPasses[task.idx];
       auto& drawPass = m_drawPasses[task.idx];
 
-      for (const auto& attachmentRef : passDesc.attachments) {
+     /* for (const auto& attachmentRef : passDesc.attachments) {
         auto& imgRsc = m_images[attachmentRef.imageIdx];
         if ((imgRsc.image.getOptions().aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0) {
           imgRsc.image.transitionLayout(
@@ -806,7 +807,7 @@ void Project::draw(
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         }
-      }
+      } */
 
       {
         ActiveRenderPass pass = drawPass.m_renderPass.begin(
@@ -834,24 +835,8 @@ void Project::draw(
         }
       }
 
-      for (const auto& attachmentRef : passDesc.attachments) {
-        auto& imgRsc = m_images[attachmentRef.imageIdx];
-        if ((imgRsc.image.getOptions().aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0) {
-          imgRsc.image.transitionLayout(
-            commandBuffer,
-            VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
-        }
-        else {
-          imgRsc.image.transitionLayout(
-            commandBuffer,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_ACCESS_SHADER_READ_BIT,
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-        }
-      }
+      for (const auto& attachmentRef : passDesc.attachments)
+        m_images[attachmentRef.imageIdx].image.clearLayout();
 
       break;
     }

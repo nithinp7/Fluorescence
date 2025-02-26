@@ -19,7 +19,7 @@ struct_size: 8
 display_image DisplayImage
 
 image SaveImage: SCREEN_WIDTH SCREEN_HEIGHT rgba8
-save_image_button: SaveImage 
+save_image_button: SaveImage
 
 render_pass DISPLAY_PASS:
   store_attachments: outDisplay=DisplayImage outSave=SaveImage

@@ -329,7 +329,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           "Saving images is only supported for VK_FORMAT_R8G8B8A8_UNORM "
           "currently.");
       m_images[*imageIdx].createOptions.usage |=
-          VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+          VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
       m_saveImageButtons.push_back({*imageIdx, uiIdx++});
 
       break;
