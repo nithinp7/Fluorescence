@@ -8,17 +8,31 @@ The application is built on top of my rendering engine, [Althea](https://github.
 
 ## Demo Projects
 
+### WIP Skin Rendering Project / BRDF experiments
+
+
+<p float="left">
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/WIP_Skin.jpg" height=400px/>
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/IceMan.png" height=400px/>
+</p>
+
+### Diffusion Profile Generator
+
+<p float="left">
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Projects/Skin/DiffusionProfile.png" height=400px/>
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/DiffusionSpectrum.png" height=400px/>
+</p>
+
 ### Stable Fluids - 3D Implementation + Raymarched Lighting
 
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/StableFluids3D_Raymarched.gif" height=800px/>
+
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Smoke3D.jpg" height=400px/>
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Smoke3D_2.png" height=400px/>
+
 
 ### Stable Fluids - 2D Implementation
 
 <img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/StableFluids2D.gif" width=800px/>
-
-### Voxel Raymarching
-
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Frosted.png" height=600px/>
 
 ### Atmospheric Scattering
 
