@@ -2,9 +2,12 @@
 enable_feature: perspective_camera
 
 checkbox ENABLE_REFL: true
+checkbox ENABLE_REFL_EPI: true
 checkbox ENABLE_SSS_EPI: true
 checkbox ENABLE_SSS_DER: true
 checkbox ENABLE_SEE_THROUGH: false
+
+slider_float SSS_RADIUS: 0.01 0.0001 0.02
 
 slider_uint SAMPLE_COUNT: 2 1 100
 slider_float TSR_SPEED: 0.098 0.00 1.0
@@ -35,6 +38,8 @@ texture_file HeadBumpTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshea
 texture_file HeadLambertianTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/lambertian.jpg" srgb
 #texture_file HeadLambertianTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/lambertian2.png" srgb
 texture_file HeadSpecTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/spec.png"
+
+texture_file DiffusionProfileTexture: "C:/Users/nithi/Documents/Code/Fluorescence/Projects/Skin/DiffusionProfile.png" 
 
 struct VertexOutput {
   vec4 position;

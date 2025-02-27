@@ -1,7 +1,7 @@
 #version 460 core
 
-#define SCREEN_WIDTH 1440
-#define SCREEN_HEIGHT 1280
+#define SCREEN_WIDTH 2560
+#define SCREEN_HEIGHT 1334
 
 struct VertexOutput {
   vec4 position;
@@ -16,17 +16,19 @@ layout(set=1,binding=3, r32f) uniform image2D PrevDepthImage;
 layout(set=1,binding=4) uniform sampler2D HeadBumpTexture;
 layout(set=1,binding=5) uniform sampler2D HeadLambertianTexture;
 layout(set=1,binding=6) uniform sampler2D HeadSpecTexture;
-layout(set=1,binding=7) uniform sampler2D DisplayTexture;
-layout(set=1,binding=8) uniform sampler2D PrevDisplayTexture;
-layout(set=1,binding=9) uniform sampler2D DepthTexture;
-layout(set=1,binding=10) uniform sampler2D PrevDepthTexture;
+layout(set=1,binding=7) uniform sampler2D DiffusionProfileTexture;
+layout(set=1,binding=8) uniform sampler2D DisplayTexture;
+layout(set=1,binding=9) uniform sampler2D PrevDisplayTexture;
+layout(set=1,binding=10) uniform sampler2D DepthTexture;
+layout(set=1,binding=11) uniform sampler2D PrevDepthTexture;
 
-layout(set=1, binding=11) uniform _UserUniforms {
+layout(set=1, binding=12) uniform _UserUniforms {
 	vec4 HEMOGLOBIN_COLOR;
 	vec4 EPI_ABS_COLOR;
 	uint SAMPLE_COUNT;
 	uint BACKGROUND;
 	uint RENDER_MODE;
+	float SSS_RADIUS;
 	float TSR_SPEED;
 	float REPROJ_TOLERANCE;
 	float IOR;
@@ -39,6 +41,7 @@ layout(set=1, binding=11) uniform _UserUniforms {
 	float LIGHT_PHI;
 	float LIGHT_STRENGTH;
 	bool ENABLE_REFL;
+	bool ENABLE_REFL_EPI;
 	bool ENABLE_SSS_EPI;
 	bool ENABLE_SSS_DER;
 	bool ENABLE_SEE_THROUGH;
@@ -46,7 +49,7 @@ layout(set=1, binding=11) uniform _UserUniforms {
 
 #include <Fluorescence.glsl>
 
-layout(set=1, binding=12) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=13) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 

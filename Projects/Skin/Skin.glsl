@@ -10,6 +10,13 @@ vec3 computeDir(vec2 uv) {
 	return (camera.inverseView * vec4(normalize(target.xyz), 0)).xyz;
 }
 
+vec3 computePrevDir(vec2 uv) {
+	vec2 d = uv * 2.0 - 1.0;
+
+	vec4 target = camera.inverseProjection * vec4(d, 1.0.xx);
+	return (camera.prevInverseView * vec4(normalize(target.xyz), 0)).xyz;
+}
+
 vec3 sampleEnv(vec3 dir) {
   float cosphi = cos(LIGHT_PHI); float sinphi = sin(LIGHT_PHI);
   float costheta = cos(LIGHT_THETA); float sintheta = sin(LIGHT_THETA);
@@ -170,12 +177,32 @@ void PS_Obj(VertexOutput IN) {
     vec3 refrDir = refract(dir, H, 1.0/IOR);
     float refrDotH = dot(refrDir, H);
     if (refrDotH < 0.0) {
-      if (ENABLE_SSS_EPI) {
+
+      if (ENABLE_SSS_EPI)
+      {
+        vec2 xi = randVec2(seed);
+        vec3 profile = texture(DiffusionProfileTexture, xi).rgb;
+        vec2 neighborUv = prevScreenUv + SSS_RADIUS * (2.0 * xi - 1.0.xx);
+        // float neighborDepth = reconstructLinearDepth(texture(PrevDepthTexture, neighborUv).x);
+        vec3 neighborIrradiance = texture(PrevDisplayTexture, neighborUv).rgb;
+        Lo += (1.0 - tsrSpeed) * max(1.0.xxx - F, 0.0.xxx) * neighborIrradiance / SAMPLE_COUNT;
+        // TODO depth-reject neighbor-samples
+        // float dPrevRaw = texture(PrevDepthTexture, prevScreenUv).x;
+        // float dPrev = reconstructLinearDepth(dPrevRaw);
+        // float dPrev_expected = reconstructLinearDepth(IN.prevPosition.z / IN.prevPosition.w);
+
+        // vec3 neighborSample = texture(PrevDisplayTexture, prevScreenUv).rgb;
+      }
+
+      if (ENABLE_REFL_EPI) {
         float cosRefrDirNormal = -dot(H, refrDir);
         float epidermisPathLength = EPI_DEPTH / cosRefrDirNormal;
 
         vec3 epiAbs = EPI_ABS_COLOR.rgb;
         vec3 sssThroughput = exp(-epiAbs * epidermisPathLength);
+
+        // vec3 diffusionAmount = texture(DiffusionProfileTexture, randVec2(seed)).rgb;
+        // sssThroughput *= diffusionAmount;
 
         vec3 HEMOGLOBIN_DIFFUSE = HEMOGLOBIN_COLOR.rgb * HEMOGLOBIN_SCALE;
         vec3 refrReflDir;
