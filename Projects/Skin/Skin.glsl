@@ -139,7 +139,7 @@ void PS_Obj(VertexOutput IN) {
   vec3 normal = normalize(tangentSpace * bumpNormal);
 
   float spec = texture(HeadSpecTexture, IN.uv).x;
-  float roughness = ROUGHNESS * (0.5 - spec);
+  float roughness = clamp(ROUGHNESS - spec, 0.1, 0.8);
   
   vec3 diffuse = texture(HeadLambertianTexture, IN.uv).rgb;
 
@@ -182,7 +182,7 @@ void PS_Obj(VertexOutput IN) {
       {
         vec2 xi = randVec2(seed);
         vec3 profile = texture(DiffusionProfileTexture, xi).rgb;
-        vec2 neighborUv = prevScreenUv + SSS_RADIUS * (2.0 * xi - 1.0.xx);
+        vec2 neighborUv = prevScreenUv + 0.01 * SSS_RADIUS * (2.0 * xi - 1.0.xx);
         // float neighborDepth = reconstructLinearDepth(texture(PrevDepthTexture, neighborUv).x);
         vec3 neighborIrradiance = texture(PrevDisplayTexture, neighborUv).rgb;
         Lo += (1.0 - tsrSpeed) * max(1.0.xxx - F, 0.0.xxx) * neighborIrradiance / SAMPLE_COUNT;

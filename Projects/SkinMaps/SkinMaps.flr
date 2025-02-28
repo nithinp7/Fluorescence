@@ -1,0 +1,38 @@
+
+
+slider_uint MODE: 0 0 3
+slider_float SLICE: 0.5 0.0 1.0
+slider_float SCALE: 10.0 0.1 100.0
+
+slider_float PAN_X: 0.5 0.0 1.0
+slider_float PAN_Y: 0.5 0.0 1.0
+slider_float ZOOM: 1.0 0.5 25.0
+
+slider_float CURVATURE_RADIUS: 0.001 0.001 0.01
+
+obj_model HeadModel: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/head.obj"
+texture_file HeadBumpTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/bump.png"
+texture_file HeadLambertianTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/lambertian.jpg" srgb
+
+struct VertexOutput {
+  vec2 uv;
+};
+struct_size: 8
+
+display_image DisplayImage
+
+checkbox FIX_UV: false
+image SaveImage: 6000 6000 rgba8
+save_image_button: SaveImage
+
+render_pass DISPLAY_PASS:
+  store_attachments: outDisplay=DisplayImage
+
+  draw: VS_DrawMap PS_DrawMap 3 1
+    vertex_output: VertexOutput
+
+render_pass SAVE_PASS:
+  store_attachments: outSave=SaveImage
+
+  draw: VS_SaveMap PS_SaveMap 3 1
+    vertex_output: VertexOutput
