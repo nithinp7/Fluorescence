@@ -231,6 +231,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       auto max = p.parseUint();
       PARSER_VERIFY(value, "Could not parse max value for uint slider.");
 
+      m_uiElements.push_back({ UET_SLIDER_UINT, (uint32_t)m_sliderUints.size() });
       m_sliderUints.push_back(
           {std::string(*name), *value, *min, *max, uiIdx++, nullptr});
       break;
@@ -249,6 +250,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       auto max = p.parseInt();
       PARSER_VERIFY(value, "Could not parse max value for int slider.");
 
+      m_uiElements.push_back({ UET_SLIDER_INT, (uint32_t)m_sliderInts.size() });
       m_sliderInts.push_back(
           {std::string(*name), *value, *min, *max, uiIdx++, nullptr});
       break;
@@ -267,6 +269,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       auto max = p.parseFloat();
       PARSER_VERIFY(value, "Could not parse max value for float slider.");
 
+      m_uiElements.push_back({ UET_SLIDER_FLOAT, (uint32_t)m_sliderFloats.size() });
       m_sliderFloats.push_back(
           {std::string(*name), *value, *min, *max, uiIdx++, nullptr});
       break;
@@ -297,6 +300,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           a,
           "Could not parse default color component A for color_picker.");
 
+      m_uiElements.push_back({ UET_COLOR_PICKER, (uint32_t)m_colorPickers.size() });
       m_colorPickers.push_back(
           {std::string(*name), glm::vec4(*r, *g, *b, *a), uiIdx++, nullptr});
 
@@ -308,6 +312,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       auto value = p.parseBool();
       PARSER_VERIFY(value, "Could not parse default value for checkbox.");
 
+      m_uiElements.push_back({ UET_CHECKBOX, (uint32_t)m_checkboxes.size() });
       m_checkboxes.push_back({std::string(*name), *value, uiIdx++, nullptr});
 
       break;
@@ -330,8 +335,24 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           "currently.");
       m_images[*imageIdx].createOptions.usage |=
           VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+      m_uiElements.push_back({ UET_SAVE_IMAGE_BUTTON, (uint32_t)m_saveImageButtons.size() });
       m_saveImageButtons.push_back({*imageIdx, uiIdx++});
 
+      break;
+    }
+    case I_SEPARATOR: {
+      m_uiElements.push_back({ UET_SEPARATOR, ~0ul });
+      break;
+    }
+    case I_DROPDOWN_START: {
+      PARSER_VERIFY(name, "Could not parse ui dropdown name.");
+      m_uiElements.push_back({ UET_DROPDOWN_START, (uint32_t)m_genericNamedElements.size() });
+      m_genericNamedElements.push_back({ std::string(*name) });
+      break;
+    }
+    case I_DROPDOWN_END: {
+      m_uiElements.push_back({ UET_DROPDOWN_END, ~0ul });
       break;
     }
     case I_STRUCT: {

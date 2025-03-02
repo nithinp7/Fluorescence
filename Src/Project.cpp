@@ -85,11 +85,12 @@ Project::Project(
 
     rsc.image = Image(app, desc.createOptions);
     bool bIsDepth = (rsc.image.getOptions().usage &
-      VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
+                     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
 
     ImageViewOptions viewOptions{};
     viewOptions.format = rsc.image.getOptions().format;
-    viewOptions.aspectFlags = bIsDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+    viewOptions.aspectFlags =
+        bIsDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
     rsc.view = ImageView(app, rsc.image, viewOptions);
 
     SamplerOptions samplerOptions{};
@@ -143,7 +144,8 @@ Project::Project(
 
     m_dynamicDataBuffer.resize(size);
     for (auto& cpicker : m_parsed.m_colorPickers) {
-      cpicker.pValue = reinterpret_cast<float*>(m_dynamicDataBuffer.data() + offset);
+      cpicker.pValue =
+          reinterpret_cast<float*>(m_dynamicDataBuffer.data() + offset);
       cpicker.pValue[0] = cpicker.defaultValue.x;
       cpicker.pValue[1] = cpicker.defaultValue.y;
       cpicker.pValue[2] = cpicker.defaultValue.z;
@@ -355,7 +357,6 @@ Project::Project(
         slot++);
   }
 
-
   // auto-gen pixel shader block, pre-include of user-file
   {
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
@@ -366,11 +367,11 @@ Project::Project(
         for (const auto& attachmentRef : pass.attachments) {
           const auto& img = m_images[attachmentRef.imageIdx];
           if ((img.image.getOptions().usage &
-            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
+               VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
             CODE_APPEND(
-              "layout(location = %d) out vec4 %s;\n",
-              colorAttachmentIdx++,
-              attachmentRef.aliasName.c_str());
+                "layout(location = %d) out vec4 %s;\n",
+                colorAttachmentIdx++,
+                attachmentRef.aliasName.c_str());
           }
         }
         CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
@@ -427,7 +428,7 @@ Project::Project(
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
         CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
-        
+
         if (draw.vertexOutputStructIdx >= 0) {
           CODE_APPEND(
               "layout(location = 0) in %s _VERTEX_INPUT;\n",
@@ -485,7 +486,7 @@ Project::Project(
     subpassBuilders.reserve(pass.draws.size());
 
     VkClearValue colorClear;
-    colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    colorClear.color = {{0.0f, 0.0f, 0.0f, 0.0f}};
     VkClearValue depthClear;
     depthClear.depthStencil = {1.0f, 0};
 
@@ -604,97 +605,112 @@ void Project::tick(Application& app, const FrameContext& frame) {
 
   if (m_bHasDynamicData && !app.getInputManager().getMouseCursorHidden()) {
     if (ImGui::Begin("Options", false)) {
-      // TODO: cache UI order to avoid linear scans each time...
-      uint32_t uiIdx = 0;
       char nameBuf[128];
 
-      auto drawUiElem = [&]() -> bool {
-        for (const auto& uslider : m_parsed.m_sliderUints) {
-          if (uslider.uiIdx == uiIdx) {
-            ImGui::Text(uslider.name.c_str());
-            sprintf(nameBuf, "##%s_%u", uslider.name.c_str(), uiIdx);
-            int v = static_cast<int>(*uslider.pValue);
-            if (ImGui::SliderInt(nameBuf, &v, uslider.min, uslider.max)) {
-              *uslider.pValue = static_cast<uint32_t>(v);
+      int highestLayerOpen = 0;
+      int currentLayer = 0;
+
+      for (const auto& ui : m_parsed.m_uiElements) {
+        if (ui.type == ParsedFlr::UET_DROPDOWN_START) {
+          const auto& name = m_parsed.m_genericNamedElements[ui.idx].name;
+          if (highestLayerOpen == currentLayer &&
+              ImGui::CollapsingHeader(name.c_str()))
+            highestLayerOpen++;
+          currentLayer++;
+        } else if (ui.type == ParsedFlr::UET_DROPDOWN_END) {
+          if (highestLayerOpen == currentLayer)
+            highestLayerOpen--;
+          currentLayer--;
+        }
+
+        if (currentLayer > highestLayerOpen)
+          continue;
+
+        switch (ui.type) {
+        case ParsedFlr::UET_SLIDER_UINT: {
+          const auto& uslider = m_parsed.m_sliderUints[ui.idx];
+          ImGui::Text(uslider.name.c_str());
+          sprintf(nameBuf, "##%s_%u", uslider.name.c_str(), ui.idx);
+          int v = static_cast<int>(*uslider.pValue);
+          if (ImGui::SliderInt(nameBuf, &v, uslider.min, uslider.max)) {
+            *uslider.pValue = static_cast<uint32_t>(v);
+          }
+          break;
+        }
+        case ParsedFlr::UET_SLIDER_INT: {
+          const auto& islider = m_parsed.m_sliderInts[ui.idx];
+          ImGui::Text(islider.name.c_str());
+          sprintf(nameBuf, "##%s_%u", islider.name.c_str(), ui.idx);
+          ImGui::SliderInt(nameBuf, islider.pValue, islider.min, islider.max);
+          break;
+        }
+        case ParsedFlr::UET_SLIDER_FLOAT: {
+          const auto& fslider = m_parsed.m_sliderFloats[ui.idx];
+          ImGui::Text(fslider.name.c_str());
+          sprintf(nameBuf, "##%s_%u", fslider.name.c_str(), ui.idx);
+          ImGui::SliderFloat(nameBuf, fslider.pValue, fslider.min, fslider.max);
+          break;
+        }
+        case ParsedFlr::UET_COLOR_PICKER: {
+          const auto& cpicker = m_parsed.m_colorPickers[ui.idx];
+          ImGui::Text(cpicker.name.c_str());
+          sprintf(nameBuf, "##%s_%u", cpicker.name.c_str(), ui.idx);
+          ImGui::ColorPicker4(nameBuf, cpicker.pValue);
+          break;
+        }
+        case ParsedFlr::UET_CHECKBOX: {
+          const auto& checkbox = m_parsed.m_checkboxes[ui.idx];
+          ImGui::Text(checkbox.name.c_str());
+          sprintf(nameBuf, "##%s_%u", checkbox.name.c_str(), ui.idx);
+          bool bValue = (bool)*checkbox.pValue;
+          if (ImGui::Checkbox(nameBuf, &bValue))
+            *checkbox.pValue = (uint32_t)bValue;
+          break;
+        }
+        case ParsedFlr::UET_SAVE_IMAGE_BUTTON: {
+          const auto& saveImageButton = m_parsed.m_saveImageButtons[ui.idx];
+          char buf[256];
+          sprintf(
+              buf,
+              "Save PNG: %s",
+              m_parsed.m_images[saveImageButton.imageIdx].name.c_str());
+          if (ImGui::Button(buf)) {
+            OPENFILENAME ofn{};
+            memset(&ofn, 0, sizeof(OPENFILENAME));
+
+            char filename[512] = {0};
+
+            ofn.lStructSize = sizeof(ofn);
+            ofn.hwndOwner = glfwGetWin32Window(app.getWindow());
+            ofn.lpstrFile = filename;
+            ofn.lpstrFile[0] = '\0';
+            ofn.nMaxFile = sizeof(filename);
+            ofn.lpstrFilter = "PNG\0*.png\0\0";
+            ofn.nFilterIndex = 1;
+            ofn.lpstrFileTitle = NULL;
+            ofn.nMaxFileTitle = 0;
+            ofn.lpstrInitialDir = NULL;
+            ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+            if (GetSaveFileName(&ofn)) {
+              m_pendingSaveImage = {
+                  std::string(filename),
+                  saveImageButton.imageIdx};
             }
-            return true;
           }
-        }
-        for (const auto& islider : m_parsed.m_sliderInts) {
-          if (islider.uiIdx == uiIdx) {
-            ImGui::Text(islider.name.c_str());
-            sprintf(nameBuf, "##%s_%u", islider.name.c_str(), uiIdx);
-            ImGui::SliderInt(nameBuf, islider.pValue, islider.min, islider.max);
-            return true;
-          }
-        }
-        for (const auto& fslider : m_parsed.m_sliderFloats) {
-          if (fslider.uiIdx == uiIdx) {
-            ImGui::Text(fslider.name.c_str());
-            sprintf(nameBuf, "##%s_%u", fslider.name.c_str(), uiIdx);
-            ImGui::SliderFloat(
-                nameBuf,
-                fslider.pValue,
-                fslider.min,
-                fslider.max);
-            return true;
-          }
-        }
-        for (const auto& cpicker : m_parsed.m_colorPickers) {
-          if (cpicker.uiIdx == uiIdx) {
-            ImGui::Text(cpicker.name.c_str());
-            sprintf(nameBuf, "##%s_%u", cpicker.name.c_str(), uiIdx);
-            ImGui::ColorPicker4(
-              nameBuf,
-              cpicker.pValue);
-            return true;
-          }
-        }
-        for (const auto& checkbox : m_parsed.m_checkboxes) {
-          if (checkbox.uiIdx == uiIdx) {
-            ImGui::Text(checkbox.name.c_str());
-            sprintf(nameBuf, "##%s_%u", checkbox.name.c_str(), uiIdx);
-            bool bValue = (bool)*checkbox.pValue;
-            if (ImGui::Checkbox(nameBuf, &bValue))
-              *checkbox.pValue = (uint32_t)bValue;
-            return true;
-          }
-        }
-        for (const auto& saveImageButton : m_parsed.m_saveImageButtons) 
-        {
-          if (saveImageButton.uiIdx == uiIdx)
-          {
-            char buf[256];
-            sprintf(buf, "Save Image %s", m_parsed.m_images[saveImageButton.imageIdx].name.c_str());
-            if (ImGui::Button(buf))
-            {
-              OPENFILENAME ofn{};
-              memset(&ofn, 0, sizeof(OPENFILENAME));
 
-              char filename[512] = { 0 };
-
-              ofn.lStructSize = sizeof(ofn);
-              ofn.hwndOwner = glfwGetWin32Window(app.getWindow());
-              ofn.lpstrFile = filename;
-              ofn.lpstrFile[0] = '\0';
-              ofn.nMaxFile = sizeof(filename);
-              ofn.lpstrFilter = "PNG\0*.png\0\0";
-              ofn.nFilterIndex = 1;
-              ofn.lpstrFileTitle = NULL;
-              ofn.nMaxFileTitle = 0;
-              ofn.lpstrInitialDir = NULL;
-              ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-
-              if (GetSaveFileName(&ofn)) {
-                m_pendingSaveImage = { std::string(filename), saveImageButton.imageIdx };
-              }
-            }
-          }
+          break;
         }
-        return false;
-      };
-      while (drawUiElem()) {
-        uiIdx++;
+        case ParsedFlr::UET_SEPARATOR: {
+          ImGui::Separator();
+          break;
+        }
+
+        // already handled
+        case ParsedFlr::UET_DROPDOWN_START:
+        case ParsedFlr::UET_DROPDOWN_END: 
+          break;
+        };
       }
     }
 
@@ -723,27 +739,40 @@ void Project::draw(
     const GlobalHeap& heap,
     const FrameContext& frame) {
 
-  if (m_pendingSaveImage)
-  {
+  if (m_pendingSaveImage) {
     auto& img = m_images[m_pendingSaveImage->imageIdx].image;
     // TODO: assumes r8g8b8a8_unorm, generalize
     uint32_t width = img.getOptions().width;
     uint32_t height = img.getOptions().height;
     size_t byteSize = width * height * 4;
-    BufferAllocation* pStaging = new BufferAllocation(BufferUtilities::createStagingBufferForDownload(byteSize));
-    
-    img.copyMipToBuffer(commandBuffer, pStaging->getBuffer(), 0, 0);
-    img.transitionLayout(commandBuffer, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_NONE, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+    BufferAllocation* pStaging = new BufferAllocation(
+        BufferUtilities::createStagingBufferForDownload(byteSize));
 
-    app.addDeletiontask({ 
-      [pStaging, width, height, byteSize, fileName = m_pendingSaveImage->m_saveFileName]() {
-        const std::byte* mapped = reinterpret_cast<const std::byte*>(pStaging->mapMemory());
-        Utilities::savePng(fileName, width, height, gsl::span(mapped, byteSize));
-        pStaging->unmapMemory();
-        delete pStaging;
-      }, 
-      app.getCurrentFrameRingBufferIndex() });
-    
+    img.copyMipToBuffer(commandBuffer, pStaging->getBuffer(), 0, 0);
+    img.transitionLayout(
+        commandBuffer,
+        VK_IMAGE_LAYOUT_GENERAL,
+        VK_ACCESS_NONE,
+        VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+
+    app.addDeletiontask(
+        {[pStaging,
+          width,
+          height,
+          byteSize,
+          fileName = m_pendingSaveImage->m_saveFileName]() {
+           const std::byte* mapped =
+               reinterpret_cast<const std::byte*>(pStaging->mapMemory());
+           Utilities::savePng(
+               fileName,
+               width,
+               height,
+               gsl::span(mapped, byteSize));
+           pStaging->unmapMemory();
+           delete pStaging;
+         },
+         app.getCurrentFrameRingBufferIndex()});
+
     m_pendingSaveImage = std::nullopt;
   }
 
@@ -790,24 +819,23 @@ void Project::draw(
       const auto& passDesc = m_parsed.m_renderPasses[task.idx];
       auto& drawPass = m_drawPasses[task.idx];
 
-     /* for (const auto& attachmentRef : passDesc.attachments) {
-        auto& imgRsc = m_images[attachmentRef.imageIdx];
-        if ((imgRsc.image.getOptions().aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0) {
-          imgRsc.image.transitionLayout(
-            commandBuffer,
-            VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
-        }
-        else {
-          imgRsc.image.transitionLayout(
-            commandBuffer,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-        }
-      } */
+      /* for (const auto& attachmentRef : passDesc.attachments) {
+         auto& imgRsc = m_images[attachmentRef.imageIdx];
+         if ((imgRsc.image.getOptions().aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT)
+       != 0) { imgRsc.image.transitionLayout( commandBuffer,
+             VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
+         }
+         else {
+           imgRsc.image.transitionLayout(
+             commandBuffer,
+             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+         }
+       } */
 
       {
         ActiveRenderPass pass = drawPass.m_renderPass.begin(

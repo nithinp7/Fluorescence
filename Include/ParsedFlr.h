@@ -31,6 +31,28 @@ struct ParsedFlr {
   };
   std::vector<ConstFloat> m_constFloats;
 
+  enum UiElementType : uint8_t {
+    UET_SLIDER_UINT = 0,
+    UET_SLIDER_INT,
+    UET_SLIDER_FLOAT,
+    UET_COLOR_PICKER,
+    UET_CHECKBOX,
+    UET_SAVE_IMAGE_BUTTON,
+    UET_SEPARATOR,
+    UET_DROPDOWN_START,
+    UET_DROPDOWN_END
+  };
+  struct UiElement {
+    UiElementType type;
+    uint32_t idx;
+  };
+  std::vector<UiElement> m_uiElements;
+
+  struct GenericNamedElement {
+    std::string name;
+  };
+  std::vector<GenericNamedElement> m_genericNamedElements;
+
   struct SliderUint {
     std::string name;
     uint32_t defaultValue;
@@ -228,6 +250,9 @@ struct ParsedFlr {
     I_COLOR_PICKER,
     I_CHECKBOX,
     I_SAVE_IMAGE_BUTTON,
+    I_SEPARATOR,
+    I_DROPDOWN_START,
+    I_DROPDOWN_END,
     I_STRUCT,
     I_STRUCT_SIZE,
     I_STRUCTURED_BUFFER,
@@ -266,6 +291,9 @@ struct ParsedFlr {
       "color_picker",
       "checkbox",
       "save_image_button",
+      "ui_separator",
+      "ui_dropdown_start",
+      "ui_dropdown_end",
       "struct",
       "struct_size",
       "structured_buffer",
