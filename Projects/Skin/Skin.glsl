@@ -3,6 +3,15 @@
 #include <Misc/Sampling.glsl>
 #include <Misc/ReconstructPosition.glsl>
 
+
+vec3 sampleEnvMap(vec3 dir) {
+  float yaw = atan(dir.z, dir.x);
+  float pitch = -atan(dir.y, length(dir.xz));
+  vec2 uv = vec2(0.5 * yaw, pitch) / PI + 0.5;
+
+  return textureLod(EnvironmentMap, uv, 0.0).rgb;
+} 
+
 vec3 computeDir(vec2 uv) {
 	vec2 d = uv * 2.0 - 1.0;
 
@@ -52,9 +61,11 @@ vec3 sampleEnv(vec3 dir) {
   } else if (BACKGROUND == 3) {
     float f = n.x + n.y + n.z;
     return max(round(fract(f * c)), 0.2).xxx;
-  } else {
+  } else if (BACKGROUND == 4) {
     float x = 0.5 + 0.5 * dot(dir,L);
     return LIGHT_STRENGTH * x * round(n * c) / c;
+  } else {
+    return sampleEnvMap(dir);
   }
 }
 
@@ -309,8 +320,8 @@ void PS_SkinIrr(VertexOutput IN) {
 
   float NdotV = dot(dir, normal);
 
-  float spec = texture(HeadSpecTexture, IN.uv).x;
-  float roughness = clamp(ROUGHNESS - spec, 0.1, 0.8);
+  float spec = 0.5 * texture(HeadSpecTexture, IN.uv).x;
+  float roughness = clamp(ROUGHNESS - spec, 0.1, 1.0);
   
   vec3 diffuse = texture(HeadLambertianTexture, IN.uv).rgb;
 
@@ -330,12 +341,12 @@ void PS_SkinIrr(VertexOutput IN) {
         vec3 f;
         float pdf;
         {
-          for (int i = 0; i < 1; i++) {
+          for (int i = 0; i < 5; i++) {
             f = sampleMicrofacetBrdf(
               randVec2(seed), -dir, normal,
               diffuse, METALLIC, roughness, 
               reflDir, pdf);
-            if (pdf >= 0.01)
+            if (pdf >= PDF_CUTOFF)
               break;
           }
           if (pdf < PDF_CUTOFF) {
@@ -368,6 +379,7 @@ void PS_SkinIrr(VertexOutput IN) {
 
 void PS_SkinResolve(VertexOutput IN) {
   float diffusionProfileWindow = 0.2;
+
   if (SHOW_PROFILE && IN.uv.x < diffusionProfileWindow && IN.uv.y < diffusionProfileWindow) {
     vec2 uv = IN.uv / diffusionProfileWindow;
     vec3 profile = sampleDiffusionProfile(length(uv - 0.5.xx));

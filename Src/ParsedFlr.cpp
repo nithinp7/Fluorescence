@@ -923,11 +923,18 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
 
       // TODO: formalize options here
       bool bSrgb = false;
+      bool bHdr = false;
       if (auto option = p.parseName()) {
-        PARSER_VERIFY(
-            !option->compare("srgb"),
+        if (!option->compare("srgb")) {
+          bSrgb = true;
+        }
+        else if (!option->compare("hdr")) {
+          bHdr = true;
+        }
+        else {
+          PARSER_VERIFY(false,
             "Unknown option provided with texture_file instruction.");
-        bSrgb = true;
+        }
       }
 
       std::string pathStr(*path);
@@ -937,7 +944,12 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
 
       int texFileIdx = m_textureFiles.size();
       auto& texFile = m_textureFiles.emplace_back();
-      Utilities::loadImage(pathStr, texFile.loadedImage);
+      if (bHdr) {
+        Utilities::loadHdri(pathStr, texFile.loadedImage);
+      }
+      else {
+        Utilities::loadImage(pathStr, texFile.loadedImage);
+      }
       PARSER_VERIFY(
           texFile.loadedImage.data.size() > 0,
           "Could not load specified texture file.");
@@ -947,10 +959,14 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       texFile.createOptions.height = texFile.loadedImage.height;
       if (bSrgb) {
         texFile.createOptions.format = VK_FORMAT_R8G8B8A8_SRGB;
+        assert(texFile.loadedImage.bytesPerChannel == 1);
+      }
+      else if (bHdr) {
+        texFile.createOptions.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+        assert(texFile.loadedImage.bytesPerChannel == 4);
       }
 
       assert(texFile.loadedImage.channels == 4);
-      assert(texFile.loadedImage.bytesPerChannel == 1);
 
       m_textures.push_back({std::string(*name), -1, texFileIdx});
 

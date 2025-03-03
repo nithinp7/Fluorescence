@@ -19,14 +19,15 @@ layout(set=1,binding=6) uniform sampler2D HeadBumpTexture;
 layout(set=1,binding=7) uniform sampler2D HeadLambertianTexture;
 layout(set=1,binding=8) uniform sampler2D DiffusionProfileTexture;
 layout(set=1,binding=9) uniform sampler2D HeadSpecTexture;
-layout(set=1,binding=10) uniform sampler2D DisplayTexture;
-layout(set=1,binding=11) uniform sampler2D PrevDisplayTexture;
-layout(set=1,binding=12) uniform sampler2D DepthTexture;
-layout(set=1,binding=13) uniform sampler2D PrevDepthTexture;
-layout(set=1,binding=14) uniform sampler2D PrevIrradianceTexture;
-layout(set=1,binding=15) uniform sampler2D IrradianceTexture;
+layout(set=1,binding=10) uniform sampler2D EnvironmentMap;
+layout(set=1,binding=11) uniform sampler2D DisplayTexture;
+layout(set=1,binding=12) uniform sampler2D PrevDisplayTexture;
+layout(set=1,binding=13) uniform sampler2D DepthTexture;
+layout(set=1,binding=14) uniform sampler2D PrevDepthTexture;
+layout(set=1,binding=15) uniform sampler2D PrevIrradianceTexture;
+layout(set=1,binding=16) uniform sampler2D IrradianceTexture;
 
-layout(set=1, binding=16) uniform _UserUniforms {
+layout(set=1, binding=17) uniform _UserUniforms {
 	vec4 HEMOGLOBIN_COLOR;
 	vec4 EPI_ABS_COLOR;
 	uint SAMPLE_COUNT;
@@ -61,7 +62,7 @@ layout(set=1, binding=16) uniform _UserUniforms {
 
 #include <Fluorescence.glsl>
 
-layout(set=1, binding=17) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=18) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 

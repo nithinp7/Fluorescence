@@ -3,12 +3,12 @@ enable_feature: perspective_camera
 
 ui_dropdown_start DiffusionProfileSettings
   checkbox SHOW_PROFILE: false
-  slider_float RED_0: 1.0 -1.0 1.0
-  slider_float RED_1: 0.495 0.0 2.0
-  slider_float BLUE_0: 0.579 -1.0 1.0
-  slider_float BLUE_1: 0.232 0.0 2.0
-  slider_float GREEN_0: 1.0 -1.0 1.0
-  slider_float GREEN_1: 0.305 0.0 2.0
+  slider_float RED_0: 0.608 -1.0 1.0
+  slider_float RED_1: 0.523 0.0 2.0
+  slider_float BLUE_0: 0.059 -1.0 1.0
+  slider_float BLUE_1: 0.01 0.0 2.0
+  slider_float GREEN_0: 0.359 -1.0 1.0
+  slider_float GREEN_1: 0.043 0.0 2.0
 ui_dropdown_end
 
 ui_separator
@@ -26,9 +26,9 @@ ui_separator
 ui_dropdown_start SamplingOptions
   slider_float SSS_RADIUS: 0.01 0.01 0.1
 
-  slider_uint SAMPLE_COUNT: 2 1 100
-  slider_float TSR_SPEED: 0.098 0.00 1.0
-  slider_float REPROJ_TOLERANCE: 0.015 0.0 0.5
+  slider_uint SAMPLE_COUNT: 4 1 100
+  slider_float TSR_SPEED: 0.013 0.00 1.0
+  slider_float REPROJ_TOLERANCE: 0.008 0.0 0.5
   slider_float IOR: 1.4 0.1 2.0
 ui_dropdown_end
 
@@ -45,7 +45,7 @@ ui_dropdown_end
 ui_separator
 
 ui_dropdown_start LightSettings
-  slider_uint BACKGROUND: 0 0 4
+  slider_uint BACKGROUND: 5 0 5
   slider_float LIGHT_THETA: 0.0 0.0 8.0
   slider_float LIGHT_PHI: 1.0 -2.0 2.0
   slider_float LIGHT_STRENGTH: 2.5 0.25 10.0
@@ -55,9 +55,9 @@ ui_dropdown_end
 ui_separator
 
 slider_uint RENDER_MODE: 0 0 4
-slider_float BUMP_STRENGTH: 15.0 0.0 100.0
+slider_float BUMP_STRENGTH: 11.11 0.0 100.0
 
-slider_float ROUGHNESS: 0.765 0.01 1.0
+slider_float ROUGHNESS: 0.838 0.01 1.0
 slider_float METALLIC: 0.0 0.0 1.0
 
 obj_model HeadModel: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/head.obj"
@@ -70,6 +70,8 @@ texture_file HeadLambertianTexture: "C:/Users/nithi/Documents/Data/Models/Heads/
 
 texture_file DiffusionProfileTexture: "C:/Users/nithi/Documents/Code/Fluorescence/Projects/Skin/DiffusionProfile.png" 
 texture_file HeadSpecTexture: "C:/Users/nithi/Documents/Code/Fluorescence/Projects/Skin/SpecMap.png"
+
+texture_file EnvironmentMap: "C:/Users/nithi/Documents/Code/Fluorescence/Extern/Althea/Content/HDRI_Skybox/NeoclassicalInterior.hdr" hdr
 
 struct VertexOutput {
   vec4 position;
