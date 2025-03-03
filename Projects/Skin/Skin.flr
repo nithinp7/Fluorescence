@@ -1,35 +1,64 @@
 
 enable_feature: perspective_camera
 
-checkbox ENABLE_REFL: true
-checkbox ENABLE_REFL_EPI: true
-checkbox ENABLE_SSS_EPI: true
-checkbox ENABLE_SSS_DER: true
-checkbox ENABLE_SEE_THROUGH: false
+ui_dropdown_start DiffusionProfileSettings
+  checkbox SHOW_PROFILE: false
+  slider_float RED_0: 1.0 -1.0 1.0
+  slider_float RED_1: 0.495 0.0 2.0
+  slider_float BLUE_0: 0.579 -1.0 1.0
+  slider_float BLUE_1: 0.232 0.0 2.0
+  slider_float GREEN_0: 1.0 -1.0 1.0
+  slider_float GREEN_1: 0.305 0.0 2.0
+ui_dropdown_end
 
-slider_float SSS_RADIUS: 0.01 0.01 0.1
+ui_separator
 
-slider_uint SAMPLE_COUNT: 2 1 100
-slider_float TSR_SPEED: 0.098 0.00 1.0
-slider_float REPROJ_TOLERANCE: 0.015 0.0 0.5
-slider_float IOR: 1.4 0.1 2.0
+ui_dropdown_start FeatureSwitches
+  checkbox ENABLE_REFL: true
+  checkbox ENABLE_REFL_EPI: true
+  checkbox ENABLE_SSS_EPI: true
+  checkbox ENABLE_SSS_DER: true
+  checkbox ENABLE_SEE_THROUGH: false
+ui_dropdown_end
 
-slider_float HEMOGLOBIN_SCALE: 2.268 0.0 40.0
-color_picker HEMOGLOBIN_COLOR: 0.077 0.034 0.042 1.0
+ui_separator
 
-slider_float EPI_DEPTH: 0.92 0.001 10.0
-color_picker EPI_ABS_COLOR: 0.195 0.439 0.683 1.0
+ui_dropdown_start SamplingOptions
+  slider_float SSS_RADIUS: 0.01 0.01 0.1
 
-slider_uint BACKGROUND: 0 0 4
+  slider_uint SAMPLE_COUNT: 2 1 100
+  slider_float TSR_SPEED: 0.098 0.00 1.0
+  slider_float REPROJ_TOLERANCE: 0.015 0.0 0.5
+  slider_float IOR: 1.4 0.1 2.0
+ui_dropdown_end
+
+ui_separator
+
+ui_dropdown_start SkinSettings
+  slider_float HEMOGLOBIN_SCALE: 2.268 0.0 40.0
+  color_picker HEMOGLOBIN_COLOR: 0.077 0.034 0.042 1.0
+
+  slider_float EPI_DEPTH: 0.92 0.001 10.0
+  color_picker EPI_ABS_COLOR: 0.195 0.439 0.683 1.0
+ui_dropdown_end
+
+ui_separator
+
+ui_dropdown_start LightSettings
+  slider_uint BACKGROUND: 0 0 4
+  slider_float LIGHT_THETA: 0.0 0.0 8.0
+  slider_float LIGHT_PHI: 1.0 -2.0 2.0
+  slider_float LIGHT_STRENGTH: 2.5 0.25 10.0
+  slider_float LIGHT_COVERAGE: 0.5 0.0 1.0
+ui_dropdown_end
+
+ui_separator
+
 slider_uint RENDER_MODE: 0 0 4
 slider_float BUMP_STRENGTH: 15.0 0.0 100.0
 
 slider_float ROUGHNESS: 0.765 0.01 1.0
 slider_float METALLIC: 0.0 0.0 1.0
-
-slider_float LIGHT_THETA: 0.0 0.0 8.0
-slider_float LIGHT_PHI: 1.0 -2.0 2.0
-slider_float LIGHT_STRENGTH: 2.5 0.25 10.0
 
 obj_model HeadModel: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/head.obj"
 texture_file HeadBumpTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/bump.png"
@@ -62,26 +91,38 @@ depth_image DepthImage: SCREEN_WIDTH SCREEN_HEIGHT
 image PrevDepthImage: SCREEN_WIDTH SCREEN_HEIGHT r32f
   texture_alias PrevDepthTexture
 
+image PrevIrradianceImage: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
+  texture_alias PrevIrradianceTexture
+image IrradianceImage: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
+  texture_alias IrradianceTexture
+
 compute_shader CS_CopyDisplayImage: 32 32 1
 
-transition_layout: DepthImage texture
 transition_layout: PrevDisplayImage image
 transition_layout: PrevDepthImage image
+transition_layout: PrevIrradianceImage image
 compute_dispatch: CS_CopyDisplayImage SCREEN_WIDTH SCREEN_HEIGHT 1
 transition_layout: PrevDisplayImage texture
 transition_layout: PrevDepthImage texture
+transition_layout: PrevIrradianceImage texture
 
 display_image OutImage
 
-render_pass DISPLAY_PASS:
-  store_attachments: outDisplay=OutImage outColor=DisplayImage 
+render_pass TEXSPACE_LIGHTING_PASS:
+  store_attachments: outIrradiance=IrradianceImage
   store_depth: DepthImage
 
-  draw: VS_Background PS_Background 3 1
+  draw_obj: HeadModel VS_SkinIrr PS_SkinIrr
+    vertex_output: VertexOutput
+
+transition_layout: IrradianceImage texture
+transition_layout: DepthImage texture
+
+render_pass DISPLAY_PASS:
+  store_attachments: outDisplay=OutImage outColor=DisplayImage 
+
+  draw: VS_SkinResolve PS_SkinResolve 3 1
     vertex_output: VertexOutput
     disable_depth
-
-  draw_obj: HeadModel VS_Obj PS_Obj
-    vertex_output: VertexOutput
 
 transition_layout: DisplayImage texture

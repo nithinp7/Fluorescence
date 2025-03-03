@@ -38,6 +38,7 @@ Project::Project(
       m_dynamicUniforms(),
       m_dynamicDataBuffer(),
       m_cameraController(),
+      m_cameraArgs(),
       m_perspectiveCamera(),
       m_audioInput(),
       m_pAudio(nullptr),
