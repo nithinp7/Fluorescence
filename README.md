@@ -12,6 +12,8 @@ The application is built on top of my rendering engine, [Althea](https://github.
 
 WIP implementation of screen-space subsurface scattering
 
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/IBL_Skin_2.png"/>
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/IBL_Skin_0.png"/>
 <img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/ScreenSpaceSSS.png"/>
 
 ### Diffusion Profile Generator
