@@ -10,9 +10,9 @@ The application is built on top of my rendering engine, [Althea](https://github.
 
 ### Skin Rendering
 
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin3.png" height=400px/>
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin4.png" height=400px/>
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin2.png" height=400px/>
+WIP implementation of screen-space subsurface scattering
+
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/ScreenSpaceSSS.png"/>
 
 ### Diffusion Profile Generator
 
