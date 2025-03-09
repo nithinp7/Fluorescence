@@ -15,9 +15,9 @@ ui_separator
 
 ui_dropdown_start FeatureSwitches
   checkbox ENABLE_SHADOWS: true
-  slider_float SHADOW_DT: 0.01 0.01 4.0
-  slider_float SHADOW_BIAS: 0.01 0.01 1.0
-  slider_float SHADOW_THRESHOLD: 0.01 0.01 1.0
+  slider_float SHADOW_DT: 0.02 0.01 4.0
+  slider_float SHADOW_BIAS: 0.121 0.01 1.0
+  slider_float SHADOW_THRESHOLD: 0.126 0.01 1.0
   slider_uint SHADOW_STEPS: 50 20 150
   checkbox ENABLE_REFL: true
   checkbox ENABLE_REFL_EPI: true

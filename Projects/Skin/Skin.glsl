@@ -9,7 +9,7 @@ vec3 sampleEnvMap(vec3 dir) {
   float pitch = -atan(dir.y, length(dir.xz));
   vec2 uv = vec2(0.5 * yaw, pitch) / PI + 0.5;
 
-  return textureLod(EnvironmentMap, uv, 0.0).rgb;
+  return 5.0 * textureLod(EnvironmentMap, uv, 0.0).rgb;
 } 
 
 vec3 computeDir(vec2 uv) {
@@ -308,13 +308,15 @@ void PS_SkinResolve(VertexOutput IN) {
     return;
   }
 
+  float EXPOSURE = 0.3;
+
   vec4 irradiance = texture(IrradianceTexture, IN.uv);
   vec2 depth = texture(DepthTexture, IN.uv).ra;
   if (irradiance.a < 1.0) {
     vec3 dir = normalize(computeDir(IN.uv));
     vec4 color = vec4(sampleEnv(dir), 1.0);
     outDisplay = color;
-    outDisplay.rgb = vec3(1.0) - exp(-outDisplay.rgb * 0.8);
+    outDisplay.rgb = vec3(1.0) - exp(-outDisplay.rgb * EXPOSURE);
     return;
   }
 
@@ -341,7 +343,7 @@ void PS_SkinResolve(VertexOutput IN) {
     outDisplay = vec4((texture(DepthTexture, IN.uv).rrr * 10.0), 1.0);
   }
 
-  outDisplay.rgb = vec3(1.0) - exp(-outDisplay.rgb * 0.8);
+  outDisplay.rgb = vec3(1.0) - exp(-outDisplay.rgb * EXPOSURE);
 }
 #endif // DISPLAY_PASS
 
