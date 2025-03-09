@@ -5,7 +5,7 @@
 
 
 vec3 sampleEnvMap(vec3 dir) {
-  float yaw = mod(atan(dir.z, dir.x) + LIGHT_THETA, PI);
+  float yaw = mod(atan(dir.z, dir.x) + LIGHT_THETA, 2.0 * PI) - PI;
   float pitch = -atan(dir.y, length(dir.xz));
   vec2 uv = vec2(0.5 * yaw, pitch) / PI + 0.5;
 
@@ -77,18 +77,13 @@ struct SkinMaterial {
 ////////////////////////// COMPUTE SHADERS //////////////////////////
 
 #ifdef IS_COMP_SHADER
-void CS_CopyDisplayImage() {
+void CS_CopyPrevBuffers() {
   ivec2 pixelId = ivec2(gl_GlobalInvocationID.xy);
   if (pixelId.x >= SCREEN_WIDTH || pixelId.y >= SCREEN_HEIGHT) {
     return;
   }
 
-  vec4 c = vec4(texelFetch(DisplayTexture, pixelId, 0).rgb, 1.0);
-  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0)
-    c = vec4(0.0.xxx, 1.0);
-  imageStore(PrevDisplayImage, pixelId, c);
-  
-  c = vec4(texelFetch(IrradianceTexture, pixelId, 0).rgb, 1.0);
+  vec4 c = vec4(texelFetch(IrradianceTexture, pixelId, 0).rgb, 1.0);
   if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0)
     c = vec4(0.0.xxx, 1.0);
   imageStore(PrevIrradianceImage, pixelId, c);
@@ -114,12 +109,13 @@ layout(location = 2) in vec2 inUv;
 VertexOutput VS_SkinIrr() {
   VertexOutput OUT;
 
-  vec4 worldPos = vec4(inPosition, 1.0);
+  float SCALE = 5.0;
+  vec4 worldPos = vec4(SCALE * inPosition, 1.0);
   vec4 projPos = camera.projection * camera.view * worldPos;
   gl_Position = projPos;
   OUT.worldPosition = worldPos;
   OUT.position = projPos;
-  OUT.prevPosition = camera.projection * camera.prevView * vec4(inPosition, 1.0);
+  OUT.prevPosition = camera.projection * camera.prevView * worldPos;
   OUT.normal = inNormal;
   OUT.uv = vec2(inUv.x, 1.0 - inUv.y);
 
@@ -233,12 +229,12 @@ void PS_SkinIrr(VertexOutput IN) {
   
   mat3 tangentSpace = LocalToWorld(normalize(IN.normal));
 
+  float NdotV = dot(dir, IN.normal);
+  
   float bump = texture(HeadBumpTexture, IN.uv).x;
   vec2 bumpGrad = vec2(dFdx(bump), dFdy(bump)); 
-  vec3 bumpNormal = vec3(BUMP_STRENGTH * bumpGrad, 1.0);
+  vec3 bumpNormal = vec3(NdotV * BUMP_STRENGTH * bumpGrad, 1.0);
   vec3 normal = normalize(tangentSpace * bumpNormal);
-
-  float NdotV = dot(dir, normal);
 
   float spec = 0.5 * texture(HeadSpecTexture, IN.uv).x;
   float roughness = clamp(ROUGHNESS - spec, 0.1, 1.0);
@@ -254,7 +250,6 @@ void PS_SkinIrr(VertexOutput IN) {
       float F0 = 1.0;//(IOR - 1.0) / (IOR + 1.0);
       F0 *= F0;
       vec3 F = vec3(0.0);
-      vec3 H = normal;
 
       {
         vec3 reflDir;
@@ -263,7 +258,7 @@ void PS_SkinIrr(VertexOutput IN) {
         {
           for (int i = 0; i < 5; i++) {
             f = sampleMicrofacetBrdf(
-              randVec2(seed), -dir, normal,
+              randVec2(seed), -dir, IN.normal,
               diffuse, METALLIC, roughness, 
               reflDir, pdf);
             if (pdf >= PDF_CUTOFF)
@@ -275,8 +270,8 @@ void PS_SkinIrr(VertexOutput IN) {
             tsrSpeed = 0.0;
           } else  
           {
-            H = (normalize(reflDir + -dir));
-            float NdotH = abs(dot(normal, H));
+            vec3 H = (normalize(reflDir + -dir));
+            float NdotH = abs(dot(IN.normal, H));
             F = fresnelSchlick(NdotH, F0.xxx, roughness);
           }
         }
@@ -309,7 +304,6 @@ void PS_SkinResolve(VertexOutput IN) {
   if (SHOW_PROFILE && IN.uv.x < diffusionProfileWindow && IN.uv.y < diffusionProfileWindow) {
     vec2 uv = IN.uv / diffusionProfileWindow;
     vec3 profile = sampleDiffusionProfile(length(uv - 0.5.xx));
-    outColor = vec4(profile, 1.0);
     outDisplay = vec4(profile, 1.0);
     return;
   }
@@ -319,8 +313,8 @@ void PS_SkinResolve(VertexOutput IN) {
   if (irradiance.a < 1.0) {
     vec3 dir = normalize(computeDir(IN.uv));
     vec4 color = vec4(sampleEnv(dir), 1.0);
-    outColor = color;
     outDisplay = color;
+    outDisplay.rgb = vec3(1.0) - exp(-outDisplay.rgb * 0.8);
     return;
   }
 
@@ -339,7 +333,6 @@ void PS_SkinResolve(VertexOutput IN) {
   }
   
   outDisplay = irradiance;
-  outColor = irradiance;
 
   if ((uniforms.inputMask & INPUT_BIT_L) != 0) {
     outDisplay = fract(texture(DebugTexture, IN.uv) * 10.0);
@@ -347,6 +340,8 @@ void PS_SkinResolve(VertexOutput IN) {
   if ((uniforms.inputMask & INPUT_BIT_O) != 0) {
     outDisplay = vec4((texture(DepthTexture, IN.uv).rrr * 10.0), 1.0);
   }
+
+  outDisplay.rgb = vec3(1.0) - exp(-outDisplay.rgb * 0.8);
 }
 #endif // DISPLAY_PASS
 

@@ -17,7 +17,7 @@ ui_dropdown_start FeatureSwitches
   checkbox ENABLE_SHADOWS: true
   slider_float SHADOW_DT: 0.01 0.01 4.0
   slider_float SHADOW_BIAS: 0.01 0.01 1.0
-  sldier_float SHADOW_THRESHOLD: 0.01 0.01 1.0
+  slider_float SHADOW_THRESHOLD: 0.01 0.01 1.0
   slider_uint SHADOW_STEPS: 50 20 150
   checkbox ENABLE_REFL: true
   checkbox ENABLE_REFL_EPI: true
@@ -87,13 +87,6 @@ struct VertexOutput {
 };
 struct_size: 68
 
-#TODO RENAME
-image DisplayImage: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
-  texture_alias DisplayTexture
-
-image PrevDisplayImage: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
-  texture_alias PrevDisplayTexture
-
 depth_image DepthImage: SCREEN_WIDTH SCREEN_HEIGHT
   texture_alias DepthTexture
 image PrevDepthImage: SCREEN_WIDTH SCREEN_HEIGHT r32f
@@ -104,17 +97,15 @@ image PrevIrradianceImage: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
 image IrradianceImage: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
   texture_alias IrradianceTexture
 
-compute_shader CS_CopyDisplayImage: 32 32 1
+compute_shader CS_CopyPrevBuffers: 32 32 1
 
-transition_layout: PrevDisplayImage image
 transition_layout: PrevDepthImage image
 transition_layout: PrevIrradianceImage image
-compute_dispatch: CS_CopyDisplayImage SCREEN_WIDTH SCREEN_HEIGHT 1
-transition_layout: PrevDisplayImage texture
+compute_dispatch: CS_CopyPrevBuffers SCREEN_WIDTH SCREEN_HEIGHT 1
 transition_layout: PrevDepthImage texture
 transition_layout: PrevIrradianceImage texture
 
-display_image OutImage
+display_image DisplayImage
 
 image DebugImage: SCREEN_WIDTH SCREEN_HEIGHT rgba8
   texture_alias DebugTexture
@@ -131,10 +122,8 @@ transition_layout: DepthImage texture
 transition_layout: DebugImage texture
 
 render_pass DISPLAY_PASS:
-  store_attachments: outDisplay=OutImage outColor=DisplayImage 
+  store_attachments: outDisplay=DisplayImage
 
   draw: VS_SkinResolve PS_SkinResolve 3 1
     vertex_output: VertexOutput
     disable_depth
-
-transition_layout: DisplayImage texture
