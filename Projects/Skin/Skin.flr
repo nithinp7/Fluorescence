@@ -14,6 +14,11 @@ ui_dropdown_end
 ui_separator
 
 ui_dropdown_start FeatureSwitches
+  checkbox ENABLE_SHADOWS: true
+  slider_float SHADOW_DT: 0.01 0.01 4.0
+  slider_float SHADOW_BIAS: 0.01 0.01 1.0
+  sldier_float SHADOW_THRESHOLD: 0.01 0.01 1.0
+  slider_uint SHADOW_STEPS: 50 20 150
   checkbox ENABLE_REFL: true
   checkbox ENABLE_REFL_EPI: true
   checkbox ENABLE_SSS_EPI: true
@@ -74,12 +79,13 @@ texture_file HeadSpecTexture: "C:/Users/nithi/Documents/Code/Fluorescence/Projec
 texture_file EnvironmentMap: "C:/Users/nithi/Documents/Code/Fluorescence/Extern/Althea/Content/HDRI_Skybox/NeoclassicalInterior.hdr" hdr
 
 struct VertexOutput {
+  vec4 worldPosition;
   vec4 position;
   vec4 prevPosition;
   vec3 normal;
   vec2 uv;
 };
-struct_size: 52
+struct_size: 68
 
 #TODO RENAME
 image DisplayImage: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
@@ -110,8 +116,11 @@ transition_layout: PrevIrradianceImage texture
 
 display_image OutImage
 
-render_pass TEXSPACE_LIGHTING_PASS:
-  store_attachments: outIrradiance=IrradianceImage
+image DebugImage: SCREEN_WIDTH SCREEN_HEIGHT rgba8
+  texture_alias DebugTexture
+
+render_pass LIGHTING_PASS:
+  store_attachments: outIrradiance=IrradianceImage outDebug=DebugImage
   store_depth: DepthImage
 
   draw_obj: HeadModel VS_SkinIrr PS_SkinIrr
@@ -119,6 +128,7 @@ render_pass TEXSPACE_LIGHTING_PASS:
 
 transition_layout: IrradianceImage texture
 transition_layout: DepthImage texture
+transition_layout: DebugImage texture
 
 render_pass DISPLAY_PASS:
   store_attachments: outDisplay=OutImage outColor=DisplayImage 

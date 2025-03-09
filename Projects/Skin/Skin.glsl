@@ -5,7 +5,7 @@
 
 
 vec3 sampleEnvMap(vec3 dir) {
-  float yaw = atan(dir.z, dir.x);
+  float yaw = mod(atan(dir.z, dir.x) + LIGHT_THETA, PI);
   float pitch = -atan(dir.y, length(dir.xz));
   vec2 uv = vec2(0.5 * yaw, pitch) / PI + 0.5;
 
@@ -104,7 +104,7 @@ void CS_CopyDisplayImage() {
 
 #ifdef IS_VERTEX_SHADER
 
-#ifdef TEXSPACE_LIGHTING_PASS
+#ifdef LIGHTING_PASS
 #ifdef _ENTRY_POINT_VS_SkinIrr
 // TODO automate...
 layout(location = 0) in vec3 inPosition;
@@ -114,9 +114,10 @@ layout(location = 2) in vec2 inUv;
 VertexOutput VS_SkinIrr() {
   VertexOutput OUT;
 
-  vec4 worldPos = camera.view * vec4(inPosition, 1.0);
-  vec4 projPos = camera.projection * worldPos;
+  vec4 worldPos = vec4(inPosition, 1.0);
+  vec4 projPos = camera.projection * camera.view * worldPos;
   gl_Position = projPos;
+  OUT.worldPosition = worldPos;
   OUT.position = projPos;
   OUT.prevPosition = camera.projection * camera.prevView * vec4(inPosition, 1.0);
   OUT.normal = inNormal;
@@ -125,7 +126,7 @@ VertexOutput VS_SkinIrr() {
   return OUT;
 }
 #endif // _ENTRY_POINT_VS_Skin
-#endif // TEXSPACE_LIGHTING_PASS
+#endif // LIGHTING_PASS
 
 #ifdef DISPLAY_PASS
 
@@ -148,149 +149,68 @@ VertexOutput VS_SkinResolve() {
 
 #ifdef IS_PIXEL_SHADER
 
-/*
-void PS_Obj(VertexOutput IN) {
-  // TODO - wrap this TAA part into a helper
-  vec2 screenUv = 0.5 * IN.position.xy / IN.position.w + 0.5.xx;
-  uvec2 seed = uvec2(screenUv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
-  seed *= uvec2(uniforms.frameCount, uniforms.frameCount + 1);
-
-  float tsrSpeed = TSR_SPEED;
-  vec2 prevScreenUv = IN.prevPosition.xy / IN.prevPosition.w * 0.5 + 0.5.xx;
-  if (clamp(prevScreenUv, 0.0.xx, 1.0.xx) != prevScreenUv)
-    tsrSpeed = 1.0;
-
-  float dPrevRaw = texture(PrevDepthTexture, prevScreenUv).x;
-  float dPrev = reconstructLinearDepth(dPrevRaw);
-  float dPrev_expected = reconstructLinearDepth(IN.prevPosition.z / IN.prevPosition.w);
-
-  // TODO smooth out the effect of depth-rejection on the TSR speed
-  if (abs(dPrev_expected - dPrev) > REPROJ_TOLERANCE)
-    tsrSpeed = 1.0;
-  
-  vec3 dir = normalize(computeDir(screenUv));
-  mat3 tangentSpace = LocalToWorld(normalize(IN.normal));
-
-  float bump = texture(HeadBumpTexture, IN.uv).x;
-  vec2 bumpGrad = vec2(dFdx(bump), dFdy(bump)); 
-  vec3 bumpNormal = vec3(BUMP_STRENGTH * bumpGrad, 1.0);
-  vec3 normal = normalize(tangentSpace * bumpNormal);
-
-  float spec = texture(HeadSpecTexture, IN.uv).x;
-  float roughness = clamp(ROUGHNESS - spec, 0.1, 0.8);
-  
-  vec3 diffuse = texture(HeadLambertianTexture, IN.uv).rgb;
-
-  vec3 Lo = 0.0.xxx;
-  for (int sampleIdx = 0; sampleIdx < SAMPLE_COUNT; sampleIdx++) {
-    float F0 = (IOR - 1.0) / (IOR + 1.0);
-    F0 *= F0;
-    vec3 F = vec3(0.0);
-    vec3 H = normal;
-
-    {
-      vec3 reflDir;
-      vec3 f;
-      float pdf;
-      {
-        f = sampleMicrofacetBrdf(
-          randVec2(seed), -dir, normal,
-          diffuse, METALLIC, roughness, 
-          reflDir, pdf);
-        if (pdf < 0.1) {
-          f = 0.0.xxx;
-          pdf = 1.0;
-        } else {
-          H = (normalize(reflDir + -dir));
-          float NdotH = abs(dot(normal, H));
-          F = fresnelSchlick(NdotH, F0.xxx, roughness);
-        }
-      }
-
-      vec3 throughput = f * max(dot(reflDir, -dir), 0.0) / pdf;
-      if (ENABLE_REFL) 
-        Lo += sampleEnv(reflDir) * throughput / SAMPLE_COUNT;
-    }
-
-    vec3 refrDir = refract(dir, H, 1.0/IOR);
-    float refrDotH = dot(refrDir, H);
-    if (refrDotH < 0.0) {
-
-      if (ENABLE_SSS_EPI)
-      {
-        vec2 xi = randVec2(seed);
-        // vec3 profile = texture(DiffusionProfileTexture, xi).rgb;
-        vec3 profile = sampleDiffusionProfile(length(xi - 0.5.xx));
-        vec2 neighborUv = prevScreenUv + 0.01 * SSS_RADIUS * (2.0 * xi - 1.0.xx);
-        // float neighborDepth = reconstructLinearDepth(texture(PrevDepthTexture, neighborUv).x);
-        vec3 neighborIrradiance = texture(PrevDisplayTexture, neighborUv).rgb;
-        // Lo += (1.0 - tsrSpeed) * max(1.0.xxx - F, 0.0.xxx) * profile * neighborIrradiance / SAMPLE_COUNT;
-        Lo += profile * neighborIrradiance / SAMPLE_COUNT;
-        // TODO depth-reject neighbor-samples
-        // float dPrevRaw = texture(PrevDepthTexture, prevScreenUv).x;
-        // float dPrev = reconstructLinearDepth(dPrevRaw);
-        // float dPrev_expected = reconstructLinearDepth(IN.prevPosition.z / IN.prevPosition.w);
-
-        // vec3 neighborSample = texture(PrevDisplayTexture, prevScreenUv).rgb;
-      }
-
-      if (ENABLE_REFL_EPI) {
-        float cosRefrDirNormal = -dot(H, refrDir);
-        float epidermisPathLength = EPI_DEPTH / cosRefrDirNormal;
-
-        vec3 epiAbs = EPI_ABS_COLOR.rgb;
-        vec3 sssThroughput = exp(-epiAbs * epidermisPathLength);
-
-        // vec3 diffusionAmount = texture(DiffusionProfileTexture, randVec2(seed)).rgb;
-        // sssThroughput *= diffusionAmount;
-
-        vec3 HEMOGLOBIN_DIFFUSE = HEMOGLOBIN_COLOR.rgb * HEMOGLOBIN_SCALE;
-        vec3 refrReflDir;
-        {
-          float pdf;
-          vec3 refrReflDirLocal = sampleHemisphereCosine(seed, pdf);
-          refrReflDir = normalize(LocalToWorld(H) * refrReflDirLocal);
-          if (pdf > 0.01) {
-            sssThroughput *= HEMOGLOBIN_DIFFUSE / PI * max(dot(refrDir, -refrReflDir), 0.0) / pdf;
-          } else {
-            sssThroughput = 0.0.xxx;
-          }
-        }
-
-        float cosRefrReflDirNormal = abs(dot(H, refrReflDir));
-        epidermisPathLength = EPI_DEPTH / cosRefrReflDirNormal;
-        sssThroughput *= exp(-epiAbs * epidermisPathLength);
-
-        Lo += max(1.0.xxx - F, 0.0.xxx) * sssThroughput * sampleEnv(refrReflDir) / SAMPLE_COUNT;
-      } else if (ENABLE_SEE_THROUGH) {
-        Lo += max(1.0.xxx - F, 0.0.xxx) * sampleEnv(refrDir) / SAMPLE_COUNT;
-      }  
-    }
-  }
-
-  vec4 color;
-  if (RENDER_MODE == 0) {
-    color = vec4(Lo, 1.0);
-  } else if (RENDER_MODE == 1) {
-    color = vec4(diffuse, 1.0);
-  } else if (RENDER_MODE == 2) {
-    color = vec4(0.5 * normal + 0.5.xxx, 1.0);
-  } else if (RENDER_MODE == 3) {
-    color = vec4(bump * bump.xxx, 1.0);//ec4(10.0 * bumpGrad, 0.0, 1.0);
-  } else {
-    color = vec4(roughness.xxx, 1.0);
-  }
-  
-  vec3 prevColor = texture(PrevDisplayTexture, prevScreenUv).rgb;
-  if (tsrSpeed != 1.0)
-    color.rgb = mix(prevColor, vec3(color.rgb), tsrSpeed);
-  outColor = vec4(color.rgb, 1.0);
-  outDisplay = vec4(vec3(1.0) - exp(-color.rgb * 0.5), 1.0);
+float sampleDepth(vec2 uv) {
+  uv = clamp(uv, 0.0.xx, 1.0.xx);
+  float draw = texture(PrevDepthTexture, uv).x;
+  return reconstructLinearDepth(draw);
 }
-*/
 
-#ifdef TEXSPACE_LIGHTING_PASS
+#ifdef LIGHTING_PASS
+float computeScreenSpaceShadows(vec3 worldPos, vec3 L, vec2 startUv) {
+  // float SHADOW_STEP_SIZE = min(1.0/SCREEN_WIDTH, 1.0/SCREEN_HEIGHT);
+  uint stepCount = SHADOW_STEPS;
+
+  vec4 cstart = camera.view * vec4(worldPos, 1.0);
+  vec4 pstart = camera.projection * cstart;
+  float invW0 = 1.0 / pstart.w;
+  pstart *= invW0;
+  vec4 cend = camera.view * vec4(L, 0.0);
+  vec4 pend = camera.projection * cend;
+  float invW1 = 1.0 / pend.w;
+  pend *= invW1;
+
+  float t = 0.0;
+  float dt = SHADOW_DT;//SHADOW_STEP_SIZE;
+  float startD = reconstructLinearDepth(texture(PrevDepthTexture, 0.5 * pstart.xy + 0.5.xx).r);
+  float curD = startD;
+  
+  outDebug = vec4(startD.xxx, 1.0);
+  for (int iter = 0; iter < stepCount; iter++) {
+    t += dt;
+    vec3 curPos = worldPos + L * t;
+    vec4 pt = camera.projection * camera.view * vec4(curPos, 1.0);
+    // float invWt = mix(invW0, invW1, t);
+    // vec4 pt = mix(pstart, pend, t) / invWt;
+    if (t >= 1.0) {
+      return 1.0;
+    }
+    
+    vec2 curUv = pt.xy/pt.w * 0.5 + 0.5.xx;
+
+    if (clamp(curUv, 0.0, 1.0) != curUv) {
+      return 1.0;
+    }
+
+    float dRaw = texture(PrevDepthTexture, curUv).x;
+    if (dRaw >= 0.999) {
+      return 1.0;
+    }
+    
+    float d = reconstructLinearDepth(dRaw);
+
+    if (length(reconstructPosition(curUv, dRaw, camera.inverseProjection, camera.inverseView) - curPos) < SHADOW_THRESHOLD) {
+      return 0.0;
+    }
+
+    outDebug = vec4(dRaw.xxx, 1.0);
+    curD = dRaw;
+  }
+
+  return 1.0; // unshadowed
+}
+
 void PS_SkinIrr(VertexOutput IN) {
+  outDebug = vec4(0.0.xxx, 1.0);
   // TODO - wrap this TAA part into a helper
   vec2 screenUv = 0.5 * IN.position.xy / IN.position.w + 0.5.xx;
   vec3 dir = normalize(computeDir(screenUv));
@@ -328,7 +248,7 @@ void PS_SkinIrr(VertexOutput IN) {
   const float PDF_CUTOFF = 0.001;
 
   vec3 Lo = 0.0.xxx;
-  // if (NdotV < 0.0) 
+  if (NdotV < 0.0) 
   {
     for (int sampleIdx = 0; sampleIdx < SAMPLE_COUNT; sampleIdx++) {
       float F0 = 1.0;//(IOR - 1.0) / (IOR + 1.0);
@@ -361,19 +281,25 @@ void PS_SkinIrr(VertexOutput IN) {
           }
         }
 
-        vec3 throughput = f * max(dot(reflDir, normal), 0.0) / pdf;
-        Lo += F * sampleEnv(reflDir) * throughput / SAMPLE_COUNT;
+        float NdotL = dot(reflDir, normal);
+        if (NdotL > 0.0) {
+          vec3 throughput = f * NdotL / pdf;
+          float v = 1.0;
+          if (ENABLE_SHADOWS)
+            v = computeScreenSpaceShadows(IN.worldPosition.xyz/IN.worldPosition.w - dir * SHADOW_BIAS, reflDir, screenUv);
+          Lo += v * F * sampleEnv(reflDir) * throughput / SAMPLE_COUNT;
+        }
       }
     }
   }
-
+  
   vec3 prevLo = texture(PrevIrradianceTexture, prevScreenUv).rgb;
   Lo = mix(prevLo, Lo, TSR_SPEED);
-  // if (length(Lo) < 0.001)
-    // Lo = reflDir;//vec3(1.0, 0.0, 0.0);
+  
+  outDebug = 1.0.xxxx;
   outIrradiance = vec4(Lo, 1.0);
 }
-#endif // TEXSPACE_LIGHTING_PASS
+#endif // LIGHTING_PASS
 
 #ifdef DISPLAY_PASS
 
@@ -406,37 +332,21 @@ void PS_SkinResolve(VertexOutput IN) {
     // vec3 profile = texture(DiffusionProfileTexture, xi).rgb;
     vec3 profile = sampleDiffusionProfile(length(xi - 0.5.xx));
     vec2 neighborUv = IN.uv + SSS_RADIUS * (2.0 * xi - 1.0.xx);
-    // float neighborDepth = reconstructLinearDepth(texture(PrevDepthTexture, neighborUv).x);
     vec4 neighborIrradiance = texture(IrradianceTexture, neighborUv);
     if (neighborIrradiance.a == 1.0) {
-      // Lo += (1.0 - tsrSpeed) * max(1.0.xxx - F, 0.0.xxx) * profile * neighborIrradiance / SAMPLE_COUNT;
       irradiance.rgb += profile * neighborIrradiance.rgb;
     }
-    // TODO depth-reject neighbor-samples
-    // float dPrevRaw = texture(PrevDepthTexture, prevScreenUv).x;
-    // float dPrev = reconstructLinearDepth(dPrevRaw);
-    // float dPrev_expected = reconstructLinearDepth(IN.prevPosition.z / IN.prevPosition.w);
-
-    // vec3 neighborSample = texture(PrevDisplayTexture, prevScreenUv).rgb;
   }
   
-  // vec4 color = vec4(IN.normal, 1.0);
-
-  // vec2 screenUv = 0.5 * IN.position.xy / IN.position.w + 0.5.xx;
-  // vec3 dir = computeDir(screenUv);
-  // vec3 normal = IN.normal;
-
-  // uvec2 seed = uvec2(IN.uv * vec2(IRR_MAP_WIDTH, IRR_MAP_HEIGHT));
-  // color.rgb = randVec3(seed);
-  // // seed *= uvec2(uniforms.frameCount, uniforms.frameCount + 1);
-
-  // vec3 diffuse = texture(HeadLambertianTexture, IN.uv).rgb;
-  // float pdf;
-  // vec3 reflDir = LocalToWorld(normal) * sampleHemisphereCosine(seed, pdf);
-  // color.rgb = diffuse * sampleEnv(reflDir) * max(dot(reflDir, -dir), 0.0) / pdf;
-
   outDisplay = irradiance;
   outColor = irradiance;
+
+  if ((uniforms.inputMask & INPUT_BIT_L) != 0) {
+    outDisplay = fract(texture(DebugTexture, IN.uv) * 10.0);
+  }
+  if ((uniforms.inputMask & INPUT_BIT_O) != 0) {
+    outDisplay = vec4((texture(DepthTexture, IN.uv).rrr * 10.0), 1.0);
+  }
 }
 #endif // DISPLAY_PASS
 
