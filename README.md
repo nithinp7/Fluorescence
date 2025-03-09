@@ -12,8 +12,8 @@ The application is built on top of my rendering engine, [Althea](https://github.
 
 WIP implementation of screen-space subsurface scattering
 
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin_3_8 (1).png"/>
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin_3_8 (2).png"/>
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin_3_9 (1).png"/>
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin_3_9 (2).png"/>
 
 ### Stable Fluids - 3D Implementation + Raymarched Lighting
 
