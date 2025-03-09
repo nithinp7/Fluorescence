@@ -12,9 +12,24 @@ The application is built on top of my rendering engine, [Althea](https://github.
 
 WIP implementation of screen-space subsurface scattering
 
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/IBL_Skin_2.png"/>
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/IBL_Skin_0.png"/>
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/ScreenSpaceSSS.png"/>
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin_3_8 (1).png"/>
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin_3_8 (2).png"/>
+
+### Stable Fluids - 3D Implementation + Raymarched Lighting
+
+
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Smoke3D.jpg"/>
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Smoke3D_2.png"/>
+
+### Atmospheric Scattering
+
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/SunSky2.png">
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/SunSky3.png">
+
+
+### Stable Fluids - 2D Implementation
+
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/StableFluids2D.gif" width=800px/>
 
 ### Diffusion Profile Generator
 
@@ -22,24 +37,6 @@ WIP implementation of screen-space subsurface scattering
 <img src="https://github.com/nithinp7/Fluorescence/blob/main/Projects/Skin/DiffusionProfile.png" height=400px/>
 <img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/DiffusionSpectrum.png" height=400px/>
 </p>
-
-### Stable Fluids - 3D Implementation + Raymarched Lighting
-
-
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Smoke3D.jpg" height=400px/>
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Smoke3D_2.png" height=400px/>
-
-
-### Stable Fluids - 2D Implementation
-
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/StableFluids2D.gif" width=800px/>
-
-### Atmospheric Scattering
-
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/SunSky2.png" width=800px/>
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/SunSky3.png" width=800px/>
-
-### SDF Pathtracer
 
 
 ### Smoothed Particle Hydrodynamics (SPH) - 2D Implementation
