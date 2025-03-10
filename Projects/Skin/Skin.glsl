@@ -92,6 +92,11 @@ void CS_CopyPrevBuffers() {
   if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0)
     d = 0.0;
   imageStore(PrevDepthImage, pixelId, d.xxxx);
+
+  c = vec4(texelFetch(MiscTexture, pixelId, 0).rgb, 1.0);
+  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0)
+    c = vec4(0.0.xxx, 1.0);
+  imageStore(PrevMiscBuffer, pixelId, c);
 }
 #endif // IS_COMP_SHADER
 
@@ -156,25 +161,24 @@ float computeScreenSpaceShadows(vec3 worldPos, vec3 L, vec2 startUv) {
   // float SHADOW_STEP_SIZE = min(1.0/SCREEN_WIDTH, 1.0/SCREEN_HEIGHT);
   uint stepCount = SHADOW_STEPS;
 
-  vec4 cstart = camera.view * vec4(worldPos, 1.0);
-  vec4 pstart = camera.projection * cstart;
-  float invW0 = 1.0 / pstart.w;
-  pstart *= invW0;
-  vec4 cend = camera.view * vec4(L, 0.0);
-  vec4 pend = camera.projection * cend;
-  float invW1 = 1.0 / pend.w;
-  pend *= invW1;
+  // vec4 cstart = camera.iew * vec4(worldPos, 1.0);
+  // vec4 pstart = camera.projection * cstart;
+  // float invW0 = 1.0 / pstart.w;
+  // pstart *= invW0;
+  // vec4 cend = camera.view * vec4(L, 0.0);
+  // vec4 pend = camera.projection * cend;
+  // float invW1 = 1.0 / pend.w;
+  // pend *= invW1;
 
   float t = 0.0;
   float dt = SHADOW_DT;//SHADOW_STEP_SIZE;
-  float startD = reconstructLinearDepth(texture(PrevDepthTexture, 0.5 * pstart.xy + 0.5.xx).r);
-  float curD = startD;
+  // float startD = reconstructLinearDepth(texture(PrevDepthTexture, 0.5 * pstart.xy + 0.5.xx).r);
+  // float curD = startD;
   
-  outDebug = vec4(startD.xxx, 1.0);
   for (int iter = 0; iter < stepCount; iter++) {
     t += dt;
     vec3 curPos = worldPos + L * t;
-    vec4 pt = camera.projection * camera.view * vec4(curPos, 1.0);
+    vec4 pt = camera.projection * camera.prevView * vec4(curPos, 1.0);
     // float invWt = mix(invW0, invW1, t);
     // vec4 pt = mix(pstart, pend, t) / invWt;
     if (t >= 1.0) {
@@ -194,19 +198,20 @@ float computeScreenSpaceShadows(vec3 worldPos, vec3 L, vec2 startUv) {
     
     float d = reconstructLinearDepth(dRaw);
 
-    if (length(reconstructPosition(curUv, dRaw, camera.inverseProjection, camera.inverseView) - curPos) < SHADOW_THRESHOLD) {
+    if (length(reconstructPosition(curUv, dRaw, camera.inverseProjection, camera.prevInverseView) - curPos) < SHADOW_THRESHOLD) {
       return 0.0;
     }
 
-    outDebug = vec4(dRaw.xxx, 1.0);
-    curD = dRaw;
+    // curD = dRaw;
   }
 
   return 1.0; // unshadowed
 }
 
 void PS_SkinIrr(VertexOutput IN) {
-  outDebug = vec4(0.0.xxx, 1.0);
+  float spec = 0.5 * texture(HeadSpecTexture, IN.uv).x;
+  float roughness = clamp(ROUGHNESS - spec, 0.1, 1.0);
+  
   // TODO - wrap this TAA part into a helper
   vec2 screenUv = 0.5 * IN.position.xy / IN.position.w + 0.5.xx;
   vec3 dir = normalize(computeDir(screenUv));
@@ -214,10 +219,12 @@ void PS_SkinIrr(VertexOutput IN) {
   seed *= uvec2(uniforms.frameCount, uniforms.frameCount + 1);
   // seed *= uvec2(10023, 10024);
 
-  float tsrSpeed = TSR_SPEED;
+  float tsrSpeed = TSR_SPEED - 0.001;//- (1.0 - roughness) * 0.01;
   vec2 prevScreenUv = IN.prevPosition.xy / IN.prevPosition.w * 0.5 + 0.5.xx;
   if (clamp(prevScreenUv, 0.0.xx, 1.0.xx) != prevScreenUv)
-    tsrSpeed = 1.0;
+    tsrSpeed = 0.0;
+
+  vec4 prevMisc = tsrSpeed * texture(PrevMiscTexture, prevScreenUv);
 
   float dPrevRaw = texture(PrevDepthTexture, prevScreenUv).x;
   float dPrev = reconstructLinearDepth(dPrevRaw);
@@ -225,7 +232,7 @@ void PS_SkinIrr(VertexOutput IN) {
 
   // TODO smooth out the effect of depth-rejection on the TSR speed
   if (abs(dPrev_expected - dPrev) > REPROJ_TOLERANCE)
-    tsrSpeed = 1.0;
+    tsrSpeed = 0.0;
   
   mat3 tangentSpace = LocalToWorld(normalize(IN.normal));
 
@@ -236,17 +243,18 @@ void PS_SkinIrr(VertexOutput IN) {
   vec3 bumpNormal = vec3(NdotV * BUMP_STRENGTH * bumpGrad, 1.0);
   vec3 normal = normalize(tangentSpace * bumpNormal);
 
-  float spec = 0.5 * texture(HeadSpecTexture, IN.uv).x;
-  float roughness = clamp(ROUGHNESS - spec, 0.1, 1.0);
-  
   vec3 diffuse = texture(HeadLambertianTexture, IN.uv).rgb;
 
   const float PDF_CUTOFF = 0.001;
 
+  uint sampleCount = SAMPLE_COUNT;
+  if (tsrSpeed == 0.0 || prevMisc.r < 40.0)
+    sampleCount = 16;
+
   vec3 Lo = 0.0.xxx;
   if (NdotV < 0.0) 
   {
-    for (int sampleIdx = 0; sampleIdx < SAMPLE_COUNT; sampleIdx++) {
+    for (int sampleIdx = 0; sampleIdx < sampleCount; sampleIdx++) {
       float F0 = 1.0;//(IOR - 1.0) / (IOR + 1.0);
       F0 *= F0;
       vec3 F = vec3(0.0);
@@ -256,7 +264,8 @@ void PS_SkinIrr(VertexOutput IN) {
         vec3 f;
         float pdf;
         {
-          for (int i = 0; i < 5; i++) {
+          const uint PDF_RETRIES = 4;
+          for (int i = 0; i < PDF_RETRIES; i++) {
             f = sampleMicrofacetBrdf(
               randVec2(seed), -dir, IN.normal,
               diffuse, METALLIC, roughness, 
@@ -281,17 +290,19 @@ void PS_SkinIrr(VertexOutput IN) {
           vec3 throughput = f * NdotL / pdf;
           float v = 1.0;
           if (ENABLE_SHADOWS)
-            v = computeScreenSpaceShadows(IN.worldPosition.xyz/IN.worldPosition.w - dir * SHADOW_BIAS, reflDir, screenUv);
-          Lo += v * F * sampleEnv(reflDir) * throughput / SAMPLE_COUNT;
+            v = computeScreenSpaceShadows(IN.worldPosition.xyz/IN.worldPosition.w - dir * SHADOW_BIAS, reflDir, prevScreenUv);
+          Lo += v * F * sampleEnv(reflDir) * throughput / sampleCount;
         }
       }
     }
   }
   
+  float blendAmt = tsrSpeed * prevMisc.r + sampleCount;
   vec3 prevLo = texture(PrevIrradianceTexture, prevScreenUv).rgb;
-  Lo = mix(prevLo, Lo, TSR_SPEED);
+  Lo = mix(prevLo, Lo, sampleCount / blendAmt);
   
-  outDebug = 1.0.xxxx;
+  outMisc = vec4(blendAmt, 0.0, 0.0, 1.0);
+  outDebug = vec4((sampleCount / 8.0).xxx, 1.0);  
   outIrradiance = vec4(Lo, 1.0);
 }
 #endif // LIGHTING_PASS
@@ -337,10 +348,7 @@ void PS_SkinResolve(VertexOutput IN) {
   outDisplay = irradiance;
 
   if ((uniforms.inputMask & INPUT_BIT_L) != 0) {
-    outDisplay = fract(texture(DebugTexture, IN.uv) * 10.0);
-  }
-  if ((uniforms.inputMask & INPUT_BIT_O) != 0) {
-    outDisplay = vec4((texture(DepthTexture, IN.uv).rrr * 10.0), 1.0);
+    outDisplay = texture(DebugTexture, IN.uv);
   }
 
   outDisplay.rgb = vec3(1.0) - exp(-outDisplay.rgb * EXPOSURE);

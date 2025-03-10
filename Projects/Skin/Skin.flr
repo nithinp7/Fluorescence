@@ -31,8 +31,8 @@ ui_separator
 ui_dropdown_start SamplingOptions
   slider_float SSS_RADIUS: 0.01 0.01 0.1
 
-  slider_uint SAMPLE_COUNT: 4 1 100
-  slider_float TSR_SPEED: 0.013 0.00 1.0
+  slider_uint SAMPLE_COUNT: 1 1 100
+  slider_float TSR_SPEED: 1.0 0.00 1.0
   slider_float REPROJ_TOLERANCE: 0.008 0.0 0.5
   slider_float IOR: 1.4 0.1 2.0
 ui_dropdown_end
@@ -97,13 +97,20 @@ image PrevIrradianceImage: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
 image IrradianceImage: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
   texture_alias IrradianceTexture
 
+image MiscBuffer: SCREEN_WIDTH SCREEN_HEIGHT r32f
+  texture_alias MiscTexture
+image PrevMiscBuffer: SCREEN_WIDTH SCREEN_HEIGHT r32f
+  texture_alias PrevMiscTexture
+
 compute_shader CS_CopyPrevBuffers: 32 32 1
 
 transition_layout: PrevDepthImage image
 transition_layout: PrevIrradianceImage image
+transition_layout: PrevMiscBuffer image
 compute_dispatch: CS_CopyPrevBuffers SCREEN_WIDTH SCREEN_HEIGHT 1
 transition_layout: PrevDepthImage texture
 transition_layout: PrevIrradianceImage texture
+transition_layout: PrevMiscBuffer texture
 
 display_image DisplayImage
 
@@ -111,7 +118,7 @@ image DebugImage: SCREEN_WIDTH SCREEN_HEIGHT rgba8
   texture_alias DebugTexture
 
 render_pass LIGHTING_PASS:
-  store_attachments: outIrradiance=IrradianceImage outDebug=DebugImage
+  store_attachments: outIrradiance=IrradianceImage outDebug=DebugImage outMisc=MiscBuffer
   store_depth: DepthImage
 
   draw_obj: HeadModel VS_SkinIrr PS_SkinIrr

@@ -15,7 +15,11 @@ int main(int argc, char* argv[]) {
   exeDir.remove_filename();
   std::filesystem::current_path(exeDir);
 
-  Application app("Fluorescence", "../..", "../../Extern/Althea", 1440, 1280);
+  Application::CreateOptions options{};
+  options.width = 1440;
+  options.height = 1280;
+  options.frameRateLimit = 30;
+  Application app("Fluorescence", "../..", "../../Extern/Althea", &options);
   app.createGame<flr::Fluorescence>();
 
   flr::Fluorescence* game = app.getGameInstance<flr::Fluorescence>();

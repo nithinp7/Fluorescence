@@ -1,7 +1,7 @@
 #version 460 core
 
-#define SCREEN_WIDTH 2560
-#define SCREEN_HEIGHT 1334
+#define SCREEN_WIDTH 1440
+#define SCREEN_HEIGHT 1280
 
 struct VertexOutput {
   vec4 worldPosition;
@@ -14,19 +14,23 @@ struct VertexOutput {
 layout(set=1,binding=1, r32f) uniform image2D PrevDepthImage;
 layout(set=1,binding=2, rgba32f) uniform image2D PrevIrradianceImage;
 layout(set=1,binding=3, rgba32f) uniform image2D IrradianceImage;
-layout(set=1,binding=4, rgba8) uniform image2D DebugImage;
-layout(set=1,binding=5) uniform sampler2D HeadBumpTexture;
-layout(set=1,binding=6) uniform sampler2D HeadLambertianTexture;
-layout(set=1,binding=7) uniform sampler2D DiffusionProfileTexture;
-layout(set=1,binding=8) uniform sampler2D HeadSpecTexture;
-layout(set=1,binding=9) uniform sampler2D EnvironmentMap;
-layout(set=1,binding=10) uniform sampler2D DepthTexture;
-layout(set=1,binding=11) uniform sampler2D PrevDepthTexture;
-layout(set=1,binding=12) uniform sampler2D PrevIrradianceTexture;
-layout(set=1,binding=13) uniform sampler2D IrradianceTexture;
-layout(set=1,binding=14) uniform sampler2D DebugTexture;
+layout(set=1,binding=4, r32f) uniform image2D MiscBuffer;
+layout(set=1,binding=5, r32f) uniform image2D PrevMiscBuffer;
+layout(set=1,binding=6, rgba8) uniform image2D DebugImage;
+layout(set=1,binding=7) uniform sampler2D HeadBumpTexture;
+layout(set=1,binding=8) uniform sampler2D HeadLambertianTexture;
+layout(set=1,binding=9) uniform sampler2D DiffusionProfileTexture;
+layout(set=1,binding=10) uniform sampler2D HeadSpecTexture;
+layout(set=1,binding=11) uniform sampler2D EnvironmentMap;
+layout(set=1,binding=12) uniform sampler2D DepthTexture;
+layout(set=1,binding=13) uniform sampler2D PrevDepthTexture;
+layout(set=1,binding=14) uniform sampler2D PrevIrradianceTexture;
+layout(set=1,binding=15) uniform sampler2D IrradianceTexture;
+layout(set=1,binding=16) uniform sampler2D MiscTexture;
+layout(set=1,binding=17) uniform sampler2D PrevMiscTexture;
+layout(set=1,binding=18) uniform sampler2D DebugTexture;
 
-layout(set=1, binding=15) uniform _UserUniforms {
+layout(set=1, binding=19) uniform _UserUniforms {
 	vec4 HEMOGLOBIN_COLOR;
 	vec4 EPI_ABS_COLOR;
 	uint SHADOW_STEPS;
@@ -66,7 +70,7 @@ layout(set=1, binding=15) uniform _UserUniforms {
 
 #include <Fluorescence.glsl>
 
-layout(set=1, binding=16) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=20) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 
@@ -74,6 +78,7 @@ layout(set=1, binding=16) uniform _CameraUniforms { PerspectiveCamera camera; };
 #ifdef _ENTRY_POINT_PS_SkinIrr
 layout(location = 0) out vec4 outIrradiance;
 layout(location = 1) out vec4 outDebug;
+layout(location = 2) out vec4 outMisc;
 #endif // _ENTRY_POINT_PS_SkinIrr
 #ifdef _ENTRY_POINT_PS_SkinResolve
 layout(location = 0) out vec4 outDisplay;
