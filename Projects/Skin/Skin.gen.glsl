@@ -21,18 +21,18 @@ layout(set=1,binding=7) uniform sampler2D HeadBumpTexture;
 layout(set=1,binding=8) uniform sampler2D HeadLambertianTexture;
 layout(set=1,binding=9) uniform sampler2D DiffusionProfileTexture;
 layout(set=1,binding=10) uniform sampler2D HeadSpecTexture;
-layout(set=1,binding=11) uniform sampler2D EnvironmentMap;
-layout(set=1,binding=12) uniform sampler2D DepthTexture;
-layout(set=1,binding=13) uniform sampler2D PrevDepthTexture;
-layout(set=1,binding=14) uniform sampler2D PrevIrradianceTexture;
-layout(set=1,binding=15) uniform sampler2D IrradianceTexture;
-layout(set=1,binding=16) uniform sampler2D MiscTexture;
-layout(set=1,binding=17) uniform sampler2D PrevMiscTexture;
-layout(set=1,binding=18) uniform sampler2D DebugTexture;
+layout(set=1,binding=11) uniform sampler2D SkinSwatchTexture;
+layout(set=1,binding=12) uniform sampler2D HeadThicknessTexture;
+layout(set=1,binding=13) uniform sampler2D EnvironmentMap;
+layout(set=1,binding=14) uniform sampler2D DepthTexture;
+layout(set=1,binding=15) uniform sampler2D PrevDepthTexture;
+layout(set=1,binding=16) uniform sampler2D PrevIrradianceTexture;
+layout(set=1,binding=17) uniform sampler2D IrradianceTexture;
+layout(set=1,binding=18) uniform sampler2D MiscTexture;
+layout(set=1,binding=19) uniform sampler2D PrevMiscTexture;
+layout(set=1,binding=20) uniform sampler2D DebugTexture;
 
-layout(set=1, binding=19) uniform _UserUniforms {
-	vec4 HEMOGLOBIN_COLOR;
-	vec4 EPI_ABS_COLOR;
+layout(set=1, binding=21) uniform _UserUniforms {
 	uint SHADOW_STEPS;
 	uint SAMPLE_COUNT;
 	uint BACKGROUND;
@@ -43,6 +43,7 @@ layout(set=1, binding=19) uniform _UserUniforms {
 	float BLUE_1;
 	float GREEN_0;
 	float GREEN_1;
+	float THICKNESS_SCALE;
 	float SHADOW_DT;
 	float SHADOW_BIAS;
 	float SHADOW_THRESHOLD;
@@ -50,16 +51,18 @@ layout(set=1, binding=19) uniform _UserUniforms {
 	float TSR_SPEED;
 	float REPROJ_TOLERANCE;
 	float IOR;
-	float HEMOGLOBIN_SCALE;
-	float EPI_DEPTH;
 	float LIGHT_THETA;
 	float LIGHT_PHI;
 	float LIGHT_STRENGTH;
 	float LIGHT_COVERAGE;
 	float BUMP_STRENGTH;
+	float SWATCH_SPEC_STRENGTH;
+	float SWATCH_BUMP_STRENGTH;
+	float SWATCH_UV_SCALE;
 	float ROUGHNESS;
 	float METALLIC;
 	bool SHOW_PROFILE;
+	bool ENABLE_TRANSLUCENCY;
 	bool ENABLE_SHADOWS;
 	bool ENABLE_REFL;
 	bool ENABLE_REFL_EPI;
@@ -70,7 +73,7 @@ layout(set=1, binding=19) uniform _UserUniforms {
 
 #include <Fluorescence.glsl>
 
-layout(set=1, binding=20) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=22) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 

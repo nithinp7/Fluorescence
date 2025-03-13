@@ -8,6 +8,8 @@ vec3 sampleDiffusionProfile(float d) {
 }
 */
 
+#include <Misc/Sampling.glsl>
+
 float bumpCurvature(vec2 uv) {
   float b = texture(HeadBumpTexture, uv).r;
   float bL = texture(HeadBumpTexture, uv - vec2(CURVATURE_RADIUS, 0.0)).r;
@@ -16,6 +18,29 @@ float bumpCurvature(vec2 uv) {
   float bU = texture(HeadBumpTexture, uv + vec2(0.0, CURVATURE_RADIUS)).r;
 
   return 0.25 * (bL + bR + bD + bU) - b;
+}
+
+float proceduralBumpMap(vec2 uv) {
+  vec2 p = uv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT) + 0.5;
+
+  // uniform seed
+  uvec2 seed = uvec2(12032, 151927) * uvec2(1832, 1833);
+  //uvec2(uniforms.frameCount, uniforms.frameCount+1);
+
+  float pz = 0.0;
+
+  uint SAMPLE_COUNT = 1000;
+  for (int i = 0; i < SAMPLE_COUNT; i++) {
+    vec2 rp = randVec2(seed) * SCREEN_WIDTH;//vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
+    float r = rng(seed) * SCREEN_WIDTH;
+    pz += 0.5 * sin(2000.0 * SLICE * length(p - rp) / (2.08 + 5.0 * r)) + 0.5;
+    // if (length(p - rp) < 5.0)
+    // {
+    //   return 1.0;
+    // }    
+  }
+
+  return pz / SAMPLE_COUNT;
 }
 
 #ifdef IS_VERTEX_SHADER
@@ -55,8 +80,10 @@ vec3 drawSkinMap(vec2 uv) {
     color = vec3(max(bumpGrad, 0.01 * SLICE.xx), 0.0) * SCALE;
   } else if (MODE == 2) {
     color = max(length(bumpGrad), 0.01 * SLICE).xxx * SCALE;
-  } else {
+  } else if (MODE == 3) {
     color = bumpCurvature(uv).xxx * SCALE;
+  } else {
+    color = proceduralBumpMap(uv).xxx * SCALE;
   }
 
   return color;

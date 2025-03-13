@@ -1,6 +1,6 @@
 
 
-slider_uint MODE: 0 0 3
+slider_uint MODE: 0 0 4
 slider_float SLICE: 0.5 0.0 1.0
 slider_float SCALE: 10.0 0.1 100.0
 
@@ -22,7 +22,7 @@ struct_size: 8
 display_image DisplayImage
 
 checkbox FIX_UV: false
-image SaveImage: 6000 6000 rgba8
+image SaveImage: 1024 1024 rgba8
 save_image_button: SaveImage
 
 render_pass DISPLAY_PASS:

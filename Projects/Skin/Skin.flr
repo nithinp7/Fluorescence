@@ -14,11 +14,18 @@ ui_dropdown_end
 ui_separator
 
 ui_dropdown_start FeatureSwitches
+  checkbox ENABLE_TRANSLUCENCY: true
+  slider_float THICKNESS_SCALE: 2.0 0.5 5.0
   checkbox ENABLE_SHADOWS: true
-  slider_float SHADOW_DT: 0.02 0.01 4.0
-  slider_float SHADOW_BIAS: 0.121 0.01 1.0
-  slider_float SHADOW_THRESHOLD: 0.126 0.01 1.0
-  slider_uint SHADOW_STEPS: 50 20 150
+  ui_dropdown_start ShadowSettings
+    slider_float SHADOW_DT: 0.02 0.01 4.0
+    slider_float SHADOW_BIAS: 0.121 0.01 1.0
+    slider_float SHADOW_THRESHOLD: 0.126 0.01 1.0
+    slider_uint SHADOW_STEPS: 50 20 150
+  ui_dropdown_end
+
+  ui_separator
+
   checkbox ENABLE_REFL: true
   checkbox ENABLE_REFL_EPI: true
   checkbox ENABLE_SSS_EPI: true
@@ -33,18 +40,8 @@ ui_dropdown_start SamplingOptions
 
   slider_uint SAMPLE_COUNT: 1 1 100
   slider_float TSR_SPEED: 1.0 0.00 1.0
-  slider_float REPROJ_TOLERANCE: 0.008 0.0 0.5
+  slider_float REPROJ_TOLERANCE: 0.068 0.0 0.5
   slider_float IOR: 1.4 0.1 2.0
-ui_dropdown_end
-
-ui_separator
-
-ui_dropdown_start SkinSettings
-  slider_float HEMOGLOBIN_SCALE: 2.268 0.0 40.0
-  color_picker HEMOGLOBIN_COLOR: 0.077 0.034 0.042 1.0
-
-  slider_float EPI_DEPTH: 0.92 0.001 10.0
-  color_picker EPI_ABS_COLOR: 0.195 0.439 0.683 1.0
 ui_dropdown_end
 
 ui_separator
@@ -60,10 +57,15 @@ ui_dropdown_end
 ui_separator
 
 slider_uint RENDER_MODE: 0 0 4
-slider_float BUMP_STRENGTH: 11.11 0.0 100.0
 
-slider_float ROUGHNESS: 0.838 0.01 1.0
-slider_float METALLIC: 0.0 0.0 1.0
+ui_dropdown_start SurfaceDetails
+  slider_float BUMP_STRENGTH: 11.11 0.0 100.0
+  slider_float SWATCH_SPEC_STRENGTH: 1.0 0.1 20.0
+  slider_float SWATCH_BUMP_STRENGTH: 1.0 0.1 20.0
+  slider_float SWATCH_UV_SCALE: 70.0 1.0 100.0
+  slider_float ROUGHNESS: 0.838 0.01 1.0
+  slider_float METALLIC: 0.0 0.0 1.0
+ui_dropdown_end
 
 obj_model HeadModel: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/head.obj"
 texture_file HeadBumpTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/bump.png"
@@ -75,6 +77,8 @@ texture_file HeadLambertianTexture: "C:/Users/nithi/Documents/Data/Models/Heads/
 
 texture_file DiffusionProfileTexture: "C:/Users/nithi/Documents/Code/Fluorescence/Projects/Skin/DiffusionProfile.png" 
 texture_file HeadSpecTexture: "C:/Users/nithi/Documents/Code/Fluorescence/Projects/Skin/SpecMap.png"
+texture_file SkinSwatchTexture: "C:/Users/nithi/Documents/Code/Fluorescence/Projects/Skin/SkinBumpSwatch.png"
+texture_file HeadThicknessTexture: "C:/Users/nithi/Documents/Data/Models/Heads/lpshead/ThicknessMap.png"
 
 texture_file EnvironmentMap: "C:/Users/nithi/Documents/Code/Fluorescence/Extern/Althea/Content/HDRI_Skybox/NeoclassicalInterior.hdr" hdr
 
