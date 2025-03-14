@@ -12,6 +12,11 @@ The application is built on top of my rendering engine, [Althea](https://github.
 
 WIP implementation of screen-space subsurface scattering
 
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin_3_13_(2).png"/>
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin_3_13_(1).png"/>
+
+Older screenshots:
+
 <img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin_3_10.png" width=800px/>
 <img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin_3_9 (1).png"/>
 <img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/Skin_3_9 (2).png"/>
