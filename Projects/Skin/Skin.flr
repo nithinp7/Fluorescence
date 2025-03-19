@@ -61,7 +61,8 @@ slider_uint RENDER_MODE: 0 0 4
 ui_dropdown_start SurfaceDetails
   slider_float BUMP_STRENGTH: 11.11 0.0 100.0
   slider_float SWATCH_SPEC_STRENGTH: 1.0 0.1 20.0
-  slider_float SWATCH_BUMP_STRENGTH: 1.0 0.1 20.0
+  slider_float SWATCH_BUMP_STRENGTH: 1.0 0.1 1.0
+  slider_float SWATCH_ROT: 1.0 1.0 100.0
   slider_float SWATCH_UV_SCALE: 70.0 1.0 100.0
   slider_float ROUGHNESS: 0.838 0.01 1.0
   slider_float METALLIC: 0.0 0.0 1.0

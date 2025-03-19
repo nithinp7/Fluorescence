@@ -209,21 +209,31 @@ float computeScreenSpaceShadows(vec3 worldPos, vec3 L, vec2 startUv) {
 }
 
 void PS_SkinIrr(VertexOutput IN) {
-  vec2 swatchUv = fract(SWATCH_UV_SCALE * IN.uv);
-  float swatch = texture(SkinSwatchTexture, swatchUv).r ;
-  // outDebug = vec4(swatch.xxx, 1.0);
-
-  // float spec = 0.5 * texture(HeadSpecTexture, IN.uv).x + 
-  float spec = SWATCH_SPEC_STRENGTH * (swatch - 0.5);
-  float roughness = clamp(ROUGHNESS - spec, 0.1, 1.0);
-  
   // TODO - wrap this TAA part into a helper
   vec2 screenUv = 0.5 * IN.position.xy / IN.position.w + 0.5.xx;
   vec3 dir = normalize(computeDir(screenUv));
   uvec2 seed = uvec2(screenUv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
   seed *= uvec2(uniforms.frameCount, uniforms.frameCount + 1);
-  // seed *= uvec2(10023, 10024);
 
+  float NdotV = dot(dir, normalize(IN.normal));
+  
+  vec2 swatchUv = SWATCH_UV_SCALE * IN.uv;
+  vec2 ssSwatchJitter = 5000.0 * (0.5 * randVec2(seed) - 0.5.xx) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
+  swatchUv += ssSwatchJitter.x * dFdx(swatchUv) + ssSwatchJitter.y * dFdy(swatchUv);
+  {
+    float theta = 0.0;// SWATCH_ROT * (IN.uv.x * IN.uv.y);
+    float cs = cos(theta); float sn = sin(theta);
+    swatchUv = swatchUv.x * vec2(cs, sn) + swatchUv.y * vec2(-sn, cs);
+    swatchUv = fract(swatchUv);
+  }
+
+  float swatch = texture(SkinSwatchTexture, swatchUv).r ;
+  // outDebug = vec4(swatch.xxx, 1.0);
+
+  // float spec = 0.5 * texture(HeadSpecTexture, IN.uv).x + 
+  float spec = SWATCH_SPEC_STRENGTH * (2.0 * swatch - 1.0);
+  float roughness = clamp(ROUGHNESS - spec, 0.1, 1.0);
+  
   float tsrSpeed = TSR_SPEED - 0.001;//- (1.0 - roughness) * 0.01;
   vec2 prevScreenUv = IN.prevPosition.xy / IN.prevPosition.w * 0.5 + 0.5.xx;
   if (clamp(prevScreenUv, 0.0.xx, 1.0.xx) != prevScreenUv)
@@ -241,9 +251,7 @@ void PS_SkinIrr(VertexOutput IN) {
   
   mat3 tangentSpace = LocalToWorld(normalize(IN.normal));
 
-  float NdotV = dot(dir, IN.normal);
-  
-  float bump = texture(HeadBumpTexture, IN.uv).x + SWATCH_BUMP_STRENGTH * (2.0 * swatch - 1.0);
+  float bump = mix(2.0 * texture(HeadBumpTexture, IN.uv).x - 1.0, 2.0 * swatch - 1.0, SWATCH_BUMP_STRENGTH);
   vec2 bumpGrad = vec2(dFdx(bump), dFdy(bump)); 
   vec3 bumpNormal = vec3(NdotV * BUMP_STRENGTH * bumpGrad, 1.0);
   vec3 normal = normalize(tangentSpace * bumpNormal);
@@ -260,7 +268,8 @@ void PS_SkinIrr(VertexOutput IN) {
   if (NdotV < 0.0) 
   {
     for (int sampleIdx = 0; sampleIdx < sampleCount; sampleIdx++) {
-      float F0 = 1.0;//(IOR - 1.0) / (IOR + 1.0);
+      float F0 = 1.0;///IOR;//(IOR - 1.0) / (IOR + 1.0);
+      // F0 = 1.0 / F0;
       F0 *= F0;
       vec3 F = vec3(0.0);
 
@@ -318,7 +327,7 @@ void PS_SkinIrr(VertexOutput IN) {
   // Lo = mix(Lo, prevLo, tsrSpeed);
   
   outMisc = vec4(blendAmt, 0.0, 0.0, 1.0);
-  outDebug = vec4(0.5 * normal + 0.5.xxx, 1.0);
+  // outDebug = vec4(0.5 * normal + 0.5.xxx, 1.0);
   // outDebug = vec4((sampleCount / 8.0), 100.0 * abs(dPrev_expected - dPrev), 0.0, 1.0);  
   outIrradiance = vec4(Lo, 1.0);
 }

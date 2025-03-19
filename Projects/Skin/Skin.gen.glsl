@@ -1,7 +1,7 @@
 #version 460 core
 
-#define SCREEN_WIDTH 1440
-#define SCREEN_HEIGHT 1280
+#define SCREEN_WIDTH 1276
+#define SCREEN_HEIGHT 1321
 
 struct VertexOutput {
   vec4 worldPosition;
@@ -58,6 +58,7 @@ layout(set=1, binding=21) uniform _UserUniforms {
 	float BUMP_STRENGTH;
 	float SWATCH_SPEC_STRENGTH;
 	float SWATCH_BUMP_STRENGTH;
+	float SWATCH_ROT;
 	float SWATCH_UV_SCALE;
 	float ROUGHNESS;
 	float METALLIC;
