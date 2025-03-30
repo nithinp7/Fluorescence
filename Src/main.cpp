@@ -1,3 +1,5 @@
+#if BUILD_FLR_APP
+
 #include "Fluorescence.h"
 
 #include <Althea/Application.h>
@@ -36,3 +38,5 @@ int main(int argc, char* argv[]) {
 
   return EXIT_SUCCESS;
 }
+
+#endif // BUILD_FLR_APP

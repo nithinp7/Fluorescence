@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 
+option(BUILD_FLR_APP "Build Fluorescence as a standalone app" on)
+
 project(
     Fluorescence
     VERSION 0.1.0
@@ -26,7 +28,17 @@ function(glob_files out_var_name regexes)
 endfunction()
 
 glob_files(SRC_FILES_LIST "Src/*.cpp" "Src/*/*.cpp")
-add_executable(Fluorescence ${SRC_FILES_LIST})
+if (BUILD_FLR_APP)
+  add_executable(Fluorescence ${SRC_FILES_LIST})
+  target_compile_definitions(${PROJECT_NAME} PRIVATE BUILD_FLR_APP=1)
+else()
+  add_library(Fluorescence ${SRC_FILES_LIST})
+  target_include_directories (Fluorescence
+      PUBLIC
+        Include
+  )
+  target_compile_definitions(${PROJECT_NAME} PRIVATE BUILD_FLR_APP=0)
+endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE MAX_UV_COORDS=4)
 
