@@ -219,6 +219,12 @@ struct ParsedFlr {
   };
   std::vector<Task> m_taskList;
 
+  struct TaskBlock {
+    std::string name;
+    std::vector<Task> tasks;
+  };
+  std::vector<TaskBlock> m_taskBlocks;
+
   enum FeatureFlag : uint32_t {
     FF_NONE = 0,
     FF_PERSPECTIVE_CAMERA = (1 << 0),
@@ -278,6 +284,8 @@ struct ParsedFlr {
     I_TEXTURE_ALIAS,
     I_TEXTURE_FILE,
     I_TRANSITION,
+    I_TASK_BLOCK_START,
+    I_TASK_BLOCK_END,
     I_COUNT
   };
 
@@ -318,7 +326,9 @@ struct ParsedFlr {
       "depth_image",
       "texture_alias",
       "texture_file",
-      "transition_layout"};
+      "transition_layout",
+      "task_block_start",
+      "task_block_end"};
 
   struct ImageFormatTableEntry {
     const char* glslFormatName;

@@ -71,6 +71,8 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
   uint32_t lineNumber = 0;
   uint32_t uiIdx = 0;
 
+  bool bTaskBlockActive = false;
+
 #define PARSER_VERIFY(X, MSG)                                                  \
   if (!(X)) {                                                                  \
     sprintf(                                                                   \
@@ -167,6 +169,13 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
         m_images[imageIdx].createOptions.usage |=
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
       }
+    };
+
+    auto pushTask = [&](uint32_t idx, TaskType type) {
+      if (bTaskBlockActive)
+        m_taskBlocks.back().tasks.push_back(Task{ idx, type });
+      else
+        m_taskList.push_back(Task{ idx, type });
     };
 
     p.parseWhitespace();
@@ -483,7 +492,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           "Could not find referenced compute-shader referenced in "
           "compute-dispatch declaration.");
 
-      m_taskList.push_back({(uint32_t)m_computeDispatches.size(), TT_COMPUTE});
+      pushTask((uint32_t)m_computeDispatches.size(), TT_COMPUTE);
       m_computeDispatches.push_back(
           {computeShaderIdx, *dispatchSizeX, *dispatchSizeY, *dispatchSizeZ});
 
@@ -515,7 +524,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
         bn = p.parseName();
       }
 
-      m_taskList.push_back({(uint32_t)m_barriers.size(), TT_BARRIER});
+      pushTask((uint32_t)m_barriers.size(), TT_BARRIER);
       m_barriers.emplace_back().buffers = std::move(buffers);
 
       break;
@@ -545,7 +554,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
     case I_RENDER_PASS: {
       PARSER_VERIFY(name, "Could not parse render-pass name.");
 
-      m_taskList.push_back({(uint32_t)m_renderPasses.size(), TT_RENDER});
+      pushTask((uint32_t)m_renderPasses.size(), TT_RENDER);
       m_renderPasses.push_back({std::string(*name), {}, {}, -1, -1});
 
       if (auto width = parseUintOrVar()) {
@@ -997,7 +1006,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           "Invalid transition target specified in transition_layout "
           "declaration.");
 
-      m_taskList.push_back({(uint32_t)m_transitions.size(), TT_TRANSITION});
+      pushTask((uint32_t)m_transitions.size(), TT_TRANSITION);
       m_transitions.push_back({*imageIdx, (LayoutTransitionTarget)*modeIdx});
 
       break;
@@ -1010,6 +1019,19 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
 
       m_objModels.push_back({std::string(*name), std::string(*path)});
 
+      break;
+    };
+    case I_TASK_BLOCK_START: {
+      PARSER_VERIFY(name, "Could not parse task-block name.");
+      PARSER_VERIFY(!bTaskBlockActive, "Attempting to start a new task-block without ending previous task-block.");
+      bTaskBlockActive = true;
+      m_taskBlocks.push_back({ std::string(*name), {} });
+
+      break;
+    };
+    case I_TASK_BLOCK_END: {
+      PARSER_VERIFY(bTaskBlockActive, "Encountered task_block_end without corresponding task_block_start.");
+      bTaskBlockActive = false;
       break;
     };
     default:
