@@ -11,8 +11,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-include_directories(Include Src)
-
 function(glob_files out_var_name regexes)
     set(files "")
     foreach(arg ${ARGV})
@@ -26,6 +24,8 @@ function(glob_files out_var_name regexes)
     endif()
     set(${ARGV0} "${files}" PARENT_SCOPE)
 endfunction()
+
+include_directories(Include/Fluorescence Src)
 
 glob_files(SRC_FILES_LIST "Src/*.cpp" "Src/*/*.cpp")
 if (BUILD_FLR_APP)
