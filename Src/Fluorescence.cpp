@@ -37,15 +37,20 @@ static char s_filename[512] = {0};
 using namespace AltheaEngine;
 
 namespace flr {
+Application* GApplication = nullptr;
+GlobalHeap* GGlobalHeap = nullptr;
 
 void Fluorescence::setStartupProject(const char* path) {
   strncpy(s_filename, path, 512);
   m_bReloadProject = true;
 }
 
-Fluorescence::Fluorescence() {}
+Fluorescence::Fluorescence(const FlrAppOptions& options)
+  : m_options(options) {}
 
 void Fluorescence::initGame(Application& app) {
+  GApplication = &app;
+
   // TODO: need to unbind these at shutdown
   InputManager& input = app.getInputManager();
   input.setMouseCursorHidden(false);
@@ -59,7 +64,7 @@ void Fluorescence::initGame(Application& app) {
           if (m_pProject->hasFailed()) {
             m_bReloadProject = true;
           } else {
-            m_pProject->tryRecompile(app);
+            m_pProject->tryRecompile();
           }
         }
       });
@@ -74,9 +79,12 @@ void Fluorescence::initGame(Application& app) {
         m_bReloadProject = true;
       });
 
-  input.addKeyBinding(
-      {GLFW_KEY_O, GLFW_PRESS, GLFW_MOD_CONTROL},
+  if (m_options.bStandaloneMode)
+  {
+    input.addKeyBinding(
+      { GLFW_KEY_O, GLFW_PRESS, GLFW_MOD_CONTROL },
       [&app, this]() { m_bOpenFileDialogue = true; });
+  }
   input.addKeyBinding({GLFW_KEY_P, GLFW_PRESS, 0}, [&app, this]() {
     m_bPaused = !m_bPaused;
   });
@@ -90,10 +98,19 @@ void Fluorescence::createRenderState(Application& app) {
   SingleTimeCommandBuffer commandBuffer(app);
   _createGlobalResources(app, commandBuffer);
   _createDisplayPass(app);
+
+  if (m_pProject)
+    for (auto& program : m_programs)
+      program->createRenderState(m_pProject, commandBuffer);
 }
 
 void Fluorescence::destroyRenderState(Application& app) {
   Gui::destroyRenderState(app);
+
+  for (auto& program : m_programs)
+    program->destroyRenderState();
+
+  m_descriptorSets = {};
 
   delete m_pProject;
   m_pProject = nullptr;
@@ -104,6 +121,7 @@ void Fluorescence::destroyRenderState(Application& app) {
 
   m_uniforms = {};
   m_heap = {};
+  GGlobalHeap = nullptr;
 }
 
 void Fluorescence::tick(Application& app, const FrameContext& frame) {
@@ -159,8 +177,34 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
 
       m_pProject = nullptr;
       if (Utilities::checkFileExists(std::string(s_filename))) {
+        for (auto& program : m_programs)
+          program->destroyRenderState();
+
+        SingleTimeCommandBuffer commandBuffer(app);
         m_pProject =
-            new Project(app, m_heap, m_uniforms, (const char*)s_filename);
+            new Project(commandBuffer, m_uniforms, (const char*)s_filename);
+
+        for (auto& program : m_programs)
+          program->createRenderState(m_pProject, commandBuffer);
+
+        PerFrameResources* prevDescTables = new PerFrameResources(std::move(m_descriptorSets));
+        app.addDeletiontask(DeletionTask{ [prevDescTables]() {
+            delete prevDescTables;
+          }, app.getCurrentFrameRingBufferIndex() });
+        
+        DescriptorSetLayoutBuilder builder{};
+        builder.addUniformBufferBinding();
+
+        for (auto& program : m_programs)
+          program->setupDescriptorTable(builder);
+
+        m_descriptorSets = PerFrameResources(app, builder);
+
+        ResourcesAssignment assignment = m_descriptorSets.assign();
+        assignment.bindTransientUniforms(m_uniforms);
+
+        for (auto& program : m_programs)
+          program->createDescriptors(assignment);
       }
     }
 
@@ -184,7 +228,9 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
     }
 
     if (m_pProject && m_pProject->isReady()) {
-      m_pProject->tick(app, frame);
+      m_pProject->tick(frame);
+      for (auto& program : m_programs)
+        program->tick(m_pProject, frame);
     }
 
     //static GraphEditor::Graph graph;
@@ -219,10 +265,12 @@ void Fluorescence::_createGlobalResources(
     Application& app,
     SingleTimeCommandBuffer& commandBuffer) {
   m_heap = GlobalHeap(app);
+  GGlobalHeap = &m_heap;
   AltheaEngine::registerDefaultTexturesToHeap(m_heap);
   m_uniforms = TransientUniforms<FlrUniforms>(app, {});
   m_uniforms.registerToHeap(m_heap);
 }
+
 void Fluorescence::_createDisplayPass(Application& app) {
   VkClearValue colorClear;
   colorClear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
@@ -289,7 +337,9 @@ void Fluorescence::draw(
 
   VkDescriptorSet heapDescriptorSet = m_heap.getDescriptorSet();
   if (m_pProject && m_pProject->isReady() && !m_bPaused) {
-    m_pProject->draw(app, commandBuffer, m_heap, frame);
+    m_pProject->draw(commandBuffer, frame);
+    for (auto& program : m_programs)
+      program->draw(m_pProject, commandBuffer, frame);
   }
 
   {

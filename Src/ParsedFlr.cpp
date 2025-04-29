@@ -272,11 +272,11 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       p.parseWhitespace();
 
       auto min = p.parseFloat();
-      PARSER_VERIFY(value, "Could not parse min value for float slider.");
+      PARSER_VERIFY(min, "Could not parse min value for float slider.");
       p.parseWhitespace();
 
       auto max = p.parseFloat();
-      PARSER_VERIFY(value, "Could not parse max value for float slider.");
+      PARSER_VERIFY(max, "Could not parse max value for float slider.");
 
       m_uiElements.push_back({ UET_SLIDER_FLOAT, (uint32_t)m_sliderFloats.size() });
       m_sliderFloats.push_back(

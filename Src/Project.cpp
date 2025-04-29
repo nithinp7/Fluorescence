@@ -23,13 +23,19 @@
 
 using namespace AltheaEngine;
 
+namespace AltheaEngine {
+extern InputManager* GInputManager;
+}
+
 namespace flr {
+extern Application* GApplication;
+extern GlobalHeap* GGlobalHeap;
+
 Project::Project(
-    Application& app,
-    GlobalHeap& heap,
+    SingleTimeCommandBuffer& commandBuffer,
     const TransientUniforms<FlrUniforms>& flrUniforms,
     const char* projPath)
-    : m_parsed(app, projPath),
+    : m_parsed(*GApplication, projPath),
       m_buffers(),
       m_images(),
       m_computePipelines(),
@@ -57,8 +63,6 @@ Project::Project(
   std::filesystem::path shaderFileName = projPath_;
   shaderFileName.replace_extension(".glsl");
 
-  SingleTimeCommandBuffer commandBuffer(app);
-
   m_buffers.reserve(m_parsed.m_buffers.size());
   for (const ParsedFlr::BufferDesc& desc : m_parsed.m_buffers) {
     const ParsedFlr::StructDef& structdef =
@@ -68,7 +72,7 @@ Project::Project(
     allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 
     m_buffers.push_back(BufferUtilities::createBuffer(
-        app,
+        *GApplication,
         structdef.size * desc.elemCount,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         allocInfo));
@@ -84,7 +88,7 @@ Project::Project(
   for (const ParsedFlr::ImageDesc& desc : m_parsed.m_images) {
     ImageResource& rsc = m_images.emplace_back();
 
-    rsc.image = Image(app, desc.createOptions);
+    rsc.image = Image(*GApplication, desc.createOptions);
     bool bIsDepth = (rsc.image.getOptions().usage &
                      VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
 
@@ -92,10 +96,10 @@ Project::Project(
     viewOptions.format = rsc.image.getOptions().format;
     viewOptions.aspectFlags =
         bIsDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-    rsc.view = ImageView(app, rsc.image, viewOptions);
+    rsc.view = ImageView(*GApplication, rsc.image, viewOptions);
 
     SamplerOptions samplerOptions{};
-    rsc.sampler = Sampler(app, samplerOptions);
+    rsc.sampler = Sampler(*GApplication, samplerOptions);
   }
 
   m_textureFiles.reserve(m_parsed.m_textureFiles.size());
@@ -103,23 +107,27 @@ Project::Project(
     ImageResource& rsc = m_textureFiles.emplace_back();
 
     rsc.image = Image(
-        app,
+        *GApplication,
         (VkCommandBuffer)commandBuffer,
         tex.loadedImage.data,
         tex.createOptions);
 
     ImageViewOptions viewOptions{};
     viewOptions.format = rsc.image.getOptions().format;
-    rsc.view = ImageView(app, rsc.image, viewOptions);
+    rsc.view = ImageView(*GApplication, rsc.image, viewOptions);
 
     SamplerOptions samplerOptions{};
-    rsc.sampler = Sampler(app, samplerOptions);
+    rsc.sampler = Sampler(*GApplication, samplerOptions);
   }
 
   m_objModels.reserve(m_parsed.m_objModels.size());
   for (const auto& m : m_parsed.m_objModels) {
     auto& obj = m_objModels.emplace_back();
-    if (!SimpleObjLoader::loadObj(app, commandBuffer, m.path.c_str(), obj)) {
+    if (!SimpleObjLoader::loadObj(
+            *GApplication,
+            commandBuffer,
+            m.path.c_str(),
+            obj)) {
       m_parsed.m_failed = true;
       sprintf(m_parsed.m_errMsg, "Failed to load obj mesh %s", m.path.c_str());
       return;
@@ -179,7 +187,7 @@ Project::Project(
     }
 
     m_dynamicUniforms =
-        DynamicBuffer(app, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, size);
+        DynamicBuffer(*GApplication, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, size);
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
       m_dynamicUniforms.updateData(i, m_dynamicDataBuffer);
   }
@@ -187,13 +195,13 @@ Project::Project(
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
     m_cameraController = CameraController(
         60.0f,
-        (float)app.getSwapChainExtent().width /
-            (float)app.getSwapChainExtent().height);
-    m_perspectiveCamera = TransientUniforms<PerspectiveCamera>(app);
+        (float)GApplication->getSwapChainExtent().width /
+            (float)GApplication->getSwapChainExtent().height);
+    m_perspectiveCamera = TransientUniforms<PerspectiveCamera>(*GApplication);
   }
 
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
-    m_audioInput = TransientUniforms<AudioInput>(app);
+    m_audioInput = TransientUniforms<AudioInput>(*GApplication);
   }
 
   DescriptorSetLayoutBuilder dsBuilder{};
@@ -220,7 +228,7 @@ Project::Project(
     dsBuilder.addUniformBufferBinding();
   }
 
-  m_descriptorSets = PerFrameResources(app, dsBuilder);
+  m_descriptorSets = PerFrameResources(*GApplication, dsBuilder);
 
   const uint32_t GEN_CODE_BUF_SIZE = 10000;
   char* autoGenCode = new char[GEN_CODE_BUF_SIZE];
@@ -466,7 +474,8 @@ Project::Project(
 
     ComputePipelineBuilder builder{};
     builder.setComputeShader(autoGenFileName.string(), defs);
-    builder.layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
+    builder.layoutBuilder
+        .addDescriptorSet(GGlobalHeap->getDescriptorSetLayout())
         .addDescriptorSet(m_descriptorSets.getLayout());
 
     {
@@ -478,7 +487,7 @@ Project::Project(
       }
     }
 
-    m_computePipelines.emplace_back(app, std::move(builder));
+    m_computePipelines.emplace_back(*GApplication, std::move(builder));
   }
 
   m_drawPasses.reserve(m_parsed.m_renderPasses.size());
@@ -565,25 +574,26 @@ Project::Project(
         }
       }
 
-      builder.layoutBuilder.addDescriptorSet(heap.getDescriptorSetLayout())
+      builder.layoutBuilder
+          .addDescriptorSet(GGlobalHeap->getDescriptorSetLayout())
           .addDescriptorSet(m_descriptorSets.getLayout());
     }
 
     DrawPass& drawPass = m_drawPasses.emplace_back();
     drawPass.m_renderPass = RenderPass(
-        app,
+        *GApplication,
         {(uint32_t)pass.width, (uint32_t)pass.height},
         std::move(attachments),
         std::move(subpassBuilders));
 
     drawPass.m_frameBuffer = FrameBuffer(
-        app,
+        *GApplication,
         drawPass.m_renderPass,
         {(uint32_t)pass.width, (uint32_t)pass.height},
         std::move(attachmentViews));
   }
 
-  m_images[m_parsed.m_displayImageIdx].registerToTextureHeap(heap);
+  m_images[m_parsed.m_displayImageIdx].registerToTextureHeap(*GGlobalHeap);
 
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
     m_pAudio = std::make_unique<Audio>(true);
@@ -592,7 +602,7 @@ Project::Project(
 
 Project::~Project() {}
 
-void Project::tick(Application& app, const FrameContext& frame) {
+void Project::tick(const FrameContext& frame) {
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
     AudioInput audioInput;
     m_pAudio->play();
@@ -604,7 +614,7 @@ void Project::tick(Application& app, const FrameContext& frame) {
     m_audioInput.updateUniforms(audioInput, frame);
   }
 
-  if (m_bHasDynamicData && !app.getInputManager().getMouseCursorHidden()) {
+  if (m_bHasDynamicData && !GInputManager->getMouseCursorHidden()) {
     if (ImGui::Begin("Options", false)) {
       char nameBuf[128];
 
@@ -682,7 +692,7 @@ void Project::tick(Application& app, const FrameContext& frame) {
             char filename[512] = {0};
 
             ofn.lStructSize = sizeof(ofn);
-            ofn.hwndOwner = glfwGetWin32Window(app.getWindow());
+            ofn.hwndOwner = glfwGetWin32Window(GApplication->getWindow());
             ofn.lpstrFile = filename;
             ofn.lpstrFile[0] = '\0';
             ofn.nMaxFile = sizeof(filename);
@@ -709,7 +719,7 @@ void Project::tick(Application& app, const FrameContext& frame) {
 
         // already handled
         case ParsedFlr::UET_DROPDOWN_START:
-        case ParsedFlr::UET_DROPDOWN_END: 
+        case ParsedFlr::UET_DROPDOWN_END:
           break;
         };
       }
@@ -734,54 +744,15 @@ void Project::tick(Application& app, const FrameContext& frame) {
   }
 }
 
-void Project::draw(
-    Application& app,
+void Project::executeTaskList(
+    const std::vector<ParsedFlr::Task>& tasks,
     VkCommandBuffer commandBuffer,
-    const GlobalHeap& heap,
     const FrameContext& frame) {
-
-  if (m_pendingSaveImage) {
-    auto& img = m_images[m_pendingSaveImage->imageIdx].image;
-    // TODO: assumes r8g8b8a8_unorm, generalize
-    uint32_t width = img.getOptions().width;
-    uint32_t height = img.getOptions().height;
-    size_t byteSize = width * height * 4;
-    BufferAllocation* pStaging = new BufferAllocation(
-        BufferUtilities::createStagingBufferForDownload(byteSize));
-
-    img.copyMipToBuffer(commandBuffer, pStaging->getBuffer(), 0, 0);
-    img.transitionLayout(
-        commandBuffer,
-        VK_IMAGE_LAYOUT_GENERAL,
-        VK_ACCESS_NONE,
-        VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
-
-    app.addDeletiontask(
-        {[pStaging,
-          width,
-          height,
-          byteSize,
-          fileName = m_pendingSaveImage->m_saveFileName]() {
-           const std::byte* mapped =
-               reinterpret_cast<const std::byte*>(pStaging->mapMemory());
-           Utilities::savePng(
-               fileName,
-               width,
-               height,
-               gsl::span(mapped, byteSize));
-           pStaging->unmapMemory();
-           delete pStaging;
-         },
-         app.getCurrentFrameRingBufferIndex()});
-
-    m_pendingSaveImage = std::nullopt;
-  }
-
   VkDescriptorSet sets[] = {
-      heap.getDescriptorSet(),
+      GGlobalHeap->getDescriptorSet(),
       m_descriptorSets.getCurrentDescriptorSet(frame)};
 
-  for (const auto& task : m_parsed.m_taskList) {
+  for (const auto& task : tasks) {
     switch (task.type) {
     case ParsedFlr::TT_COMPUTE: {
       const auto& dispatch = m_parsed.m_computeDispatches[task.idx];
@@ -840,7 +811,7 @@ void Project::draw(
 
       {
         ActiveRenderPass pass = drawPass.m_renderPass.begin(
-            app,
+            *GApplication,
             commandBuffer,
             frame,
             drawPass.m_frameBuffer);
@@ -906,20 +877,62 @@ void Project::draw(
   }
 }
 
-void Project::tryRecompile(Application& app) {
+void Project::draw(VkCommandBuffer commandBuffer, const FrameContext& frame) {
+
+  if (m_pendingSaveImage) {
+    auto& img = m_images[m_pendingSaveImage->imageIdx].image;
+    // TODO: assumes r8g8b8a8_unorm, generalize
+    uint32_t width = img.getOptions().width;
+    uint32_t height = img.getOptions().height;
+    size_t byteSize = width * height * 4;
+    BufferAllocation* pStaging = new BufferAllocation(
+        BufferUtilities::createStagingBufferForDownload(byteSize));
+
+    img.copyMipToBuffer(commandBuffer, pStaging->getBuffer(), 0, 0);
+    img.transitionLayout(
+        commandBuffer,
+        VK_IMAGE_LAYOUT_GENERAL,
+        VK_ACCESS_NONE,
+        VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT);
+
+    GApplication->addDeletiontask(
+        {[pStaging,
+          width,
+          height,
+          byteSize,
+          fileName = m_pendingSaveImage->m_saveFileName]() {
+           const std::byte* mapped =
+               reinterpret_cast<const std::byte*>(pStaging->mapMemory());
+           Utilities::savePng(
+               fileName,
+               width,
+               height,
+               gsl::span(mapped, byteSize));
+           pStaging->unmapMemory();
+           delete pStaging;
+         },
+         GApplication->getCurrentFrameRingBufferIndex()});
+
+    m_pendingSaveImage = std::nullopt;
+  }
+
+  executeTaskList(m_parsed.m_taskList, commandBuffer, frame);
+}
+
+void Project::tryRecompile() {
   m_failedShaderCompile = false;
   *m_shaderCompileErrMsg = 0;
 
   std::string error;
   for (auto& c : m_computePipelines) {
-    c.tryRecompile(app);
+    c.tryRecompile(*GApplication);
     if (c.hasShaderRecompileErrors()) {
       error += c.getShaderRecompileErrors() + "\n";
     }
   }
 
   for (auto& p : m_drawPasses) {
-    p.m_renderPass.tryRecompile(app);
+    p.m_renderPass.tryRecompile(*GApplication);
     for (auto& s : p.m_renderPass.getSubpasses()) {
       GraphicsPipeline& g = s.getPipeline();
       if (g.hasShaderRecompileErrors()) {
@@ -932,5 +945,19 @@ void Project::tryRecompile(Application& app) {
     strncpy(m_shaderCompileErrMsg, error.c_str(), error.size());
     m_failedShaderCompile = true;
   }
+}
+
+TaskBlockId Project::findTaskBlock(const char* name) const {
+  assert(!m_parsed.m_failed);
+  assert(!m_failedShaderCompile);
+
+  size_t nsize = strlen(name);
+  for (uint32_t i = 0; i < m_parsed.m_taskBlocks.size(); i++) {
+    auto& tb = m_parsed.m_taskBlocks[i];
+    if (tb.name.size() == nsize && !strncmp(name, tb.name.data(), nsize))
+      return TaskBlockId(i);
+  }
+
+  return TaskBlockId();
 }
 } // namespace flr

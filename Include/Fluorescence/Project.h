@@ -4,13 +4,11 @@
 #include "Shared/CommonStructures.h"
 #include "SimpleObjLoader.h"
 
-#include <Althea/Application.h>
 #include <Althea/BindlessHandle.h>
 #include <Althea/BufferUtilities.h>
 #include <Althea/ComputePipeline.h>
 #include <Althea/FrameContext.h>
 #include <Althea/Framebuffer.h>
-#include <Althea/GlobalHeap.h>
 #include <Althea/ImageResource.h>
 #include <Althea/PerFrameResources.h>
 #include <Althea/RenderPass.h>
@@ -29,22 +27,24 @@ using namespace AltheaEngine;
 namespace flr {
 class Audio;
 
+struct TaskBlockId {
+  TaskBlockId() : idx(~0u) {}
+  TaskBlockId(uint32_t i) : idx(i) {}
+  bool IsValid() const { return idx != ~0u; }
+  uint32_t idx;
+};
+
 class Project {
 public:
   Project(
-      Application& app,
-      GlobalHeap& heap,
+      SingleTimeCommandBuffer& commandBuffer,
       const TransientUniforms<FlrUniforms>& flrUniforms,
       const char* projectPath);
   ~Project();
 
-  void tick(Application& app, const FrameContext& frame);
+  void tick(const FrameContext& frame);
 
-  void draw(
-      Application& app,
-      VkCommandBuffer commandBuffer,
-      const GlobalHeap& heap,
-      const FrameContext& frame);
+  void draw(VkCommandBuffer commandBuffer, const FrameContext& frame);
 
   TextureHandle getOutputTexture() const {
     return m_images[m_parsed.m_displayImageIdx].textureHandle;
@@ -60,9 +60,13 @@ public:
 
   const char* getShaderCompileErrors() const { return m_shaderCompileErrMsg; }
 
-  void tryRecompile(Application& app);
+  void tryRecompile();
+
+  TaskBlockId findTaskBlock(const char* name) const;
 
 private:
+  void executeTaskList(const std::vector<ParsedFlr::Task>& tasks, VkCommandBuffer commandBuffer, const FrameContext& frame);
+
   ParsedFlr m_parsed;
 
   std::vector<BufferAllocation> m_buffers;
