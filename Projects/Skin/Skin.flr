@@ -26,11 +26,9 @@ ui_dropdown_start FeatureSwitches
 
   ui_separator
 
-  checkbox ENABLE_REFL: true
-  checkbox ENABLE_REFL_EPI: true
+  checkbox ENABLE_SPEC: true
+  checkbox ENABLE_DIFFUSE: true
   checkbox ENABLE_SSS_EPI: true
-  checkbox ENABLE_SSS_DER: true
-  checkbox ENABLE_SEE_THROUGH: false
 ui_dropdown_end
 
 ui_separator
@@ -59,12 +57,12 @@ ui_separator
 slider_uint RENDER_MODE: 0 0 4
 
 ui_dropdown_start SurfaceDetails
-  slider_float BUMP_STRENGTH: 11.11 0.0 100.0
-  slider_float SWATCH_SPEC_STRENGTH: 1.0 0.1 20.0
+  slider_float BUMP_STRENGTH: 54.11 0.0 100.0
+  slider_float SWATCH_SPEC_STRENGTH: 7.4 0.1 20.0
   slider_float SWATCH_BUMP_STRENGTH: 1.0 0.1 1.0
   slider_float SWATCH_ROT: 1.0 1.0 100.0
-  slider_float SWATCH_UV_SCALE: 70.0 1.0 100.0
-  slider_float ROUGHNESS: 0.838 0.01 1.0
+  slider_float SWATCH_UV_SCALE: 7.7 1.0 100.0
+  slider_float ROUGHNESS: 0.642 0.01 1.0
   slider_float METALLIC: 0.0 0.0 1.0
 ui_dropdown_end
 
@@ -135,7 +133,10 @@ transition_layout: DebugImage texture
 
 render_pass DISPLAY_PASS:
   store_attachments: outDisplay=DisplayImage
+  store_depth: DepthImage
 
-  draw: VS_SkinResolve PS_SkinResolve 3 1
-    vertex_output: VertexOutput
+  draw: VS_Background PS_Background 3 1
     disable_depth
+
+  draw_obj: HeadModel VS_SkinResolve PS_SkinResolve
+    vertex_output: VertexOutput

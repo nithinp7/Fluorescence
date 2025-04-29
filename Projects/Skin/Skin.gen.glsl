@@ -1,7 +1,7 @@
 #version 460 core
 
-#define SCREEN_WIDTH 1276
-#define SCREEN_HEIGHT 1321
+#define SCREEN_WIDTH 1440
+#define SCREEN_HEIGHT 1280
 
 struct VertexOutput {
   vec4 worldPosition;
@@ -65,11 +65,9 @@ layout(set=1, binding=21) uniform _UserUniforms {
 	bool SHOW_PROFILE;
 	bool ENABLE_TRANSLUCENCY;
 	bool ENABLE_SHADOWS;
-	bool ENABLE_REFL;
-	bool ENABLE_REFL_EPI;
+	bool ENABLE_SPEC;
+	bool ENABLE_DIFFUSE;
 	bool ENABLE_SSS_EPI;
-	bool ENABLE_SSS_DER;
-	bool ENABLE_SEE_THROUGH;
 };
 
 #include <Fluorescence.glsl>
@@ -84,6 +82,9 @@ layout(location = 0) out vec4 outIrradiance;
 layout(location = 1) out vec4 outDebug;
 layout(location = 2) out vec4 outMisc;
 #endif // _ENTRY_POINT_PS_SkinIrr
+#ifdef _ENTRY_POINT_PS_Background
+layout(location = 0) out vec4 outDisplay;
+#endif // _ENTRY_POINT_PS_Background
 #ifdef _ENTRY_POINT_PS_SkinResolve
 layout(location = 0) out vec4 outDisplay;
 #endif // _ENTRY_POINT_PS_SkinResolve
@@ -103,6 +104,10 @@ void main() { CS_CopyPrevBuffers(); }
 layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
 void main() { _VERTEX_OUTPUT = VS_SkinIrr(); }
 #endif // _ENTRY_POINT_VS_SkinIrr
+#ifdef _ENTRY_POINT_VS_Background
+layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
+void main() { _VERTEX_OUTPUT = VS_Background(); }
+#endif // _ENTRY_POINT_VS_Background
 #ifdef _ENTRY_POINT_VS_SkinResolve
 layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
 void main() { _VERTEX_OUTPUT = VS_SkinResolve(); }
@@ -115,6 +120,10 @@ void main() { _VERTEX_OUTPUT = VS_SkinResolve(); }
 layout(location = 0) in VertexOutput _VERTEX_INPUT;
 void main() { PS_SkinIrr(_VERTEX_INPUT); }
 #endif // _ENTRY_POINT_PS_SkinIrr
+#ifdef _ENTRY_POINT_PS_Background
+layout(location = 0) in VertexOutput _VERTEX_INPUT;
+void main() { PS_Background(_VERTEX_INPUT); }
+#endif // _ENTRY_POINT_PS_Background
 #ifdef _ENTRY_POINT_PS_SkinResolve
 layout(location = 0) in VertexOutput _VERTEX_INPUT;
 void main() { PS_SkinResolve(_VERTEX_INPUT); }

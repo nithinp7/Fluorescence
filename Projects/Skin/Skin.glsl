@@ -9,7 +9,7 @@ vec3 sampleEnvMap(vec3 dir) {
   float pitch = -atan(dir.y, length(dir.xz));
   vec2 uv = vec2(0.5 * yaw, pitch) / PI + 0.5;
 
-  return 5.0 * textureLod(EnvironmentMap, uv, 0.0).rgb;
+  return textureLod(EnvironmentMap, uv, 0.0).rgb;
 } 
 
 vec3 computeDir(vec2 uv) {
@@ -130,14 +130,31 @@ VertexOutput VS_SkinIrr() {
 #endif // LIGHTING_PASS
 
 #ifdef DISPLAY_PASS
+VertexOutput VS_Background() {
+  VertexOutput OUT;
+  OUT.uv = VS_FullScreen();
+  return OUT;
+}
 
 #ifdef _ENTRY_POINT_VS_SkinResolve
+// TODO automate...
+layout(location = 0) in vec3 inPosition;
+layout(location = 1) in vec3 inNormal;
+layout(location = 2) in vec2 inUv;
+
 
 VertexOutput VS_SkinResolve() {
   VertexOutput OUT;
 
-  OUT.uv = VS_FullScreen();
-  gl_Position = vec4(OUT.uv * 2.0 - 1.0, 0.0, 1.0);
+  float SCALE = 5.0;
+  vec4 worldPos = vec4(SCALE * inPosition, 1.0);
+  vec4 projPos = camera.projection * camera.view * worldPos;
+  gl_Position = projPos;
+  OUT.worldPosition = worldPos;
+  OUT.position = projPos;
+  OUT.prevPosition = camera.projection * camera.prevView * worldPos;
+  OUT.normal = inNormal;
+  OUT.uv = vec2(inUv.x, 1.0 - inUv.y);
 
   return OUT;
 }
@@ -268,35 +285,56 @@ void PS_SkinIrr(VertexOutput IN) {
   if (NdotV < 0.0) 
   {
     for (int sampleIdx = 0; sampleIdx < sampleCount; sampleIdx++) {
-      float F0 = 1.0;///IOR;//(IOR - 1.0) / (IOR + 1.0);
+      float F0 = 0.04;//IOR / 2.0;//1.0;///IOR;//(IOR - 1.0) / (IOR + 1.0);
       // F0 = 1.0 / F0;
-      F0 *= F0;
-      vec3 F = vec3(0.0);
+      // F0 *= F0;
+      vec3 F = fresnelSchlick(abs(dot(normal, dir)), F0.xxx, roughness);
+      // vec3 F = vec3(0.0);
 
       {
-        vec3 reflDir;
-        vec3 f;
-        float pdf;
-        {
-          const uint PDF_RETRIES = 4;
-          for (int i = 0; i < PDF_RETRIES; i++) {
-            f = sampleMicrofacetBrdf(
-              randVec2(seed), -dir, IN.normal,
-              diffuse, METALLIC, roughness, 
-              reflDir, pdf);
-            if (pdf >= PDF_CUTOFF)
-              break;
-          }
-          if (pdf < PDF_CUTOFF) {
-            f = 0.0.xxx;
-            pdf = 1.0;
-            tsrSpeed = 0.0;
-          } else  
+        vec3 reflDir = 1.0.xxx;
+        vec3 f = 0.0.xxx;
+        float pdf = 1.0;
+
+        // if (rng(seed) < 0.5)
+        if (ENABLE_SPEC || ENABLE_DIFFUSE) {
+          float specP = 0.8;
+          bool bBothEnabled = ENABLE_SPEC && ENABLE_DIFFUSE;
+          bool bChooseSpec = 
+              (bBothEnabled && rng(seed) < specP) || !ENABLE_DIFFUSE;
+          if (bChooseSpec)
           {
-            vec3 H = (normalize(reflDir + -dir));
-            float NdotH = abs(dot(IN.normal, H));
-            F = fresnelSchlick(NdotH, F0.xxx, roughness);
+            const uint PDF_RETRIES = 4;
+            for (int i = 0; i < PDF_RETRIES; i++) {
+              f = sampleMicrofacetBrdf(
+                randVec2(seed), -dir, IN.normal,
+                /*diffuse*/1.0.xxx, METALLIC, roughness, 
+                reflDir, pdf);
+              if (pdf >= PDF_CUTOFF)
+                break;
+            }
+            {
+              // vec3 H = (normalize(reflDir + -dir));
+              // float NdotH = abs(dot(IN.normal, H));
+              // F = fresnelSchlick(NdotH, F0.xxx, roughness);
+              f *= F * specP;
+            }
           }
+          else
+          {
+            reflDir = tangentSpace * sampleHemisphereCosine(seed, pdf);
+            // reflDir = LocalToWorld(normal) * sampleHemisphereCosine(seed, pdf);
+            // f = 0.5 * sampleDiffusionProfile(rng(seed) * 0.1) * (1.0.xxx - F) * diffuse;
+            f = (1.0.xxx - F) * (1.0 - specP);// / (1.0 - specP);// * diffuse;
+          }
+          if (bBothEnabled)
+            f *= 1;//2.0;
+        }
+
+        if (pdf < PDF_CUTOFF) {
+          f = 0.0.xxx;
+          pdf = 1.0;
+          tsrSpeed = 0.0;
         }
 
         float NdotL = dot(reflDir, normal);
@@ -305,7 +343,7 @@ void PS_SkinIrr(VertexOutput IN) {
           float v = 1.0;
           if (ENABLE_SHADOWS)
             v = computeScreenSpaceShadows(IN.worldPosition.xyz/IN.worldPosition.w - dir * SHADOW_BIAS, reflDir, prevScreenUv);
-          Lo += v * F * sampleEnv(reflDir) * throughput / sampleCount;
+          Lo += v * sampleEnv(reflDir) * throughput / sampleCount;
         }
       }
     }
@@ -327,15 +365,14 @@ void PS_SkinIrr(VertexOutput IN) {
   // Lo = mix(Lo, prevLo, tsrSpeed);
   
   outMisc = vec4(blendAmt, 0.0, 0.0, 1.0);
-  // outDebug = vec4(0.5 * normal + 0.5.xxx, 1.0);
+  outDebug = vec4(Lo, 1.0);//vec4(0.5 * normal + 0.5.xxx, 1.0);
   // outDebug = vec4((sampleCount / 8.0), 100.0 * abs(dPrev_expected - dPrev), 0.0, 1.0);  
   outIrradiance = vec4(Lo, 1.0);
 }
 #endif // LIGHTING_PASS
 
 #ifdef DISPLAY_PASS
-
-void PS_SkinResolve(VertexOutput IN) {
+void PS_Background(VertexOutput IN) {
   float diffusionProfileWindow = 0.2;
 
   if (SHOW_PROFILE && IN.uv.x < diffusionProfileWindow && IN.uv.y < diffusionProfileWindow) {
@@ -345,39 +382,51 @@ void PS_SkinResolve(VertexOutput IN) {
     return;
   }
 
-  float EXPOSURE = 0.3;
+  vec3 dir = computeDir(IN.uv);
+  outDisplay = vec4(sampleEnv(dir), 1.0);
+}
 
-  vec4 irradiance = texture(IrradianceTexture, IN.uv);
-  vec2 depth = texture(DepthTexture, IN.uv).ra;
+void PS_SkinResolve(VertexOutput IN) {
+  vec2 screenUv = 0.5 * IN.position.xy / IN.position.w + 0.5.xx;
+
+  float EXPOSURE = 0.8;
+
+  vec3 postScatterDiffuse = texture(HeadLambertianTexture, IN.uv).rgb;
+  vec4 irradiance = texture(IrradianceTexture, screenUv);
+  if (ENABLE_SSS_EPI)
+    irradiance.rgb *= sampleDiffusionProfile(0.0) * postScatterDiffuse;
+  vec2 depth = texture(DepthTexture, screenUv).ra;
   if (irradiance.a < 1.0) {
-    vec3 dir = normalize(computeDir(IN.uv));
+    vec3 dir = normalize(computeDir(screenUv));
     vec4 color = vec4(sampleEnv(dir), 1.0);
     outDisplay = color;
     outDisplay.rgb = vec3(1.0) - exp(-outDisplay.rgb * EXPOSURE);
     return;
   }
 
-  uvec2 seed = uvec2(IN.uv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
+  uvec2 seed = uvec2(screenUv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
+  // uvec2 seed = uvec2(SCREEN_WIDTH, SCREEN_HEIGHT);
   seed *= uvec2(uniforms.frameCount + 1293, uniforms.frameCount + 1 + 1293);
   
   if (ENABLE_SSS_EPI) {
-    uint neighborCount = 1;
+    uint neighborCount = 10;
     for (int i = 0; i < neighborCount; i++) {
       vec2 xi = randVec2(seed);
       // vec3 profile = texture(DiffusionProfileTexture, xi).rgb;
       vec3 profile = sampleDiffusionProfile(length(xi - 0.5.xx));
-      vec2 neighborUv = IN.uv + SSS_RADIUS * (2.0 * xi - 1.0.xx);
+      vec2 neighborUv = screenUv + SSS_RADIUS * (2.0 * xi - 1.0.xx);
       vec4 neighborIrradiance = texture(IrradianceTexture, neighborUv);
       if (neighborIrradiance.a == 1.0) {
-        irradiance.rgb += profile * neighborIrradiance.rgb / neighborCount;
+        irradiance.rgb += postScatterDiffuse * profile * neighborIrradiance.rgb;
       }
     }
+    irradiance.rgb /= neighborCount + 1;
   }
   
   outDisplay = irradiance;
 
   if ((uniforms.inputMask & INPUT_BIT_L) != 0) {
-    outDisplay = texture(DebugTexture, IN.uv);
+    outDisplay = texture(DebugTexture, screenUv);
   }
 
   outDisplay.rgb = vec3(1.0) - exp(-outDisplay.rgb * EXPOSURE);

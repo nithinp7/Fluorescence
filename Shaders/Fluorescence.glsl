@@ -1,5 +1,5 @@
 #define IS_SHADER
-#include <../Include/Shared/CommonStructures.h>
+#include <../Include/Fluorescence/Shared/CommonStructures.h>
 #include <Misc/Input.glsl>
 #include <Bindless/GlobalHeap.glsl>
 #include <Misc/Constants.glsl>
