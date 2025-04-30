@@ -8,6 +8,13 @@ layout(set = 1, binding = 0) uniform _FlrUniforms{
   FlrUniforms uniforms;
 };
 
+layout(push_constant) uniform _PushConstants{
+  uint push0;
+  uint push1;
+  uint push2;
+  uint push3;
+};
+
 #define IS_ENTRY_POINT(NAME) _ENTRY_POINT_##NAME
 
 #ifdef IS_VERTEX_SHADER

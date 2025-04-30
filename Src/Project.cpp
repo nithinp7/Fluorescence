@@ -69,12 +69,20 @@ Project::Project(
         m_parsed.m_structDefs[desc.structIdx];
 
     VmaAllocationCreateInfo allocInfo{};
-    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    if (desc.bCpuVisible) {
+      allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+      allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+      usageFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    }
+    else {
+      allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    }
 
     m_buffers.push_back(BufferUtilities::createBuffer(
         *GApplication,
         structdef.size * desc.elemCount,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        usageFlags,
         allocInfo));
     vkCmdFillBuffer(
         commandBuffer,
@@ -475,8 +483,9 @@ Project::Project(
     ComputePipelineBuilder builder{};
     builder.setComputeShader(autoGenFileName.string(), defs);
     builder.layoutBuilder
-        .addDescriptorSet(GGlobalHeap->getDescriptorSetLayout())
-        .addDescriptorSet(m_descriptorSets.getLayout());
+      .addDescriptorSet(GGlobalHeap->getDescriptorSetLayout())
+      .addDescriptorSet(m_descriptorSets.getLayout())
+      .addPushConstants<GenericPush>(VK_SHADER_STAGE_COMPUTE_BIT);
 
     {
       std::string errors = builder.compileShadersGetErrors();
@@ -576,7 +585,8 @@ Project::Project(
 
       builder.layoutBuilder
           .addDescriptorSet(GGlobalHeap->getDescriptorSetLayout())
-          .addDescriptorSet(m_descriptorSets.getLayout());
+          .addDescriptorSet(m_descriptorSets.getLayout())
+          .addPushConstants<GenericPush>();
     }
 
     DrawPass& drawPass = m_drawPasses.emplace_back();
@@ -744,6 +754,10 @@ void Project::tick(const FrameContext& frame) {
   }
 }
 
+void Project::executeTaskBlock(TaskBlockId id, VkCommandBuffer commandBuffer, const FrameContext& frame) {
+  executeTaskList(m_parsed.m_taskBlocks[id.idx].tasks, commandBuffer, frame);
+}
+
 void Project::executeTaskList(
     const std::vector<ParsedFlr::Task>& tasks,
     VkCommandBuffer commandBuffer,
@@ -761,6 +775,7 @@ void Project::executeTaskList(
       ComputePipeline& c = m_computePipelines[dispatch.computeShaderIndex];
       c.bindPipeline(commandBuffer);
       c.bindDescriptorSets(commandBuffer, sets, 2);
+      c.setPushConstants(commandBuffer, m_pushData);
 
       uint32_t groupCountX = (dispatch.dispatchSizeX + compute.groupSizeX - 1) /
                              compute.groupSizeX;
@@ -817,6 +832,7 @@ void Project::executeTaskList(
             drawPass.m_frameBuffer);
         pass.setGlobalDescriptorSets(gsl::span(sets, 2));
         pass.getDrawContext().bindDescriptorSets();
+        pass.getDrawContext().updatePushConstants(m_pushData, 0);
         for (const auto& draw : m_parsed.m_renderPasses[task.idx].draws) {
           if (draw.objMeshIdx >= 0) {
             SimpleObjLoader::LoadedObj& obj = m_objModels[draw.objMeshIdx];
@@ -959,5 +975,47 @@ TaskBlockId Project::findTaskBlock(const char* name) const {
   }
 
   return TaskBlockId();
+}
+
+namespace {
+template <typename TValue, typename TUi>
+std::optional<TValue> getUiElemByName(const char* name, const std::vector<TUi>& elems) {
+  for (const auto& elem : elems) {
+    if (!strncmp(name, elem.name.data(), elem.name.size()))
+      return *reinterpret_cast<TValue*>(elem.pValue);
+  }
+  return std::nullopt;
+}
+} // namespace
+
+std::optional<bool> Project::getCheckBoxValue(const char* name) const {
+  return getUiElemByName<bool>(name, m_parsed.m_checkboxes);
+}
+std::optional<float> Project::getSliderFloatValue(const char* name) const {
+  return getUiElemByName<float>(name, m_parsed.m_sliderFloats);
+}
+std::optional<uint32_t> Project::getSliderUintValue(const char* name) const {
+  return getUiElemByName<uint32_t>(name, m_parsed.m_sliderUints);
+}
+std::optional<int> Project::getSliderIntValue(const char* name) const {
+  return getUiElemByName<int>(name, m_parsed.m_sliderInts);
+}
+std::optional<glm::vec4> Project::getColorPickerValue(const char* name) const {
+  return getUiElemByName<glm::vec4>(name, m_parsed.m_colorPickers);
+}
+
+BufferAllocation* Project::getBufferByName(const char* name) {
+  for (int i = 0; i < m_parsed.m_buffers.size(); i++) {
+    if (!strncmp(name, m_parsed.m_buffers[i].name.data(), m_parsed.m_buffers[i].name.size()))
+      return &m_buffers[i];
+  }
+  return nullptr;
+}
+
+void Project::setPushConstants(uint32_t push0, uint32_t push1, uint32_t push2, uint32 push3) {
+  m_pushData.push0 = push0;
+  m_pushData.push1 = push1;
+  m_pushData.push2 = push2;
+  m_pushData.push3 = push3;
 }
 } // namespace flr

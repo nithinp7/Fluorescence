@@ -429,7 +429,12 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           elemCount,
           "Could not parse element count in structured-buffer declaration.");
 
-      m_buffers.push_back({std::string(*name), *structIdx, *elemCount});
+      m_buffers.push_back({std::string(*name), *structIdx, *elemCount, false});
+      break;
+    }
+    case I_ENABLE_CPU_ACCESS: {
+      PARSER_VERIFY(m_buffers.size(), "Instruction enable_cpu_access must be preceded by structured buffer declaration.");
+      m_buffers.back().bCpuVisible = true;
       break;
     }
     case I_COMPUTE_SHADER: {

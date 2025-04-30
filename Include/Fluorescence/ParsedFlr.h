@@ -116,6 +116,7 @@ struct ParsedFlr {
     std::string name;
     uint32_t structIdx;
     uint32_t elemCount;
+    bool bCpuVisible;
   };
   std::vector<BufferDesc> m_buffers;
 
@@ -262,6 +263,7 @@ struct ParsedFlr {
     I_STRUCT,
     I_STRUCT_SIZE,
     I_STRUCTURED_BUFFER,
+    I_ENABLE_CPU_ACCESS,
     I_COMPUTE_SHADER,
     I_COMPUTE_DISPATCH,
     I_BARRIER,
@@ -305,6 +307,7 @@ struct ParsedFlr {
       "struct",
       "struct_size",
       "structured_buffer",
+      "enable_cpu_access",
       "compute_shader",
       "compute_dispatch",
       "barrier",

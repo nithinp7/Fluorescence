@@ -30,7 +30,7 @@ class Audio;
 struct TaskBlockId {
   TaskBlockId() : idx(~0u) {}
   TaskBlockId(uint32_t i) : idx(i) {}
-  bool IsValid() const { return idx != ~0u; }
+  bool isValid() const { return idx != ~0u; }
   uint32_t idx;
 };
 
@@ -63,6 +63,17 @@ public:
   void tryRecompile();
 
   TaskBlockId findTaskBlock(const char* name) const;
+  void executeTaskBlock(TaskBlockId id, VkCommandBuffer commandBuffer, const FrameContext& frame);
+
+  std::optional<bool> getCheckBoxValue(const char* name) const;
+  std::optional<float> getSliderFloatValue(const char* name) const;
+  std::optional<uint32_t> getSliderUintValue(const char* name) const;
+  std::optional<int> getSliderIntValue(const char* name) const;
+  std::optional<glm::vec4> getColorPickerValue(const char* name) const;
+
+  BufferAllocation* getBufferByName(const char* name);
+
+  void setPushConstants(uint32_t push0, uint32_t push1 = 0, uint32_t push2 = 0, uint32 push3 = 0);
 
 private:
   void executeTaskList(const std::vector<ParsedFlr::Task>& tasks, VkCommandBuffer commandBuffer, const FrameContext& frame);
@@ -105,6 +116,14 @@ private:
     uint32_t imageIdx;
   };
   std::optional<PendingSaveImage> m_pendingSaveImage;
+
+  struct GenericPush {
+    uint32_t push0;
+    uint32_t push1;
+    uint32_t push2;
+    uint32_t push3;
+  };
+  GenericPush m_pushData;
   
   bool m_bHasDynamicData;
 
