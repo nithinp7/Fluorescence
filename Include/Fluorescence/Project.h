@@ -27,12 +27,22 @@ using namespace AltheaEngine;
 namespace flr {
 class Audio;
 
-struct TaskBlockId {
-  TaskBlockId() : idx(~0u) {}
-  TaskBlockId(uint32_t i) : idx(i) {}
+struct GenericId {
+  GenericId() : idx(~0u) {}
+  GenericId(uint32_t i) : idx(i) {}
   bool isValid() const { return idx != ~0u; }
   uint32_t idx;
 };
+
+#define CREATE_ID_TYPE(NAME)              \
+struct NAME : GenericId {                 \
+  NAME() : GenericId() {}                 \
+  NAME(uint32_t idx) : GenericId(idx) {}  \
+};
+
+CREATE_ID_TYPE(TaskBlockId);
+CREATE_ID_TYPE(ComputeShaderId);
+CREATE_ID_TYPE(BufferId);
 
 class Project {
 public:
@@ -65,13 +75,23 @@ public:
   TaskBlockId findTaskBlock(const char* name) const;
   void executeTaskBlock(TaskBlockId id, VkCommandBuffer commandBuffer, const FrameContext& frame);
 
+  ComputeShaderId findComputeShader(const char* name) const;
+  void dispatch(ComputeShaderId compShader, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ, VkCommandBuffer commandBuffer, const FrameContext& frame) const;
+  void dispatchThreads(ComputeShaderId compShader, uint32_t threadCountX, uint32_t threadCountY, uint32_t threadCountZ, VkCommandBuffer commandBuffer, const FrameContext& frame) const;
+
   std::optional<bool> getCheckBoxValue(const char* name) const;
   std::optional<float> getSliderFloatValue(const char* name) const;
   std::optional<uint32_t> getSliderUintValue(const char* name) const;
   std::optional<int> getSliderIntValue(const char* name) const;
   std::optional<glm::vec4> getColorPickerValue(const char* name) const;
 
-  BufferAllocation* getBufferByName(const char* name);
+  std::optional<float> getConstFloat(const char* name) const;
+  std::optional<uint32_t> getConstUint(const char* name) const;
+  std::optional<int> getConstInt(const char* name) const;
+
+  BufferId findBuffer(const char* name) const;
+  BufferAllocation* getBufferAlloc(BufferId buf);
+  void barrierRW(BufferId buf, VkCommandBuffer commandBuffer) const;
 
   void setPushConstants(uint32_t push0, uint32_t push1 = 0, uint32_t push2 = 0, uint32 push3 = 0);
 
@@ -124,7 +144,7 @@ private:
     uint32_t push3;
   };
   GenericPush m_pushData;
-  
+
   bool m_bHasDynamicData;
 
   bool m_failedShaderCompile;

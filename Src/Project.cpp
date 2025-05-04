@@ -754,6 +754,40 @@ void Project::tick(const FrameContext& frame) {
   }
 }
 
+void Project::dispatch(ComputeShaderId compShader, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ, VkCommandBuffer commandBuffer, const FrameContext& frame) const {
+  assert(compShader.isValid());
+
+  VkDescriptorSet sets[] = {
+      GGlobalHeap->getDescriptorSet(),
+      m_descriptorSets.getCurrentDescriptorSet(frame) };
+
+  const ComputePipeline& c = m_computePipelines[compShader.idx];
+  c.bindPipeline(commandBuffer);
+  c.bindDescriptorSets(commandBuffer, sets, 2);
+  c.setPushConstants(commandBuffer, m_pushData);
+
+  vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
+}
+
+void Project::dispatchThreads(ComputeShaderId compShader, uint32_t threadCountX, uint32_t threadCountY, uint32_t threadCountZ, VkCommandBuffer commandBuffer, const FrameContext& frame) const {
+  assert(compShader.isValid());
+
+  VkDescriptorSet sets[] = {
+      GGlobalHeap->getDescriptorSet(),
+      m_descriptorSets.getCurrentDescriptorSet(frame) };
+
+  const auto& csInfo = m_parsed.m_computeShaders[compShader.idx];
+  const ComputePipeline& c = m_computePipelines[compShader.idx];
+  c.bindPipeline(commandBuffer);
+  c.bindDescriptorSets(commandBuffer, sets, 2);
+  c.setPushConstants(commandBuffer, m_pushData);
+
+  uint32_t groupCountX = (threadCountX + csInfo.groupSizeX - 1) / csInfo.groupSizeX;
+  uint32_t groupCountY = (threadCountY + csInfo.groupSizeY - 1) / csInfo.groupSizeY;
+  uint32_t groupCountZ = (threadCountZ + csInfo.groupSizeZ - 1) / csInfo.groupSizeZ;
+  vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
+}
+
 void Project::executeTaskBlock(TaskBlockId id, VkCommandBuffer commandBuffer, const FrameContext& frame) {
   executeTaskList(m_parsed.m_taskBlocks[id.idx].tasks, commandBuffer, frame);
 }
@@ -963,30 +997,47 @@ void Project::tryRecompile() {
   }
 }
 
-TaskBlockId Project::findTaskBlock(const char* name) const {
-  assert(!m_parsed.m_failed);
-  assert(!m_failedShaderCompile);
-
+namespace {
+template <typename TElem>
+const TElem* getElemByName(const char* name, const std::vector<TElem>& elems) {
   size_t nsize = strlen(name);
-  for (uint32_t i = 0; i < m_parsed.m_taskBlocks.size(); i++) {
-    auto& tb = m_parsed.m_taskBlocks[i];
-    if (tb.name.size() == nsize && !strncmp(name, tb.name.data(), nsize))
-      return TaskBlockId(i);
+  for (const auto& elem : elems) {
+    if (nsize == elem.name.size() && !strncmp(name, elem.name.data(), nsize))
+      return &elem;
   }
-
-  return TaskBlockId();
+  return nullptr;
 }
 
-namespace {
+template <typename TId, typename TElem>
+TId getElemIdByName(const char* name, const std::vector<TElem>& elems) {
+  size_t nsize = strlen(name);
+  for (uint32_t i = 0; i < elems.size(); i++) {
+    const auto& elem = elems[i];
+    if (nsize == elem.name.size() && !strncmp(name, elem.name.data(), nsize))
+      return TId(i);
+  }
+  return TId();
+}
+
 template <typename TValue, typename TUi>
 std::optional<TValue> getUiElemByName(const char* name, const std::vector<TUi>& elems) {
-  for (const auto& elem : elems) {
-    if (!strncmp(name, elem.name.data(), elem.name.size()))
-      return *reinterpret_cast<TValue*>(elem.pValue);
-  }
+  if (auto pElem = getElemByName(name, elems))
+    return *reinterpret_cast<TValue*>(pElem->pValue);
   return std::nullopt;
 }
 } // namespace
+
+TaskBlockId Project::findTaskBlock(const char* name) const {
+  assert(!m_parsed.m_failed);
+  assert(!m_failedShaderCompile);
+  return getElemIdByName<TaskBlockId>(name, m_parsed.m_taskBlocks);
+}
+
+ComputeShaderId Project::findComputeShader(const char* name) const {
+  assert(!m_parsed.m_failed);
+  assert(!m_failedShaderCompile);
+  return getElemIdByName<ComputeShaderId>(name, m_parsed.m_computeShaders);
+}
 
 std::optional<bool> Project::getCheckBoxValue(const char* name) const {
   return getUiElemByName<bool>(name, m_parsed.m_checkboxes);
@@ -1004,12 +1055,42 @@ std::optional<glm::vec4> Project::getColorPickerValue(const char* name) const {
   return getUiElemByName<glm::vec4>(name, m_parsed.m_colorPickers);
 }
 
-BufferAllocation* Project::getBufferByName(const char* name) {
-  for (int i = 0; i < m_parsed.m_buffers.size(); i++) {
-    if (!strncmp(name, m_parsed.m_buffers[i].name.data(), m_parsed.m_buffers[i].name.size()))
-      return &m_buffers[i];
-  }
-  return nullptr;
+std::optional<float> Project::getConstFloat(const char* name) const {
+  if (auto pElem = getElemByName(name, m_parsed.m_constFloats))
+    return pElem->value;
+  return std::nullopt;
+}
+
+std::optional<uint32_t> Project::getConstUint(const char* name) const {
+  if (auto pElem = getElemByName(name, m_parsed.m_constUints))
+    return pElem->value;
+  return std::nullopt;
+}
+
+std::optional<int> Project::getConstInt(const char* name) const {
+  if (auto pElem = getElemByName(name, m_parsed.m_constInts))
+    return pElem->value;
+  return std::nullopt;
+}
+
+BufferId Project::findBuffer(const char* name) const {
+  return getElemIdByName<BufferId>(name, m_parsed.m_buffers);
+}
+
+BufferAllocation* Project::getBufferAlloc(BufferId buf) {
+  assert(buf.isValid());
+  return &m_buffers[buf.idx];
+}
+
+void Project::barrierRW(BufferId buf, VkCommandBuffer commandBuffer) const {
+  assert(buf.isValid());
+  const auto& bufInfo = m_parsed.m_buffers[buf.idx];
+  const auto& structInfo = m_parsed.m_structDefs[bufInfo.structIdx];
+  BufferUtilities::rwBarrier(
+    commandBuffer,
+    m_buffers[buf.idx].getBuffer(),
+    0,
+    bufInfo.elemCount * structInfo.size);
 }
 
 void Project::setPushConstants(uint32_t push0, uint32_t push1, uint32_t push2, uint32 push3) {
