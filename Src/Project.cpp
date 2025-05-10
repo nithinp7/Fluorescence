@@ -79,17 +79,20 @@ Project::Project(
       allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     }
 
-    m_buffers.push_back(BufferUtilities::createBuffer(
+    auto& bufCollection = m_buffers.emplace_back();
+    for (int bi = 0; bi < desc.bufferCount; bi++) {
+      bufCollection.push_back(BufferUtilities::createBuffer(
         *GApplication,
         structdef.size * desc.elemCount,
         usageFlags,
         allocInfo));
-    vkCmdFillBuffer(
+      vkCmdFillBuffer(
         commandBuffer,
-        m_buffers.back().getBuffer(),
+        bufCollection.back().getBuffer(),
         0,
         structdef.size * desc.elemCount,
         0);
+    }
   }
 
   m_images.reserve(m_parsed.m_images.size());
@@ -214,8 +217,11 @@ Project::Project(
 
   DescriptorSetLayoutBuilder dsBuilder{};
   dsBuilder.addUniformBufferBinding();
-  for (const BufferAllocation& b : m_buffers) {
-    dsBuilder.addStorageBufferBinding(VK_SHADER_STAGE_ALL);
+  for (const auto& b : m_buffers) {
+    if (b.size() == 1)
+      dsBuilder.addStorageBufferBinding(VK_SHADER_STAGE_ALL);
+    else
+      dsBuilder.addBufferHeapBinding(b.size(), VK_SHADER_STAGE_ALL);
   }
   for (const ImageResource& rsc : m_images) {
     if ((rsc.image.getOptions().usage & VK_IMAGE_USAGE_STORAGE_BIT) == 0)
@@ -263,6 +269,12 @@ Project::Project(
     CODE_APPEND("%s;\n\n", s.body.c_str());
   }
 
+  struct HeapBinder {
+    std::vector<VkDescriptorBufferInfo> bufferInfos;
+    const std::vector<VkDescriptorBufferInfo>& getBufferInfos() const { return bufferInfos; }
+  };
+  std::vector<HeapBinder> heapBinders;
+
   // resource declarations
   uint32_t slot = 0;
   {
@@ -273,18 +285,45 @@ Project::Project(
     for (int i = 0; i < m_buffers.size(); ++i) {
       const auto& parsedBuf = m_parsed.m_buffers[i];
       const auto& structdef = m_parsed.m_structDefs[parsedBuf.structIdx];
-      const auto& buf = m_buffers[i];
+      const auto& bufCollection = m_buffers[i];
 
-      assign.bindStorageBuffer(
-          buf,
+      if (parsedBuf.bufferCount == 1) {
+        assign.bindStorageBuffer(
+          bufCollection[0],
           structdef.size * parsedBuf.elemCount,
           false);
-      CODE_APPEND(
+        CODE_APPEND(
           "layout(set=1,binding=%u) buffer BUFFER_%s {  %s %s[]; };\n",
           slot++,
           parsedBuf.name.c_str(),
           structdef.name.c_str(),
           parsedBuf.name.c_str());
+      }
+      else {
+        auto& binder = heapBinders.emplace_back();
+        binder.bufferInfos.reserve(parsedBuf.bufferCount);
+        for (auto& buf : bufCollection) {
+          VkDescriptorBufferInfo& info = binder.bufferInfos.emplace_back();
+          info.buffer = buf.getBuffer();
+          info.offset = 0;
+          info.range = structdef.size * parsedBuf.elemCount;
+        }
+
+        assign.bindBufferHeap(binder);
+        CODE_APPEND(
+          "layout(set=1,binding=%u) buffer BUFFER_%s {  %s _INNER_%s[]; } _HEAP_%s [%u];\n",
+          slot++,
+          parsedBuf.name.c_str(),
+          structdef.name.c_str(),
+          parsedBuf.name.c_str(),
+          parsedBuf.name.c_str(),
+          parsedBuf.bufferCount);
+        CODE_APPEND(
+          "#define %s(IDX) _HEAP_%s[IDX]._INNER_%s\n",
+          parsedBuf.name.c_str(),
+          parsedBuf.name.c_str(),
+          parsedBuf.name.c_str());
+      }
     }
 
     for (int i = 0; i < m_images.size(); ++i) {
@@ -826,12 +865,12 @@ void Project::executeTaskList(
       for (uint32_t bufferIdx : parsedBarrier.buffers) {
         const auto& parsedBuf = m_parsed.m_buffers[bufferIdx];
         const auto& parsedStruct = m_parsed.m_structDefs[parsedBuf.structIdx];
-        const auto& buf = m_buffers[bufferIdx];
-        BufferUtilities::rwBarrier(
-            commandBuffer,
-            buf.getBuffer(),
-            0,
-            parsedBuf.elemCount * parsedStruct.size);
+        for (const auto& buf : m_buffers[bufferIdx])
+          BufferUtilities::rwBarrier(
+              commandBuffer,
+              buf.getBuffer(),
+              0,
+              parsedBuf.elemCount * parsedStruct.size);
       }
       break;
     }
@@ -1077,20 +1116,27 @@ BufferId Project::findBuffer(const char* name) const {
   return getElemIdByName<BufferId>(name, m_parsed.m_buffers);
 }
 
-BufferAllocation* Project::getBufferAlloc(BufferId buf) {
+BufferAllocation* Project::getBufferAlloc(BufferId buf, uint32_t subBufIdx) {
   assert(buf.isValid());
-  return &m_buffers[buf.idx];
+  assert(subBufIdx < m_buffers[buf.idx].size());
+  return &m_buffers[buf.idx][subBufIdx];
+}
+
+uint32_t Project::getSubBufferCount(BufferId buf) const {
+  assert(buf.isValid());
+  return static_cast<uint32_t>(m_buffers[buf.idx].size());
 }
 
 void Project::barrierRW(BufferId buf, VkCommandBuffer commandBuffer) const {
   assert(buf.isValid());
   const auto& bufInfo = m_parsed.m_buffers[buf.idx];
   const auto& structInfo = m_parsed.m_structDefs[bufInfo.structIdx];
-  BufferUtilities::rwBarrier(
-    commandBuffer,
-    m_buffers[buf.idx].getBuffer(),
-    0,
-    bufInfo.elemCount * structInfo.size);
+  for (const auto& buf : m_buffers[buf.idx])
+    BufferUtilities::rwBarrier(
+      commandBuffer,
+      buf.getBuffer(),
+      0,
+      bufInfo.elemCount * structInfo.size);
 }
 
 void Project::setPushConstants(uint32_t push0, uint32_t push1, uint32_t push2, uint32 push3) {

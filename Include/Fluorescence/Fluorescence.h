@@ -80,6 +80,8 @@ public:
       VkCommandBuffer commandBuffer,
       const FrameContext& frame) override;
 
+  static uint32_t getFrameCount();
+
 private:
   void _createGlobalResources(
       Application& app,

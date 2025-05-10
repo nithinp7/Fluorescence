@@ -116,6 +116,7 @@ struct ParsedFlr {
     std::string name;
     uint32_t structIdx;
     uint32_t elemCount;
+    uint32_t bufferCount;
     bool bCpuVisible;
   };
   std::vector<BufferDesc> m_buffers;

@@ -124,6 +124,10 @@ void Fluorescence::destroyRenderState(Application& app) {
   GGlobalHeap = nullptr;
 }
 
+static uint32_t s_frameCount = 0;
+/*static*/
+uint32_t Fluorescence::getFrameCount() { return s_frameCount; }
+
 void Fluorescence::tick(Application& app, const FrameContext& frame) {
   {
     Gui::startRecordingImgui();
@@ -242,7 +246,6 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
   InputManager::MousePos mpos = app.getInputManager().getCurrentMousePos();
   uint32_t inputMask = app.getInputManager().getCurrentInputMask();
 
-  static uint32_t frameCount = 0;
   static uint32_t prevInputMask = inputMask;
 
   if (!m_bFreezeTime)
@@ -254,7 +257,7 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
   uniforms.mouseUv.y =
       static_cast<float>(mpos.y / app.getSwapChainExtent().height);
   uniforms.time = m_time;
-  uniforms.frameCount = frameCount++;
+  uniforms.frameCount = ++s_frameCount;
   uniforms.prevInputMask = prevInputMask;
   uniforms.inputMask = inputMask;
 

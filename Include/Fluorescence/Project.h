@@ -90,7 +90,8 @@ public:
   std::optional<int> getConstInt(const char* name) const;
 
   BufferId findBuffer(const char* name) const;
-  BufferAllocation* getBufferAlloc(BufferId buf);
+  BufferAllocation* getBufferAlloc(BufferId buf, uint32_t subBufIdx);
+  uint32_t getSubBufferCount(BufferId buf) const;
   void barrierRW(BufferId buf, VkCommandBuffer commandBuffer) const;
 
   void setPushConstants(uint32_t push0, uint32_t push1 = 0, uint32_t push2 = 0, uint32 push3 = 0);
@@ -100,7 +101,7 @@ private:
 
   ParsedFlr m_parsed;
 
-  std::vector<BufferAllocation> m_buffers;
+  std::vector<std::vector<BufferAllocation>> m_buffers;
   std::vector<ImageResource> m_images;
   std::vector<ImageResource> m_textureFiles;
   std::vector<ComputePipeline> m_computePipelines;

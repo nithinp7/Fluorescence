@@ -190,8 +190,18 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
     p.parseWhitespace();
 
     auto name = p.parseName();
-
     p.parseWhitespace();
+
+    std::optional<uint32_t> arrayCount = std::nullopt;
+    if (p.parseChar('(')) {
+      p.parseWhitespace();
+      arrayCount = parseUintOrVar();
+      PARSER_VERIFY(arrayCount, "Encountered malformed array syntax, could not read array elem count");
+      p.parseWhitespace();
+      auto closingBracket = p.parseChar(')');
+      PARSER_VERIFY(closingBracket, "Encountered malformed array syntax, expecting closing parenthesis");
+      p.parseWhitespace();
+    }
     p.parseChar(':');
     p.parseWhitespace();
 
@@ -429,7 +439,9 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
           elemCount,
           "Could not parse element count in structured-buffer declaration.");
 
-      m_buffers.push_back({std::string(*name), *structIdx, *elemCount, false});
+      m_buffers.push_back({std::string(*name), *structIdx, *elemCount, arrayCount ? *arrayCount : 1, false});
+      arrayCount = std::nullopt;
+
       break;
     }
     case I_ENABLE_CPU_ACCESS: {
@@ -1043,6 +1055,9 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       PARSER_VERIFY(false, "Encountered unknown instruction.");
       continue;
     }
+
+    // the instruction needs to consume the arrayCount and set it to nullopt, if it is valid
+    PARSER_VERIFY(!arrayCount, "Array syntax not valid for this instruction.");
   }
 
   // post-process
