@@ -7,6 +7,10 @@ struct GlobalState {
   uint accumulationFrames;
 };
 
+struct VertexOutput {
+  vec2 screenUV;
+};;
+
 layout(set=1,binding=1) buffer BUFFER_globalStateBuffer {  GlobalState globalStateBuffer[]; };
 layout(set=1,binding=2, rgba8) uniform image2D accumulationBuffer;
 layout(set=1,binding=3) uniform sampler2D accumulationTexture;
@@ -28,6 +32,13 @@ layout(set=1, binding=4) uniform _UserUniforms {
 
 layout(set=1, binding=5) uniform _CameraUniforms { PerspectiveCamera camera; };
 
+
+
+#ifdef IS_PIXEL_SHADER
+#ifdef _ENTRY_POINT_PS_SDF
+layout(location = 0) out vec4 outColor;
+#endif // _ENTRY_POINT_PS_SDF
+#endif // IS_PIXEL_SHADER
 #include "SDF.glsl"
 
 #ifdef IS_COMP_SHADER
@@ -44,13 +55,15 @@ void main() { CS_PathTrace(); }
 
 #ifdef IS_VERTEX_SHADER
 #ifdef _ENTRY_POINT_VS_SDF
-void main() { VS_SDF(); }
+layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
+void main() { _VERTEX_OUTPUT = VS_SDF(); }
 #endif // _ENTRY_POINT_VS_SDF
 #endif // IS_VERTEX_SHADER
 
 
 #ifdef IS_PIXEL_SHADER
 #ifdef _ENTRY_POINT_PS_SDF
-void main() { PS_SDF(); }
+layout(location = 0) in VertexOutput _VERTEX_INPUT;
+void main() { PS_SDF(_VERTEX_INPUT); }
 #endif // _ENTRY_POINT_PS_SDF
 #endif // IS_PIXEL_SHADER

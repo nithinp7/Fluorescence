@@ -29,13 +29,23 @@ vec3 colorRemap(vec3 color) {
   return color;
 }
 
-float sampleSdf(vec3 pos) {
+float sampleBlob(vec3 pos) {
   vec3 c = vec3(0.0, 0.0, -5.0);
   vec3 diff = pos - c;
   vec3 offs = SLIDER_A * diff;
   float r = 2.0 + 0.05 * wave(10., SLIDER_B * offs.x * offs.z + offs.y + -SLIDER_C * pos.x * pos.y * pos.z);
   float d = length(diff);
   return d - r;
+}
+
+float sampleFloor(vec3 pos) {
+  return max(pos.y + 4.0, 0.0);
+}
+
+float sampleSdf(vec3 pos) {
+  float dist = sampleBlob(pos);
+  dist = min(dist, sampleFloor(pos));
+  return dist;
 }
 
 vec3 sampleSdfGrad(vec3 pos) {
@@ -166,29 +176,23 @@ void CS_PathTrace() {
 ////////////////////////// VERTEX SHADERS //////////////////////////
 
 #ifdef IS_VERTEX_SHADER
-layout(location = 0) out vec2 outScreenUv;
-
-void VS_SDF() {
-  vec2 uv = VS_FullScreen();
-  gl_Position = vec4(uv * 2.0 - 1.0, 0.0, 1.0);
-  outScreenUv = uv;
+VertexOutput VS_SDF() {
+  VertexOutput OUT;
+  OUT.screenUV = VS_FullScreen();
+  gl_Position = vec4(OUT.screenUV * 2.0 - 1.0, 0.0, 1.0);
+  return OUT;
 }
-
 #endif // IS_VERTEX_SHADER
 
 ////////////////////////// PIXEL SHADERS //////////////////////////
 
 #ifdef IS_PIXEL_SHADER
-layout(location = 0) in vec2 inScreenUv;
-
-layout(location = 0) out vec4 outColor;
-
-void PS_SDF() {
-  vec3 dir = normalize(computeDir(inScreenUv));
+void PS_SDF(VertexOutput IN) {
+  vec3 dir = normalize(computeDir(IN.screenUV));
   vec3 pos = camera.inverseView[3].xyz;
   
   if (RENDER_MODE == 0) {
-    outColor = texture(accumulationTexture, inScreenUv);
+    outColor = texture(accumulationTexture, IN.screenUV);
   }
   if (RENDER_MODE == 1) {
     HitResult hit;
