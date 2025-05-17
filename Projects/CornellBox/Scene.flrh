@@ -3,15 +3,27 @@ struct Tri {
   vec3 v0;
   vec3 v1;
   vec3 v2;
+  uint matID;
 };
-struct_size: 36
+struct_size: 40
 
-uint MAX_SPHERES: 128
+uint MAX_SPHERES: 12
 struct Sphere {
   vec3 c;
   float r;
+  uint matID;
 };
-struct_size: 16
+struct_size: 20
+
+uint MAX_MATERIALS: 12
+struct Material {
+  vec3 diffuse;
+  float roughness;
+  vec3 emissive;
+  float metallic;
+};
+struct_size: 32
 
 structured_buffer triBuffer: Tri MAX_TRIS
 structured_buffer sphereBuffer: Sphere MAX_SPHERES
+structured_buffer materialBuffer: Material MAX_MATERIALS

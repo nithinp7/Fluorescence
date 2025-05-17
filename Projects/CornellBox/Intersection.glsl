@@ -10,6 +10,7 @@ struct HitResult {
   vec3 p;
   float t;
   vec3 n;
+  uint matID;
 };
 
 bool traceTri(Tri tri, Ray ray, out HitResult hit) {
@@ -33,6 +34,7 @@ bool traceTri(Tri tri, Ray ray, out HitResult hit) {
   hit.p = uvt.x * T[0] + uvt.y * T[1] + tri.v0;
   hit.t = uvt.z;
   hit.n = normalize(n);
+  hit.matID = tri.matID;
   return true;
 }
 
@@ -56,6 +58,7 @@ bool traceSphere(Sphere s, Ray ray, out HitResult hit) {
   hit.p = ray.o + t*ray.d;
   hit.t = t;
   hit.n = normalize(hit.p - s.c);
+  hit.matID = s.matID;
   return true;
 }
 #endif // _INTERSECTION_GLSL_

@@ -3,7 +3,8 @@
 #define SCREEN_WIDTH 1440
 #define SCREEN_HEIGHT 1280
 #define MAX_TRIS 128
-#define MAX_SPHERES 128
+#define MAX_SPHERES 12
+#define MAX_MATERIALS 12
 
 struct GlobalState {
   uint accumulationFrames;
@@ -15,11 +16,20 @@ struct Tri {
   vec3 v0;
   vec3 v1;
   vec3 v2;
+  uint matID;
 };;
 
 struct Sphere {
   vec3 c;
   float r;
+  uint matID;
+};;
+
+struct Material {
+  vec3 diffuse;
+  float roughness;
+  vec3 emissive;
+  float metallic;
 };;
 
 struct VertexOutput {
@@ -29,10 +39,11 @@ struct VertexOutput {
 layout(set=1,binding=1) buffer BUFFER_globalStateBuffer {  GlobalState globalStateBuffer[]; };
 layout(set=1,binding=2) buffer BUFFER_triBuffer {  Tri triBuffer[]; };
 layout(set=1,binding=3) buffer BUFFER_sphereBuffer {  Sphere sphereBuffer[]; };
-layout(set=1,binding=4, rgba8) uniform image2D accumulationBuffer;
-layout(set=1,binding=5) uniform sampler2D accumulationTexture;
+layout(set=1,binding=4) buffer BUFFER_materialBuffer {  Material materialBuffer[]; };
+layout(set=1,binding=5, rgba8) uniform image2D accumulationBuffer;
+layout(set=1,binding=6) uniform sampler2D accumulationTexture;
 
-layout(set=1, binding=6) uniform _UserUniforms {
+layout(set=1, binding=7) uniform _UserUniforms {
 	uint BOUNCES;
 	uint MAX_ITERS;
 	uint RENDER_MODE;
@@ -47,7 +58,7 @@ layout(set=1, binding=6) uniform _UserUniforms {
 
 #include <Fluorescence.glsl>
 
-layout(set=1, binding=7) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=8) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 

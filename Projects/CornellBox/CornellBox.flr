@@ -33,7 +33,7 @@ compute_shader CS_Tick: 1 1 1
 compute_shader CS_PathTrace: 32 32 1
 
 compute_dispatch: CS_Tick 1 1 1
-barrier: globalStateBuffer triBuffer sphereBuffer
+barrier: globalStateBuffer triBuffer sphereBuffer materialBuffer
 transition_layout: accumulationBuffer image
 compute_dispatch: CS_PathTrace SCREEN_WIDTH SCREEN_HEIGHT 1
 transition_layout: accumulationBuffer texture

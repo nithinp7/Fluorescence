@@ -7,16 +7,6 @@
 #include "Intersection.glsl"
 #include "Scene.glsl"
 
-#define SDF_GRAD_EPS 0.1
-
-/*
-struct Material {
-  vec3 diffuse;
-  float roughness;
-  vec3 emissive;
-  float metallic;
-};*/
-
 vec3 computeDir(vec2 uv) {
 	vec2 d = uv * 2.0 - 1.0;
 
@@ -80,7 +70,7 @@ vec4 samplePath(inout uvec2 seed, vec3 pos, vec3 dir) {
 
 #ifdef IS_COMP_SHADER
 void CS_Tick() {
-  if (globalStateBuffer[0].triCount == 0)
+  if (globalStateBuffer[0].triCount == 0 || (uniforms.inputMask & INPUT_BIT_R) != 0)
     initScene();
   
   // if (!ACCUMULATE || (uniforms.inputMask & INPUT_BIT_SPACE) != 0) 
@@ -153,8 +143,11 @@ void PS_Render(VertexOutput IN) {
   //     outColor = vec4(0.0.xxx, 1.0);
   // }
   HitResult hit;
-  if (traceScene(ray, hit))
-    outColor = vec4(0.5 * hit.n + 0.5.xxx, 1.0);
+  if (traceScene(ray, hit)) {
+    Material mat = materialBuffer[hit.matID];
+    outColor = vec4(mat.diffuse, 1.0);
+    // outColor = vec4(0.5 * hit.n + 0.5.xxx, 1.0);
+  }
   else
     outColor = vec4(sampleEnv(ray.d), 1.0);
 }
