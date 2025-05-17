@@ -75,7 +75,6 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
   flrFileStack.emplace_back(flrFileName);
   char lineBuf[1024];
 
-  uint32_t lineNumber = 0;
   uint32_t uiIdx = 0;
 
   bool bTaskBlockActive = false;
@@ -401,7 +400,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
 
       char body[1024] = {0};
       uint32_t offs = 0;
-      uint32_t structStartLine = lineNumber;
+      uint32_t structStartLine = flrFileStack.back().m_lineNumber;
       while (true) {
         bool breakOuter = false;
         while (*p.c) {
@@ -422,12 +421,12 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
         offs++;
 
         if (!flrFileStack.back().m_stream.getline(lineBuf, 1024)) {
-          lineNumber = structStartLine; // reset line to start of struct
+          flrFileStack.back().m_lineNumber = structStartLine; // reset line to start of struct
           PARSER_VERIFY(
               false,
               "Found unterminated struct declaration, expected \'}\'.");
         }
-        lineNumber++;
+        flrFileStack.back().m_lineNumber++;
         p.c = lineBuf;
       }
 
@@ -1074,13 +1073,22 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
     case I_INCLUDE: {
       auto pathLiteral = p.parseStringLiteral();
       PARSER_VERIFY(pathLiteral, "Could not parse included flr header path");
-
+      // try absolute path
       std::string path(*pathLiteral);
       if (!Utilities::checkFileExists(path)) {
+        // try local relative path
         std::filesystem::path fpath(flrFileStack.back().m_filename);
-        fpath.replace_filename(path);
+        fpath.replace_filename(*pathLiteral);
+        path = fpath.u8string(); 
+      }
+
+      if (!Utilities::checkFileExists(path)) {
+        // try in flr shaders folder
+        std::filesystem::path fpath = std::filesystem::path(GProjectDirectory + "/Shaders/")
+          .replace_filename(*pathLiteral);
         path = fpath.u8string();
       }
+
       flrFileStack.emplace_back(path.c_str());
       if (!flrFileStack.back().m_stream.is_open()) {
         flrFileStack.pop_back();
