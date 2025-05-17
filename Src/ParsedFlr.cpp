@@ -56,7 +56,7 @@ findIndexByName(char* const (&names)[N], std::string_view n) {
 }
 } // namespace
 
-ParsedFlr::ParsedFlr(Application& app, const char* filename)
+ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
     : m_featureFlags(FF_NONE),
       m_displayImageIdx(-1),
       m_failed(true),
@@ -65,7 +65,14 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
   m_constUints.push_back({"SCREEN_WIDTH", app.getSwapChainExtent().width});
   m_constUints.push_back({"SCREEN_HEIGHT", app.getSwapChainExtent().height});
 
-  std::ifstream flrFile(filename);
+  struct File {
+    File(const char* filename) : m_filename(filename), m_stream(filename), m_lineNumber(0) {}
+    std::string m_filename;
+    std::ifstream m_stream;
+    uint32_t m_lineNumber;
+  };
+  std::vector<File> flrFileStack;
+  flrFileStack.emplace_back(flrFileName);
   char lineBuf[1024];
 
   uint32_t lineNumber = 0;
@@ -73,20 +80,33 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
 
   bool bTaskBlockActive = false;
 
-#define PARSER_VERIFY(X, MSG)                                                  \
-  if (!(X)) {                                                                  \
-    sprintf(                                                                   \
-        m_errMsg,                                                              \
-        "ERROR: " MSG " ON LINE: %u IN FILE: %s\n",                            \
-        lineNumber,                                                            \
-        filename);                                                             \
-    std::cerr << m_errMsg << std::endl;                                        \
-    flrFile.close();                                                           \
-    return;                                                                    \
+  auto emitParserError = [&](const char* msg) {
+    sprintf(
+      m_errMsg,
+      "ERROR: %s ON LINE: %u IN FILE: %s\n",
+      msg,
+      flrFileStack.back().m_lineNumber,
+      flrFileStack.back().m_filename.c_str());
+    std::cerr << m_errMsg << std::endl;       
+    while (!flrFileStack.empty()) {
+      flrFileStack.back().m_stream.close();
+      flrFileStack.pop_back();
+    }
+  };
+
+#define PARSER_VERIFY(X, MSG)   \
+  if (!(X)) {                   \
+    emitParserError(MSG);       \
+    return;                     \
   }
 
-  while (flrFile.getline(lineBuf, 1024)) {
-    lineNumber++;
+  while (!flrFileStack.empty()) {
+    if (!flrFileStack.back().m_stream.getline(lineBuf, 1024)) {
+      flrFileStack.back().m_stream.close();
+      flrFileStack.pop_back();
+      continue;
+    }
+    flrFileStack.back().m_lineNumber++;
 
     Parser p{lineBuf};
 
@@ -401,7 +421,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
         *(body + offs) = '\n';
         offs++;
 
-        if (!flrFile.getline(lineBuf, 1024)) {
+        if (!flrFileStack.back().m_stream.getline(lineBuf, 1024)) {
           lineNumber = structStartLine; // reset line to start of struct
           PARSER_VERIFY(
               false,
@@ -1051,6 +1071,24 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
       bTaskBlockActive = false;
       break;
     };
+    case I_INCLUDE: {
+      auto pathLiteral = p.parseStringLiteral();
+      PARSER_VERIFY(pathLiteral, "Could not parse included flr header path");
+
+      std::string path(*pathLiteral);
+      if (!Utilities::checkFileExists(path)) {
+        std::filesystem::path fpath(flrFileStack.back().m_filename);
+        fpath.replace_filename(path);
+        path = fpath.u8string();
+      }
+      flrFileStack.emplace_back(path.c_str());
+      if (!flrFileStack.back().m_stream.is_open()) {
+        flrFileStack.pop_back();
+        PARSER_VERIFY(false, "Could not open included flr header file");
+      }
+
+      break;
+    };
     default:
       PARSER_VERIFY(false, "Encountered unknown instruction.");
       continue;
@@ -1108,7 +1146,6 @@ ParsedFlr::ParsedFlr(Application& app, const char* filename)
 
 #undef PARSER_VERIFY
 
-  flrFile.close();
   m_failed = false;
 }
 } // namespace flr

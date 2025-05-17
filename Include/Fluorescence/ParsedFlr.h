@@ -289,6 +289,7 @@ struct ParsedFlr {
     I_TRANSITION,
     I_TASK_BLOCK_START,
     I_TASK_BLOCK_END,
+    I_INCLUDE,
     I_COUNT
   };
 
@@ -332,7 +333,8 @@ struct ParsedFlr {
       "texture_file",
       "transition_layout",
       "task_block_start",
-      "task_block_end"};
+      "task_block_end",
+      "include"};
 
   struct ImageFormatTableEntry {
     const char* glslFormatName;
