@@ -4,8 +4,8 @@
 #include <Misc/Constants.glsl>
 #include <Misc/Sampling.glsl>
 
-#include "Intersection.glsl"
-#include "Scene.glsl"
+#include <FlrLib/Scene/Intersection.glsl>
+#include <FlrLib/Scene/Scene.glsl>
 
 vec3 computeDir(vec2 uv) {
 	vec2 d = uv * 2.0 - 1.0;
@@ -29,77 +29,98 @@ vec3 sampleEnv(vec3 dir) {
   }
 }
 
-/*
-vec4 samplePath(inout uvec2 seed, vec3 pos, vec3 dir) {
+vec4 samplePath(inout uvec2 seed, Ray ray) {
   vec4 color = vec4(0.0.xxx, 1.0);
 
   vec3 throughput = 1.0.xxx;
   for (int bounce = 0; bounce < BOUNCES; bounce++) {
     HitResult hit;
-    bool bResult = raymarch(pos, dir, hit);
-    vec3 normal = normalize(hit.grad);
+    bool bResult = traceScene(ray, hit);
 
     if (!bResult) {
-      color.rgb = sampleEnv(dir);
+      color.rgb = throughput * sampleEnv(ray.d);
       break;
     }
 
-    if (length(hit.material.emissive) > 0.0)
+    Material mat = materialBuffer[hit.matID];
+
+    if (length(mat.emissive) > 0.0)
     {
-      color.rgb += throughput * hit.material.emissive;
+      color.rgb += throughput * mat.emissive;
       break;
     }
 
     vec3 reflDir;
     float pdf;
     vec3 f = sampleMicrofacetBrdf(
-      randVec2(seed), -dir, normal,
-      hit.material.diffuse, hit.material.metallic, hit.material.roughness, 
+      randVec2(seed), -ray.d, hit.n,
+      mat.diffuse, mat.metallic, mat.roughness, 
       reflDir, pdf);
     
-    throughput *= f * hit.material.diffuse / pdf;
+    throughput *= f * mat.diffuse / pdf;
 
-    dir = normalize(reflDir);
-    pos = hit.pos + SDF_GRAD_EPS * dir;
+    const float BOUNCE_BIAS = 0.001;
+    ray.d = normalize(reflDir);
+    ray.o = hit.p + BOUNCE_BIAS * ray.d;
   }
 
   return color;
-}*/
+}
 
 ////////////////////////// COMPUTE SHADERS //////////////////////////
 
 #ifdef IS_COMP_SHADER
 void CS_Tick() {
   if (globalStateBuffer[0].triCount == 0 || (uniforms.inputMask & INPUT_BIT_R) != 0)
-    initScene();
+    initScene_CornellBox();
   
-  // if (!ACCUMULATE || (uniforms.inputMask & INPUT_BIT_SPACE) != 0) 
-  // {
-  //   globalStateBuffer[0].accumulationFrames = 1;
-  // } 
-  // else 
-  // {
-  //   globalStateBuffer[0].accumulationFrames++;
-  // }
+  if (!ACCUMULATE || (uniforms.inputMask & INPUT_BIT_SPACE) != 0) 
+  {
+    globalStateBuffer[0].accumulationFrames = 1;
+  } 
+  else 
+  {
+    globalStateBuffer[0].accumulationFrames++;
+  }
 }
 
 void CS_PathTrace() {
-  // uvec2 pixelCoord = uvec2(gl_GlobalInvocationID.xy);
-  // if (pixelCoord.x >= SCREEN_WIDTH || pixelCoord.y >= SCREEN_HEIGHT) {
-  //   return;
-  // }
+  uvec2 pixelCoord = uvec2(gl_GlobalInvocationID.xy);
+  if (pixelCoord.x >= SCREEN_WIDTH || pixelCoord.y >= SCREEN_HEIGHT) {
+    return;
+  }
 
-  // vec4 prevColor = imageLoad(accumulationBuffer, ivec2(pixelCoord));
+  vec4 prevColor = imageLoad(accumulationBuffer, ivec2(pixelCoord));
 
-  // uvec2 seed = pixelCoord * uvec2(uniforms.frameCount, uniforms.frameCount + 1);
+  uvec2 seed = pixelCoord * uvec2(uniforms.frameCount, uniforms.frameCount + 1);
   
-  // vec2 uv = vec2(pixelCoord) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
-  // vec3 dir = normalize(computeDir(uv));
-  // vec3 pos = camera.inverseView[3].xyz;
+  vec2 uv = vec2(pixelCoord) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
+  
+  Ray ray;
+  ray.o = camera.inverseView[3].xyz;
+  ray.d = normalize(computeDir(uv));
 
-  // vec4 color = samplePath(seed, pos, dir);
-  // color.rgb = mix(prevColor.rgb, color.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
-  // imageStore(accumulationBuffer, ivec2(pixelCoord), color);
+
+  vec4 color = 0.0.xxxx;
+  if (RENDER_MODE == 0) {
+    color = samplePath(seed, ray);
+  } else {
+    HitResult hit;
+    if (traceScene(ray, hit)) {
+      Material mat = materialBuffer[hit.matID];
+      if (RENDER_MODE == 1) {
+        color = vec4(mat.diffuse, 1.0);
+      } else {
+        color = vec4(0.5 * hit.n + 0.5.xxx, 1.0);
+      }
+    }
+    else {
+      color = vec4(sampleEnv(ray.d), 1.0);
+    }
+  }
+
+  color.rgb = mix(prevColor.rgb, color.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
+  imageStore(accumulationBuffer, ivec2(pixelCoord), color);
 }
 #endif // IS_COMP_SHADER
 
@@ -118,38 +139,8 @@ VertexOutput VS_Render() {
 
 #ifdef IS_PIXEL_SHADER
 void PS_Render(VertexOutput IN) {
-  Ray ray;
-  ray.o = camera.inverseView[3].xyz;
-  ray.d = normalize(computeDir(IN.screenUV));
-  
-  // if (RENDER_MODE == 0) {
-  //   outColor = texture(accumulationTexture, IN.screenUV);
-  // }
-  // if (RENDER_MODE == 1) {
-  //   HitResult hit;
-  //   bool bResult = raymarch(pos, dir, hit);
-  //   //if (bResult)
-  //     outColor = vec4(0.5 * 0.5 * normalize(hit.grad) + 0.25.xxx, 1.0);
-  //   // else 
-  //     // outColor = vec4(0.0.xxx, 1.0);
-  // }
-  // if (RENDER_MODE == 2) {
-  //   HitResult hit;
-  //   bool bResult = raymarch(pos, dir, hit);
-  //   float depth = length(hit.pos - pos);
-  //   if (bResult)
-  //     outColor = vec4((1.0 - depth / (depth + 1.0)).xxx, 1.0);
-  //   else 
-  //     outColor = vec4(0.0.xxx, 1.0);
-  // }
-  HitResult hit;
-  if (traceScene(ray, hit)) {
-    Material mat = materialBuffer[hit.matID];
-    outColor = vec4(mat.diffuse, 1.0);
-    // outColor = vec4(0.5 * hit.n + 0.5.xxx, 1.0);
-  }
-  else
-    outColor = vec4(sampleEnv(ray.d), 1.0);
+  outColor = texture(accumulationTexture, IN.screenUV);
+  // outColor.rgb = vec3(1.0) - exp(-outColor.rgb * 0.8);
 }
 #endif // IS_PIXEL_SHADER
 

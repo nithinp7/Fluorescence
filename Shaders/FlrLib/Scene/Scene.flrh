@@ -24,6 +24,10 @@ struct Material {
 };
 struct_size: 32
 
+ui_dropdown_start SCENE:
+  slider_float SCENE_SCALE: 10.0 1.0 50.0
+ui_dropdown_end
+
 structured_buffer triBuffer: Tri MAX_TRIS
 structured_buffer sphereBuffer: Sphere MAX_SPHERES
 structured_buffer materialBuffer: Material MAX_MATERIALS

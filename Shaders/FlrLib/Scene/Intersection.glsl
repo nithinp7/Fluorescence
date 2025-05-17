@@ -21,8 +21,9 @@ bool traceTri(Tri tri, Ray ray, out HitResult hit) {
 
   vec3 n = cross(T[0], T[1]);
   float nDotD = dot(n, ray.d);
-  if (abs(nDotD) < 0.00001) 
-    return false;
+  // enable optional backface culling...
+  // if (nDotD > -0.00001) return false;
+  if (abs(nDotD) < 0.00001) return false;
 
   mat3 Tinv = inverse(T);
   vec3 uvt = Tinv * (ray.o - tri.v0);
@@ -33,7 +34,7 @@ bool traceTri(Tri tri, Ray ray, out HitResult hit) {
 
   hit.p = uvt.x * T[0] + uvt.y * T[1] + tri.v0;
   hit.t = uvt.z;
-  hit.n = normalize(n);
+  hit.n = normalize(n) * -sign(nDotD);
   hit.matID = tri.matID;
   return true;
 }

@@ -45,15 +45,10 @@ layout(set=1,binding=6) uniform sampler2D accumulationTexture;
 
 layout(set=1, binding=7) uniform _UserUniforms {
 	uint BOUNCES;
-	uint MAX_ITERS;
 	uint RENDER_MODE;
 	uint BACKGROUND;
-	float ROUGHNESS;
-	float SLIDER_A;
-	float SLIDER_B;
-	float SLIDER_C;
+	float SCENE_SCALE;
 	bool ACCUMULATE;
-	bool COLOR_REMAP;
 };
 
 #include <Fluorescence.glsl>

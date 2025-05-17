@@ -2,16 +2,7 @@
 enable_feature: perspective_camera
 
 checkbox ACCUMULATE: false
-slider_float ROUGHNESS: 0.1 0.01 1.0
 slider_uint BOUNCES: 2 2 5
-
-slider_float SLIDER_A: 0.5 0.0 10.0
-slider_float SLIDER_B: 0.5 0.0 10.0
-slider_float SLIDER_C: 0.5 0.0 10.0
-
-slider_uint MAX_ITERS: 50 50 1000
-
-checkbox COLOR_REMAP: false
 
 slider_uint RENDER_MODE: 0 0 2
 slider_uint BACKGROUND: 0 0 3
@@ -24,7 +15,7 @@ struct GlobalState {
 struct_size: 12
 structured_buffer globalStateBuffer: GlobalState 1
 
-include "Scene.flrh"
+include "FlrLib/Scene/Scene.flrh"
 
 image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba8
 texture_alias accumulationTexture
