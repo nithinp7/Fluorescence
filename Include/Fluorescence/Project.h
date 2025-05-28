@@ -102,6 +102,7 @@ private:
   ParsedFlr m_parsed;
 
   std::vector<std::vector<BufferAllocation>> m_buffers;
+  std::vector<VkAccessFlags> m_bufferResourceStates;
   std::vector<ImageResource> m_images;
   std::vector<ImageResource> m_textureFiles;
   std::vector<ComputePipeline> m_computePipelines;
@@ -137,6 +138,14 @@ private:
     uint32_t imageIdx;
   };
   std::optional<PendingSaveImage> m_pendingSaveImage;
+
+  struct PendingSaveBuffer {
+    std::string m_saveFileName;
+    uint32_t bufferIdx;
+  };
+  std::optional<PendingSaveBuffer> m_pendingSaveBuffer;
+
+  std::vector<uint32_t> m_pendingTaskBlockExecs;
 
   struct GenericPush {
     uint32_t push0;

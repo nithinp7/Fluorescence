@@ -38,6 +38,8 @@ struct ParsedFlr {
     UET_COLOR_PICKER,
     UET_CHECKBOX,
     UET_SAVE_IMAGE_BUTTON,
+    UET_SAVE_BUFFER_BUTTON,
+    UET_TASK_BUTTON,
     UET_SEPARATOR,
     UET_DROPDOWN_START,
     UET_DROPDOWN_END
@@ -105,6 +107,18 @@ struct ParsedFlr {
   };
   std::vector<SaveImageButton> m_saveImageButtons;
 
+  struct SaveBufferButton {
+    uint32_t bufferIdx;
+    uint32_t uiIdx;
+  };
+  std::vector<SaveBufferButton> m_saveBufferButtons;
+
+  struct TaskButton {
+    uint32_t taskBlockIdx;
+    uint32_t uiIdx;
+  };
+  std::vector<TaskButton> m_taskButtons;
+  
   struct StructDef {
     std::string name;
     std::string body;
@@ -118,6 +132,8 @@ struct ParsedFlr {
     uint32_t elemCount;
     uint32_t bufferCount;
     bool bCpuVisible;
+    bool bTransferSrc;
+    bool bIndirectArgs;
   };
   std::vector<BufferDesc> m_buffers;
 
@@ -157,8 +173,18 @@ struct ParsedFlr {
   };
   std::vector<ComputeDispatch> m_computeDispatches;
 
+  struct BufferResourceStateMapping{
+    const char* name;
+    VkAccessFlags accessFlags;
+  };
+  static constexpr BufferResourceStateMapping BUFFER_RESOURCE_STATE_TABLE[] = {
+    {"rw", VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT},
+    {"indirectArgs", VK_ACCESS_INDIRECT_COMMAND_READ_BIT}
+  };
+
   struct Barrier {
     std::vector<uint32_t> buffers;
+    VkAccessFlags accessFlags;
   };
   std::vector<Barrier> m_barriers;
 
@@ -171,9 +197,10 @@ struct ParsedFlr {
   enum LayoutTransitionTarget : uint8_t {
     LTT_TEXTURE = 0,
     LTT_IMAGE_RW,
-    LTT_ATTACHMENT
+    LTT_ATTACHMENT,
+    LTT_COUNT
   };
-  static constexpr char* TRANSITION_TARGET_NAMES[] = {
+  static constexpr char* TRANSITION_TARGET_NAMES[LTT_COUNT] = {
       "texture",
       "image",
       "attachment"};
@@ -183,14 +210,26 @@ struct ParsedFlr {
   };
   std::vector<Transition> m_transitions;
 
+  enum DrawMode : uint8_t {
+    DM_DRAW = 0,
+    // DM_DRAW_INDEXED, 
+    DM_DRAW_OBJ,
+    DM_DRAW_INDIRECT,
+    //DM_DRAW_INDEXED_INDIRECT
+  };
   struct Draw {
     // TODO: re-usable subpasses that can be used multiple times...
     std::string vertexShader;
     std::string pixelShader;
-    uint32_t vertexCount;
-    uint32_t instanceCount;
-    int objMeshIdx; // if >= 0, pulls vertex count from loaded file
+    // param0/1/2 are used as follows
+    // if drawMode==DM_DRAW: vertexCount, instanceCount, UNUSED
+    // if drawMode==DM_DRAW_INDIRECT, indirectBufferIdx, drawCount, UNUSED
+    // if drawMode==DM_DRAW_OBJ, objIdx, UNUSED, UNUSED
+    uint32_t param0;
+    uint32_t param1;
+    uint32_t param2;
     int vertexOutputStructIdx;
+    DrawMode drawMode;
     bool bDisableDepth;
   };
 
@@ -258,6 +297,8 @@ struct ParsedFlr {
     I_COLOR_PICKER,
     I_CHECKBOX,
     I_SAVE_IMAGE_BUTTON,
+    I_SAVE_BUFFER_BUTTON,
+    I_TASK_BUTTON,
     I_SEPARATOR,
     I_DROPDOWN_START,
     I_DROPDOWN_END,
@@ -279,6 +320,7 @@ struct ParsedFlr {
     I_STORE_DEPTH,
     I_LOADSTORE_DEPTH,
     I_DRAW,
+    I_DRAW_INDIRECT,
     I_DRAW_OBJ,
     I_VERTEX_OUTPUT,
     I_FEATURE,
@@ -303,6 +345,8 @@ struct ParsedFlr {
       "color_picker",
       "checkbox",
       "save_image_button",
+      "save_buffer_button",
+      "task_button",
       "ui_separator",
       "ui_dropdown_start",
       "ui_dropdown_end",
@@ -324,6 +368,7 @@ struct ParsedFlr {
       "store_depth",
       "loadstore_depth",
       "draw",
+      "draw_indirect",
       "draw_obj",
       "vertex_output",
       "enable_feature",

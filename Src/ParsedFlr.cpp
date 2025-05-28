@@ -67,12 +67,15 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
 
   struct File {
     File(const char* filename) : m_filename(filename), m_stream(filename), m_lineNumber(0) {}
+    File(const std::string& filename) : m_filename(filename), m_stream(filename), m_lineNumber(0) {}
     std::string m_filename;
     std::ifstream m_stream;
     uint32_t m_lineNumber;
   };
   std::vector<File> flrFileStack;
   flrFileStack.emplace_back(flrFileName);
+  flrFileStack.emplace_back(GProjectDirectory + "/Shaders/FlrLib/Fluorescence.flrh");
+
   char lineBuf[1024];
 
   uint32_t uiIdx = 0;
@@ -166,6 +169,19 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
                 entry.glslFormatName,
                 glslFormat.size()))
           return entry.vkFormat;
+      }
+      return std::nullopt;
+    };
+
+    auto findVkAccessFlags =
+      [&](std::string_view brsName) -> std::optional<VkAccessFlags> {
+      for (const auto& entry : BUFFER_RESOURCE_STATE_TABLE) {
+        if (brsName.size() == strlen(entry.name) &&
+          !strncmp(
+            brsName.data(),
+            entry.name,
+            brsName.size()))
+          return entry.accessFlags;
       }
       return std::nullopt;
     };
@@ -379,6 +395,39 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
 
       break;
     }
+    case I_SAVE_BUFFER_BUTTON: {
+      auto bufferName = p.parseName();
+      PARSER_VERIFY(
+        bufferName,
+        "Could not parse buffer name in save_buffer_button instruction.");
+      auto bufferIdx = findIndexByName(m_buffers, *bufferName);
+      PARSER_VERIFY(
+        bufferIdx,
+        "Could not find specified buffer in save_buffer_button "
+        "instruction.");
+
+      m_buffers[*bufferIdx].bTransferSrc = true;
+
+      m_uiElements.push_back({ UET_SAVE_BUFFER_BUTTON, (uint32_t)m_saveBufferButtons.size() });
+      m_saveBufferButtons.push_back({ *bufferIdx, uiIdx++ });
+
+      break;
+    }
+    case I_TASK_BUTTON:
+    {
+      auto taskName = p.parseName();
+      PARSER_VERIFY(
+        taskName,
+        "Could not parse task name in task_button instruction.");
+      auto taskIdx = findIndexByName(m_taskBlocks, *taskName);
+      PARSER_VERIFY(
+        taskIdx,
+        "Could not find specified task in task_button instruction.");
+
+      m_uiElements.push_back({ UET_TASK_BUTTON, (uint32_t)m_taskButtons.size() });
+      m_taskButtons.push_back({ *taskIdx, uiIdx++ });
+      break;
+    }
     case I_SEPARATOR: {
       m_uiElements.push_back({ UET_SEPARATOR, ~0ul });
       break;
@@ -452,13 +501,16 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
           structIdx,
           "Could not find struct referenced in structured-buffer declaration.");
 
+      const auto& s = m_structDefs[*structIdx];
+      bool bIndirectArgs = s.name == "IndirectArgs" || s.name == "IndexedIndirectArgs";
+
       p.parseWhitespace();
       auto elemCount = parseUintOrVar();
       PARSER_VERIFY(
           elemCount,
           "Could not parse element count in structured-buffer declaration.");
 
-      m_buffers.push_back({std::string(*name), *structIdx, *elemCount, arrayCount ? *arrayCount : 1, false});
+      m_buffers.push_back({std::string(*name), *structIdx, *elemCount, arrayCount ? *arrayCount : 1, false, false, bIndirectArgs });
       arrayCount = std::nullopt;
 
       break;
@@ -535,6 +587,14 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       break;
     }
     case I_BARRIER: {
+      VkAccessFlags accessFlags = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+      if (name) {
+        // TODO: this syntax is a bit awkward, since the name token ends up being treated like an argument...
+        auto accessFlags_ = findVkAccessFlags(*name);
+        PARSER_VERIFY(accessFlags_, "Could not parse buffer resource state specified in barrier declaration.");
+        accessFlags = *accessFlags_;
+      }
+
       auto bn = p.parseName();
       PARSER_VERIFY(bn, "Expected at least one buffer in barrier declaration.");
 
@@ -562,6 +622,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
 
       pushTask((uint32_t)m_barriers.size(), TT_BARRIER);
       m_barriers.emplace_back().buffers = std::move(buffers);
+      m_barriers.back().accessFlags = accessFlags;
 
       break;
     }
@@ -812,8 +873,47 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
            std::string(*pixelShader),
            *vertexCount,
            *instanceCount,
+           0,
            -1,
+           DM_DRAW,
            false});
+      break;
+    }
+    case I_DRAW_INDIRECT: {
+      // TODO: have re-usable subpasses that can be drawn multiple times?
+      PARSER_VERIFY(
+        m_renderPasses.size(),
+        "Expected render-pass or display-pass declaration to precede "
+        "draw-call.");
+
+      auto vertShader = p.parseName();
+      PARSER_VERIFY(
+        vertShader,
+        "Could not parse vertex shader name in draw-call declaration.");
+      p.parseWhitespace();
+      auto pixelShader = p.parseName();
+      PARSER_VERIFY(
+        pixelShader,
+        "Could not parse pixel shader name in draw-call declaration.");
+      p.parseWhitespace();
+      
+      auto bufName = p.parseName();
+      PARSER_VERIFY(bufName, "Could not parse buffer name in draw_indirect instruction");
+      auto bufIdx = findIndexByName(m_buffers, *bufName);
+      PARSER_VERIFY(bufIdx, "Could not find specified buffer in draw_indirect instruction.");
+      const auto& s = m_structDefs[m_buffers[*bufIdx].structIdx];
+      PARSER_VERIFY(s.name == "IndirectArgs", "Unexpected struct type for structured buffer passed to draw_indirect instruction - expecting IndirectArgs or IndexedIndirectArgs");
+
+      uint32_t renderPassIdx = m_renderPasses.size() - 1;
+      m_renderPasses.back().draws.push_back(
+        { std::string(*vertShader),
+         std::string(*pixelShader),
+         *bufIdx,
+         m_buffers[*bufIdx].elemCount,
+         0,
+         -1,
+         DM_DRAW_INDIRECT, 
+         false });
       break;
     }
     case I_DRAW_OBJ: {
@@ -850,10 +950,11 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       m_renderPasses.back().draws.push_back(
           {std::string(*vertShader),
            std::string(*pixelShader),
+           *idx,
            0,
-           1,
-           (int)*idx,
+           0,
            -1,
+           DM_DRAW_OBJ,
            false});
       break;
     }

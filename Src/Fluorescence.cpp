@@ -253,9 +253,9 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
 
   FlrUniforms uniforms;
   uniforms.mouseUv.x =
-      static_cast<float>(mpos.x / app.getSwapChainExtent().width);
+      static_cast<float>(0.5 * mpos.x + 0.5);
   uniforms.mouseUv.y =
-      static_cast<float>(mpos.y / app.getSwapChainExtent().height);
+      static_cast<float>(0.5 - 0.5 * mpos.y);
   uniforms.time = m_time;
   uniforms.frameCount = ++s_frameCount;
   uniforms.prevInputMask = prevInputMask;

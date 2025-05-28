@@ -70,6 +70,10 @@ Project::Project(
 
     VmaAllocationCreateInfo allocInfo{};
     VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    if (desc.bTransferSrc)
+      usageFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    if (desc.bIndirectArgs)
+      usageFlags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
     if (desc.bCpuVisible) {
       allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
       allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
@@ -80,6 +84,7 @@ Project::Project(
     }
 
     auto& bufCollection = m_buffers.emplace_back();
+    m_bufferResourceStates.emplace_back() = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
     for (int bi = 0; bi < desc.bufferCount; bi++) {
       bufCollection.push_back(BufferUtilities::createBuffer(
         *GApplication,
@@ -395,7 +400,7 @@ Project::Project(
   }
 
   // includes
-  CODE_APPEND("#include <Fluorescence.glsl>\n\n");
+  CODE_APPEND("#include <FlrLib/Fluorescence.glsl>\n\n");
 
   // camera uniforms (references included structs)
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
@@ -585,7 +590,8 @@ Project::Project(
       else
         builder.setDepthTesting(false);
 
-      if (draw.objMeshIdx >= 0) {
+      if (draw.drawMode == ParsedFlr::DM_DRAW_OBJ) {
+        assert(draw.param0 >= 0);
         builder.addVertexInputBinding<SimpleObjLoader::ObjVert>();
         builder.addVertexAttribute(
             VertexAttributeType::VEC3,
@@ -761,6 +767,53 @@ void Project::tick(const FrameContext& frame) {
 
           break;
         }
+        case ParsedFlr::UET_SAVE_BUFFER_BUTTON: {
+          const auto& saveBufferButton = m_parsed.m_saveBufferButtons[ui.idx];
+          char buf[256];
+          sprintf(
+            buf,
+            "Save Buffer: %s",
+            m_parsed.m_buffers[saveBufferButton.bufferIdx].name.c_str());
+          if (ImGui::Button(buf)) {
+            OPENFILENAME ofn{};
+            memset(&ofn, 0, sizeof(OPENFILENAME));
+
+            char filename[512] = { 0 };
+
+            ofn.lStructSize = sizeof(ofn);
+            ofn.hwndOwner = glfwGetWin32Window(GApplication->getWindow());
+            ofn.lpstrFile = filename;
+            ofn.lpstrFile[0] = '\0';
+            ofn.nMaxFile = sizeof(filename);
+            ofn.lpstrFilter = "BIN\0*.bin\0\0";
+            ofn.nFilterIndex = 1;
+            ofn.lpstrFileTitle = NULL;
+            ofn.nMaxFileTitle = 0;
+            ofn.lpstrInitialDir = NULL;
+            ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+            if (GetSaveFileName(&ofn)) {
+              m_pendingSaveBuffer = {
+                  std::string(filename),
+                  saveBufferButton.bufferIdx };
+            }
+          }
+
+          break;
+        }
+        case ParsedFlr::UET_TASK_BUTTON: {
+          const auto& taskButton = m_parsed.m_taskButtons[ui.idx];
+
+          char buf[256];
+          sprintf(
+            buf,
+            "Run Task: %s",
+            m_parsed.m_taskBlocks[taskButton.taskBlockIdx].name.c_str());
+          if (ImGui::Button(buf))
+            m_pendingTaskBlockExecs.push_back(taskButton.taskBlockIdx);
+
+          break;
+        }
         case ParsedFlr::UET_SEPARATOR: {
           ImGui::Separator();
           break;
@@ -862,15 +915,34 @@ void Project::executeTaskList(
 
     case ParsedFlr::TT_BARRIER: {
       const auto& parsedBarrier = m_parsed.m_barriers[task.idx];
+      VkAccessFlags dstAccess = parsedBarrier.accessFlags;
       for (uint32_t bufferIdx : parsedBarrier.buffers) {
         const auto& parsedBuf = m_parsed.m_buffers[bufferIdx];
         const auto& parsedStruct = m_parsed.m_structDefs[parsedBuf.structIdx];
+        VkAccessFlags srcAccess = m_bufferResourceStates[bufferIdx];
         for (const auto& buf : m_buffers[bufferIdx])
-          BufferUtilities::rwBarrier(
-              commandBuffer,
-              buf.getBuffer(),
-              0,
-              parsedBuf.elemCount * parsedStruct.size);
+        {
+          VkBufferMemoryBarrier barrier{};
+          barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+          barrier.buffer = buf.getBuffer();
+          barrier.offset = 0;
+          barrier.size = parsedBuf.elemCount * parsedStruct.size;
+          barrier.srcAccessMask = srcAccess;
+          barrier.dstAccessMask = dstAccess;
+
+          vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+            VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+            0,
+            0,
+            nullptr,
+            1,
+            &barrier,
+            0,
+            nullptr);
+        }
+        m_bufferResourceStates[bufferIdx] = dstAccess;
       }
       break;
     }
@@ -878,24 +950,6 @@ void Project::executeTaskList(
     case ParsedFlr::TT_RENDER: {
       const auto& passDesc = m_parsed.m_renderPasses[task.idx];
       auto& drawPass = m_drawPasses[task.idx];
-
-      /* for (const auto& attachmentRef : passDesc.attachments) {
-         auto& imgRsc = m_images[attachmentRef.imageIdx];
-         if ((imgRsc.image.getOptions().aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT)
-       != 0) { imgRsc.image.transitionLayout( commandBuffer,
-             VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
-         }
-         else {
-           imgRsc.image.transitionLayout(
-             commandBuffer,
-             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-         }
-       } */
 
       {
         ActiveRenderPass pass = drawPass.m_renderPass.begin(
@@ -907,18 +961,33 @@ void Project::executeTaskList(
         pass.getDrawContext().bindDescriptorSets();
         pass.getDrawContext().updatePushConstants(m_pushData, 0);
         for (const auto& draw : m_parsed.m_renderPasses[task.idx].draws) {
-          if (draw.objMeshIdx >= 0) {
-            SimpleObjLoader::LoadedObj& obj = m_objModels[draw.objMeshIdx];
+          switch (draw.drawMode) {
+          case ParsedFlr::DM_DRAW:
+          {
+            pass.getDrawContext().draw(draw.param0, draw.param1);
+            break;
+          }
+          case ParsedFlr::DM_DRAW_INDIRECT:
+          {
+            const auto& b = m_buffers[draw.param0];
+            assert(b.size() == 1);
+            vkCmdDrawIndirect(commandBuffer, b[0].getBuffer(), 0, draw.param1, 16);
+            break;
+          }
+          case ParsedFlr::DM_DRAW_OBJ:
+          {
+            SimpleObjLoader::LoadedObj& obj = m_objModels[draw.param0];
             for (SimpleObjLoader::ObjMesh& mesh : obj.m_meshes) {
               pass.getDrawContext().bindIndexBuffer(mesh.m_indices);
               pass.getDrawContext().bindVertexBuffer(obj.m_vertices);
               pass.getDrawContext().drawIndexed(
-                  mesh.m_indices.getIndexCount(),
-                  1);
+                mesh.m_indices.getIndexCount(),
+                1);
             }
-          } else {
-            pass.getDrawContext().draw(draw.vertexCount, draw.instanceCount);
+            break;
           }
+          };
+
           if (!pass.isLastSubpass())
             pass.nextSubpass();
         }
@@ -1004,6 +1073,56 @@ void Project::draw(VkCommandBuffer commandBuffer, const FrameContext& frame) {
 
     m_pendingSaveImage = std::nullopt;
   }
+
+  if (m_pendingSaveBuffer) {
+    auto& buf = m_buffers[m_pendingSaveBuffer->bufferIdx];
+    // TODO support saving buffer heap...
+    assert(buf.size() == 0);
+    // TODO: 
+    // TODO: assumes r8g8b8a8_unorm, generalize
+    const auto& desc = m_parsed.m_buffers[m_pendingSaveBuffer->bufferIdx];
+    const auto& s = m_parsed.m_structDefs[desc.structIdx];
+    size_t byteSize = s.size * desc.elemCount;
+    BufferAllocation* pStaging = new BufferAllocation(
+      BufferUtilities::createStagingBufferForDownload(byteSize));
+
+    VkBufferCopy2 region{};
+    region.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
+    region.dstOffset = 0;
+    region.srcOffset = 0;
+    region.size = byteSize;
+    region.pNext = nullptr;
+
+    VkCopyBufferInfo2 copy{};
+    copy.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2;
+    copy.dstBuffer = pStaging->getBuffer();
+    copy.srcBuffer = buf[0].getBuffer();
+    copy.pRegions = &region;
+    copy.regionCount = 1;
+    copy.pNext = nullptr;
+
+    // TODO: barrier src ...
+    vkCmdCopyBuffer2(commandBuffer, &copy);
+
+    // TODO: barrier dst ...
+
+    GApplication->addDeletiontask(
+      { [pStaging,
+        byteSize,
+        fileName = m_pendingSaveImage->m_saveFileName]() {
+         void* pMapped = pStaging->mapMemory();
+         Utilities::writeFile(fileName, gsl::span((const char*)pMapped, byteSize));
+         pStaging->unmapMemory();
+         delete pStaging;
+       },
+       GApplication->getCurrentFrameRingBufferIndex() });
+
+    m_pendingSaveBuffer = std::nullopt;
+  }
+
+  for (uint32_t taskBlockIdx : m_pendingTaskBlockExecs)
+    executeTaskList(m_parsed.m_taskBlocks[taskBlockIdx].tasks, commandBuffer, frame);
+  m_pendingTaskBlockExecs.clear();
 
   executeTaskList(m_parsed.m_taskList, commandBuffer, frame);
 }
