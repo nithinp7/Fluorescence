@@ -2,7 +2,13 @@
 enable_feature: perspective_camera
 
 checkbox ACCUMULATE: false
+checkbox JITTER: false
 slider_uint BOUNCES: 2 2 5
+slider_float EXPOSURE: 0.8 0.05 0.99
+slider_uint BRDF_MODE: 0 0 1
+slider_float SPECULAR: 0.1 0.001 0.999
+checkbox OVERRIDE_ROUGHNESS: false
+slider_float ROUGHNESS: 0.4 0.001 0.999 
 
 slider_uint RENDER_MODE: 0 0 2
 slider_uint BACKGROUND: 0 0 3
@@ -17,7 +23,7 @@ structured_buffer globalStateBuffer: GlobalState 1
 
 include "FlrLib/Scene/Scene.flrh"
 
-image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba8
+image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
 texture_alias accumulationTexture
 
 compute_shader CS_Tick: 1 1 1

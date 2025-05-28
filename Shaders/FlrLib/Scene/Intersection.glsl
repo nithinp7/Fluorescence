@@ -14,25 +14,29 @@ struct HitResult {
 };
 
 bool traceTri(Tri tri, Ray ray, out HitResult hit) {
+  vec3 v0 = sceneVertexBuffer[tri.i0].pos;
+  vec3 v1 = sceneVertexBuffer[tri.i1].pos;
+  vec3 v2 = sceneVertexBuffer[tri.i2].pos;
+
   mat3 T;
-  T[0] = tri.v1 - tri.v0;
-  T[1] = tri.v2 - tri.v0;
+  T[0] = v1 - v0;
+  T[1] = v2 - v0;
   T[2] = -ray.d;
 
   vec3 n = cross(T[0], T[1]);
   float nDotD = dot(n, ray.d);
   // enable optional backface culling...
-  // if (nDotD > -0.00001) return false;
-  if (abs(nDotD) < 0.00001) return false;
+  if (nDotD > -0.00001) return false;
+  // if (abs(nDotD) < 0.00001) return false;
 
   mat3 Tinv = inverse(T);
-  vec3 uvt = Tinv * (ray.o - tri.v0);
+  vec3 uvt = Tinv * (ray.o - v0);
   if (uvt.x < 0.0 || uvt.x > 1.0 || 
       uvt.y < 0.0 || uvt.y > 1.0 || 
       (uvt.x + uvt.y) > 1.0 || uvt.z < 0.0) 
     return false;
 
-  hit.p = uvt.x * T[0] + uvt.y * T[1] + tri.v0;
+  hit.p = uvt.x * T[0] + uvt.y * T[1] + v0;
   hit.t = uvt.z;
   hit.n = normalize(n) * -sign(nDotD);
   hit.matID = tri.matID;

@@ -1,13 +1,13 @@
-uint MAX_TRIS: 128
+uint MAX_SCENE_TRIS: 128
 struct Tri {
-  vec3 v0;
-  vec3 v1;
-  vec3 v2;
+  uint i0;
+  uint i1;
+  uint i2;
   uint matID;
 };
-struct_size: 40
+struct_size: 16
 
-uint MAX_SPHERES: 12
+uint MAX_SCENE_SPHERES: 12
 struct Sphere {
   vec3 c;
   float r;
@@ -15,7 +15,7 @@ struct Sphere {
 };
 struct_size: 20
 
-uint MAX_MATERIALS: 12
+uint MAX_SCENE_MATERIALS: 12
 struct Material {
   vec3 diffuse;
   float roughness;
@@ -24,10 +24,18 @@ struct Material {
 };
 struct_size: 32
 
+uint MAX_SCENE_VERTS: 8192
+struct SceneVertex {
+  vec3 pos;
+};
+struct_size: 12
+
 ui_dropdown_start SCENE:
   slider_float SCENE_SCALE: 10.0 1.0 50.0
 ui_dropdown_end
 
-structured_buffer triBuffer: Tri MAX_TRIS
-structured_buffer sphereBuffer: Sphere MAX_SPHERES
-structured_buffer materialBuffer: Material MAX_MATERIALS
+structured_buffer triBuffer: Tri MAX_SCENE_TRIS
+structured_buffer sphereBuffer: Sphere MAX_SCENE_SPHERES
+structured_buffer materialBuffer: Material MAX_SCENE_MATERIALS
+structured_buffer sceneVertexBuffer: SceneVertex MAX_SCENE_VERTS
+

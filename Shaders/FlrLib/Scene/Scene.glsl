@@ -5,7 +5,9 @@
 #include <FlrLib/Scene/Intersection.glsl>
 
 struct SceneBuilder {
+  vec3 translation;
   uint matID;
+  uint vertCount;
   uint triCount;
   uint sphereCount;
   bool bFlipNormal;
@@ -18,7 +20,9 @@ void pushMaterial(Material mat) {
 }
 
 void startSceneBuild() {
+  g_sceneBuilder.translation = 0.0.xxx;
   g_sceneBuilder.matID = 0;
+  g_sceneBuilder.vertCount = 0;
   g_sceneBuilder.triCount = 0;
   g_sceneBuilder.sphereCount = 0;
   g_sceneBuilder.bFlipNormal = false;
@@ -31,16 +35,22 @@ void startSceneBuild() {
   pushMaterial(defaultMat);
 }
 
+void pushVert(vec3 pos) {
+  sceneVertexBuffer[g_sceneBuilder.vertCount++] = 
+      SceneVertex(pos + g_sceneBuilder.translation);
+}
+
 void pushTri(vec3 a, vec3 b, vec3 c) {
-  triBuffer[g_sceneBuilder.triCount++] = 
-      Tri(
-        a, 
-        g_sceneBuilder.bFlipNormal ? c : b, 
-        g_sceneBuilder.bFlipNormal ? b : c, 
-        g_sceneBuilder.matID - 1);
+  uint i0 = g_sceneBuilder.vertCount;
+  pushVert(a);
+  pushVert(g_sceneBuilder.bFlipNormal ? b : c);
+  pushVert(g_sceneBuilder.bFlipNormal ? c : b);
+  triBuffer[g_sceneBuilder.triCount++] = Tri(i0, i0+1, i0+2, g_sceneBuilder.matID - 1);
 }
 
 void popTri() {
+  // this will break if the triangles are indexed to re-use verts...
+  g_sceneBuilder.vertCount -= 3;
   g_sceneBuilder.triCount--;
 }
 
@@ -55,6 +65,7 @@ void popQuad() {
 }
 
 void pushSphere(vec3 c, float r) {
+  c += g_sceneBuilder.translation;
   sphereBuffer[g_sceneBuilder.sphereCount++] = Sphere(c, r, g_sceneBuilder.matID - 1);
 }
 
@@ -114,7 +125,7 @@ void finishSceneBuild() {
 bool traceScene(Ray ray, out HitResult hit) {
   bool bHit = false;
   uint triCount = globalStateBuffer[0].triCount;
-  for (int i = 0; i < triCount && i < MAX_TRIS; i++) {
+  for (int i = 0; i < triCount && i < MAX_SCENE_TRIS; i++) {
     HitResult h;
     if (traceTri(triBuffer[i], ray, h)) {
       if (!bHit || h.t < hit.t) {
@@ -125,7 +136,7 @@ bool traceScene(Ray ray, out HitResult hit) {
   }
 
   uint sphereCount = globalStateBuffer[0].sphereCount;
-  for (int i = 0; i < sphereCount && i < MAX_SPHERES; i++) {
+  for (int i = 0; i < sphereCount && i < MAX_SCENE_SPHERES; i++) {
     HitResult h;
     if (traceSphere(sphereBuffer[i], ray, h)) {
       if (!bHit || h.t < hit.t) {
@@ -143,6 +154,8 @@ bool traceScene(Ray ray, out HitResult hit) {
 void initScene_CornellBox() {
   startSceneBuild();
   
+  float cornellBoxScale = 15.0;
+  g_sceneBuilder.translation = vec3(10.0, 5.0, -1.0);
   {
     Material mat;
     mat.diffuse = 1.0.xxx;
@@ -151,24 +164,46 @@ void initScene_CornellBox() {
     mat.metallic = 0.0;
     pushMaterial(mat);
 
-    float cornellBoxScale = 15.0;
+    {
+      float theta = PI / 4.0;
+      float c = cos(theta), s = sin(theta);
+      mat3 boxT;
+      boxT[0] = vec3(c, 0.0, s) * 0.3 * cornellBoxScale;
+      boxT[1] = vec3(0.0, 1.0, 0.0) * 0.5 * cornellBoxScale;
+      boxT[2] = vec3(-s, 0.0, c) * 0.3 * cornellBoxScale;
+      pushBox(vec3(-0.45, -1.0 + 0.5, -0.25) * cornellBoxScale, boxT);
+    }
+
+    {
+      float theta = -PI / 21.0;
+      float c = cos(theta), s = sin(theta);
+      mat3 boxT;
+      boxT[0] = vec3(c, 0.0, s) * 0.25 * cornellBoxScale;
+      boxT[1] = vec3(0.0, 1.0, 0.0) * 0.6 * cornellBoxScale;
+      boxT[2] = vec3(-s, 0.0, c) * 0.25 * cornellBoxScale;
+      pushBox(vec3(0.45, -1.0 + 0.6, 0.15) * cornellBoxScale, boxT);
+    }
+
+    // main room
+    g_sceneBuilder.bFlipNormal = true;
     pushBox(0.0.xxx, mat3(cornellBoxScale));
-    popQuad(); // remove front face
+    // popQuad(); // remove front face
+    g_sceneBuilder.bFlipNormal = false;
     
     // color side-walls
     mat.diffuse = vec3(1.0, 0.0, 0.0);
+    triBuffer[g_sceneBuilder.triCount-8].matID = g_sceneBuilder.matID;
+    triBuffer[g_sceneBuilder.triCount-7].matID = g_sceneBuilder.matID;
+    pushMaterial(mat);
+    mat.diffuse = vec3(0.0, 1.0, 0.0);
     triBuffer[g_sceneBuilder.triCount-6].matID = g_sceneBuilder.matID;
     triBuffer[g_sceneBuilder.triCount-5].matID = g_sceneBuilder.matID;
     pushMaterial(mat);
-    mat.diffuse = vec3(0.0, 1.0, 0.0);
-    triBuffer[g_sceneBuilder.triCount-4].matID = g_sceneBuilder.matID;
-    triBuffer[g_sceneBuilder.triCount-3].matID = g_sceneBuilder.matID;
-    pushMaterial(mat);
 
     // add light
-    mat.emissive = 1000.0.xxx;
+    mat.emissive = 10.0.xxx;
     pushMaterial(mat);
-    float lightSize = 2.0;
+    float lightSize = 6.0;
     float lightHeight = cornellBoxScale - 0.5;
     pushQuad(
       vec3(-lightSize, lightHeight, -lightSize),
@@ -177,17 +212,28 @@ void initScene_CornellBox() {
       vec3(-lightSize, lightHeight, lightSize));
   }
 
-  for (int i = 0; i < 3; i++) {
+  {
     Material mat;
-    mat.diffuse = vec3(i/2.0, 1.0 - i/2.0, 1.0);
-    mat.roughness = 0.1;
+    mat.diffuse = vec3(0.0, 1.0, 1.0);
+    mat.roughness = 0.4;
     mat.emissive = 0.0.xxx;
     mat.metallic = 0.0;
     pushMaterial(mat);
 
-    pushSphere(vec3(8.0 * i - 6.0, 0.0, 0.0), 4.0);
+    pushSphere(vec3(-0.45, 0.35, -0.25) * cornellBoxScale, 0.35 * cornellBoxScale);
   }
-  
+
+  {
+    Material mat;
+    mat.diffuse = vec3(0.5, 0.5, 1.0);
+    mat.roughness = 0.4;
+    mat.emissive = 0.0.xxx;
+    mat.metallic = 0.0;
+    pushMaterial(mat);
+
+    pushSphere(vec3(0.45, 0.2 + 0.25, 0.15) * cornellBoxScale, 0.25 * cornellBoxScale);
+  }
+
   finishSceneBuild();
 }
 

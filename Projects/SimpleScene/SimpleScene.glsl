@@ -29,20 +29,21 @@ vec3 sampleEnv(vec3 dir) {
   }
 }
 
-vec4 samplePath(inout uvec2 seed, Ray ray) {
+vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat) {
   vec4 color = vec4(0.0.xxx, 1.0);
 
   vec3 throughput = 1.0.xxx;
-  for (int bounce = 0; bounce < BOUNCES; bounce++) {
-    HitResult hit;
-    bool bResult = traceScene(ray, hit);
+  for (int bounce = 0; bounce < BOUNCES+1; bounce++) {
+    bool bResult = true;
+    if (bounce > 0) {
+      bResult = traceScene(ray, hit);
+      mat = materialBuffer[hit.matID];
+    } 
 
     if (!bResult) {
       color.rgb = throughput * sampleEnv(ray.d);
       break;
     }
-
-    Material mat = materialBuffer[hit.matID];
 
     if (length(mat.emissive) > 0.0)
     {
@@ -83,10 +84,15 @@ vec4 samplePath(inout uvec2 seed, Ray ray) {
 ////////////////////////// COMPUTE SHADERS //////////////////////////
 
 #ifdef IS_COMP_SHADER
+void CS_Init() {
+  initScene_CornellBox();
+  sceneIndirectArgs[0].vertexCount = globalStateBuffer[0].triCount * 3;
+  sceneIndirectArgs[0].instanceCount = 1;
+  sceneIndirectArgs[0].firstVertex = 0; 
+  sceneIndirectArgs[0].firstInstance = 0; 
+}
+
 void CS_Tick() {
-  if (globalStateBuffer[0].triCount == 0 || (uniforms.inputMask & INPUT_BIT_R) != 0)
-    initScene_CornellBox();
-  
   if (!ACCUMULATE || (uniforms.inputMask & INPUT_BIT_SPACE) != 0) 
   {
     globalStateBuffer[0].accumulationFrames = 1;
@@ -96,66 +102,59 @@ void CS_Tick() {
     globalStateBuffer[0].accumulationFrames++;
   }
 }
-
-void CS_PathTrace() {
-  uvec2 pixelCoord = uvec2(gl_GlobalInvocationID.xy);
-  if (pixelCoord.x >= SCREEN_WIDTH || pixelCoord.y >= SCREEN_HEIGHT) {
-    return;
-  }
-
-  vec4 prevColor = imageLoad(accumulationBuffer, ivec2(pixelCoord));
-
-  uvec2 seed = pixelCoord * uvec2(uniforms.frameCount, uniforms.frameCount + 1);
-  
-  vec2 uv = vec2(pixelCoord) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
-  if (JITTER) {
-    uv += randVec2(seed) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
-  }
-
-  Ray ray;
-  ray.o = camera.inverseView[3].xyz;
-  ray.d = normalize(computeDir(uv));
-
-  vec4 color = 0.0.xxxx;
-  if (RENDER_MODE == 0) {
-    color = samplePath(seed, ray);
-  } else {
-    HitResult hit;
-    if (traceScene(ray, hit)) {
-      Material mat = materialBuffer[hit.matID];
-      if (RENDER_MODE == 1) {
-        color = vec4(mat.diffuse, 1.0);
-      } else {
-        color = vec4(0.5 * hit.n + 0.5.xxx, 1.0);
-      }
-    }
-    else {
-      color = vec4(sampleEnv(ray.d), 1.0);
-    }
-  }
-
-  color.rgb = mix(prevColor.rgb, color.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
-  imageStore(accumulationBuffer, ivec2(pixelCoord), color);
-}
 #endif // IS_COMP_SHADER
 
 ////////////////////////// VERTEX SHADERS //////////////////////////
 
 #ifdef IS_VERTEX_SHADER
-VertexOutput VS_Render() {
+VertexOutput VS_Lighting() {
+  uint triIdx = gl_VertexIndex / 3;
+  vec3 v[3] = {
+    sceneVertexBuffer[3*triIdx].pos,
+    sceneVertexBuffer[3*triIdx+1].pos,
+    sceneVertexBuffer[3*triIdx+2].pos};
   VertexOutput OUT;
-  OUT.screenUV = VS_FullScreen();
-  gl_Position = vec4(OUT.screenUV * 2.0 - 1.0, 0.0, 1.0);
+  OUT.pos = v[gl_VertexIndex % 3];
+  OUT.normal = normalize(cross(v[1] - v[0], v[2] - v[0])); 
+  OUT.mat = materialBuffer[triBuffer[triIdx].matID];
+  gl_Position = camera.projection * camera.view * vec4(OUT.pos, 1.0);
+  
   return OUT;
+}
+
+DisplayVertex VS_Display() {
+  return DisplayVertex(VS_FullScreen());
 }
 #endif // IS_VERTEX_SHADER
 
 ////////////////////////// PIXEL SHADERS //////////////////////////
 
 #ifdef IS_PIXEL_SHADER
-void PS_Render(VertexOutput IN) {
-  outColor = texture(accumulationTexture, IN.screenUV);
-  outColor.rgb = vec3(1.0) - exp(-outColor.rgb * EXPOSURE);
+void PS_Lighting(VertexOutput IN) {
+  uvec2 seed = uvec2(gl_FragCoord.xy) * uvec2(uniforms.frameCount, uniforms.frameCount+1);
+  float d = length(IN.pos - camera.inverseView[3].xyz);
+  if (RENDER_MODE == 0)
+  {
+    outColor = vec4(IN.mat.diffuse,1.0);
+    HitResult initHit;
+    initHit.p = IN.pos;
+    initHit.n = IN.normal;
+    initHit.t = 1.0;
+    initHit.matID = 0;
+
+    Ray ray;
+    ray.o = camera.inverseView[3].xyz;
+    ray.d = normalize(IN.pos - ray.o);
+    outColor = samplePath(seed, ray, initHit, IN.mat);
+  }
+  else if (RENDER_MODE == 1) 
+    outColor = vec4(0.5 * IN.normal + 0.5.xxx, 1.0);  
+  else 
+    outColor = vec4(fract(0.1 * d).xxx, 1.0);
+}
+
+void PS_Display(DisplayVertex IN) {
+  outColor = texture(accumulationTexture, IN.uv);
 }
 #endif // IS_PIXEL_SHADER
 

@@ -1,0 +1,72 @@
+
+enable_feature: perspective_camera
+
+checkbox ACCUMULATE: false
+checkbox JITTER: false
+slider_uint BOUNCES: 2 2 5
+slider_float EXPOSURE: 0.8 0.05 0.99
+slider_uint BRDF_MODE: 0 0 1
+slider_float SPECULAR: 0.1 0.001 0.999
+checkbox OVERRIDE_ROUGHNESS: false
+slider_float ROUGHNESS: 0.4 0.001 0.999 
+
+slider_uint RENDER_MODE: 0 0 2
+slider_uint BACKGROUND: 0 0 3
+
+struct GlobalState {
+  uint accumulationFrames;
+  uint triCount;
+  uint sphereCount;
+}
+struct_size: 12
+structured_buffer globalStateBuffer: GlobalState 1
+
+include "FlrLib/Scene/Scene.flrh"
+
+structured_buffer sceneIndirectArgs: IndirectArgs 1
+image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
+  texture_alias accumulationTexture
+
+compute_shader CS_Init: 1 1 1
+compute_shader CS_Tick: 1 1 1
+
+task_block_start RECREATE_SCENE
+  barrier: sceneIndirectArgs
+  compute_dispatch: CS_Init 1 1 1
+  barrier: globalStateBuffer triBuffer sphereBuffer materialBuffer
+  barrier indirectArgs: sceneIndirectArgs
+task_block_end
+
+compute_dispatch: CS_Tick 1 1 1
+barrier: globalStateBuffer
+
+task_button: RECREATE_SCENE
+
+# TODO not ideal to embed and interpolate all material properties
+struct VertexOutput {
+  vec3 pos;
+  vec3 normal;
+  Material mat;
+};
+struct_size: 56
+
+display_image DisplayImage
+
+render_pass LIGHTING_PASS:
+  store_attachments: outColor=accumulationBuffer
+
+  draw_indirect: VS_Lighting PS_Lighting sceneIndirectArgs
+    vertex_output: VertexOutput
+
+struct DisplayVertex {
+  vec2 uv;
+}
+struct_size: 8 
+
+transition_layout: accumulationBuffer texture
+
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+
+  draw: VS_Display PS_Display 3 1
+    vertex_output: DisplayVertex
