@@ -1,11 +1,10 @@
 
-#include <PathTracing/BRDF.glsl>
-
 #include <Misc/Constants.glsl>
 #include <Misc/Sampling.glsl>
 
 #include <FlrLib/Scene/Intersection.glsl>
 #include <FlrLib/Scene/Scene.glsl>
+#include <FlrLib/PBR/BRDF.glsl>
 
 vec3 computeDir(vec2 uv) {
 	vec2 d = uv * 2.0 - 1.0;
@@ -60,9 +59,7 @@ vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat) {
     if (BRDF_MODE == 0) {
       f = sampleMicrofacetBrdf(
         randVec2(seed), -ray.d, hit.n,
-        mat.diffuse, mat.metallic, 
-        OVERRIDE_ROUGHNESS ? ROUGHNESS : mat.roughness, 
-        SPECULAR.xxx,
+        mat,
         reflDir, pdf);
     }
     else { // if (BRDF_MODE == 1) {
@@ -71,7 +68,7 @@ vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat) {
       pdf = 1.0; // pdf and f cancel out...
     }
     
-    throughput *= f * mat.diffuse / pdf;
+    throughput *= f / pdf;
 
     const float BOUNCE_BIAS = 0.001;
     ray.d = normalize(reflDir);

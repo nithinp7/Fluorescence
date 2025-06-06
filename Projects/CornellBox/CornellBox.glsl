@@ -1,11 +1,10 @@
 
-#include <PathTracing/BRDF.glsl>
-
 #include <Misc/Constants.glsl>
 #include <Misc/Sampling.glsl>
 
 #include <FlrLib/Scene/Intersection.glsl>
 #include <FlrLib/Scene/Scene.glsl>
+#include <FlrLib/PBR/BRDF.glsl>
 
 vec3 computeDir(vec2 uv) {
 	vec2 d = uv * 2.0 - 1.0;
@@ -43,34 +42,44 @@ vec4 samplePath(inout uvec2 seed, Ray ray) {
     }
 
     Material mat = materialBuffer[hit.matID];
+    if (OVERRIDE_ROUGHNESS) {
+      mat.roughness = ROUGHNESS;
+    }
 
-    if (length(mat.emissive) > 0.0)
-    {
+    if (OVERRIDE_DIFFUSE) {
+      mat.diffuse = DIFFUSE.xyz;
+    }
+
+    if (OVERRIDE_SPECULAR) {
+      mat.specular = SPECULAR.xyz;
+    }
+
+    if (length(mat.emissive) > 0.0) {
       color.rgb += throughput * mat.emissive;
       break;
     }
 
-    // float F0 = 0.04;
-    // vec3 F = fresnelSchlick(abs(dot(hit.N, dir)), F0.xxx, mat.roughness);
-
+    uint brdfMode = BRDF_MODE;
+    if (brdfMode == 2) 
+      brdfMode = (rng(seed) < BRDF_MIX) ? 0 : 1;
+    
     vec3 reflDir;
     float pdf;
     vec3 f;
-    if (BRDF_MODE == 0) {
+    if (brdfMode == 0) {
       f = sampleMicrofacetBrdf(
         randVec2(seed), -ray.d, hit.n,
-        mat.diffuse, mat.metallic, 
-        OVERRIDE_ROUGHNESS ? ROUGHNESS : mat.roughness, 
-        SPECULAR.xxx,
+        mat,
         reflDir, pdf);
     }
-    else { // if (BRDF_MODE == 1) {
-      f = 1.0.xxx; // ??
-      reflDir = LocalToWorld(hit.n) * sampleHemisphereCosine(seed, pdf);
-      pdf = 1.0; // pdf and f cancel out...
+    else {
+      float samplePdf;
+      reflDir = LocalToWorld(hit.n) * sampleHemisphereCosine(seed, samplePdf);
+      f = evaluateMicrofacetBrdf(-ray.d, reflDir, hit.n, mat, pdf);
+      pdf = samplePdf;
     }
-    
-    throughput *= f * mat.diffuse / pdf;
+
+    throughput *= f / pdf;
 
     const float BOUNCE_BIAS = 0.001;
     ray.d = normalize(reflDir);

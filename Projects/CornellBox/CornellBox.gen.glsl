@@ -46,6 +46,8 @@ struct Material {
   float roughness;
   vec3 emissive;
   float metallic;
+  vec3 specular;
+  float padding;
 };;
 
 struct SceneVertex {
@@ -65,16 +67,20 @@ layout(set=1,binding=6, rgba32f) uniform image2D accumulationBuffer;
 layout(set=1,binding=7) uniform sampler2D accumulationTexture;
 
 layout(set=1, binding=8) uniform _UserUniforms {
+	vec4 DIFFUSE;
+	vec4 SPECULAR;
 	uint BOUNCES;
 	uint BRDF_MODE;
 	uint RENDER_MODE;
 	uint BACKGROUND;
 	float EXPOSURE;
-	float SPECULAR;
+	float BRDF_MIX;
 	float ROUGHNESS;
 	float SCENE_SCALE;
 	bool ACCUMULATE;
 	bool JITTER;
+	bool OVERRIDE_DIFFUSE;
+	bool OVERRIDE_SPECULAR;
 	bool OVERRIDE_ROUGHNESS;
 };
 

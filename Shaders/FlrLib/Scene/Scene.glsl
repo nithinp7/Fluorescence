@@ -31,6 +31,7 @@ void startSceneBuild() {
   defaultMat.diffuse = 0.0.xxx;
   defaultMat.roughness = 0.0;
   defaultMat.emissive = 0.0.xxx;
+  defaultMat.specular = 0.0.xxx;
   defaultMat.metallic = 0.0;
   pushMaterial(defaultMat);
 }
@@ -162,6 +163,7 @@ void initScene_CornellBox() {
     mat.roughness = 0.4;
     mat.emissive = 0.0.xxx;
     mat.metallic = 0.0;
+    mat.specular = 0.04.xxx;
     pushMaterial(mat);
 
     {
@@ -201,21 +203,22 @@ void initScene_CornellBox() {
     pushMaterial(mat);
 
     // add light
-    mat.emissive = 10.0.xxx;
+    mat.emissive = 50.0.xxx;
     pushMaterial(mat);
     float lightSize = 6.0;
     float lightHeight = cornellBoxScale - 0.5;
     pushQuad(
       vec3(-lightSize, lightHeight, -lightSize),
-      vec3(lightSize, lightHeight, -lightSize),
+      vec3(-lightSize, lightHeight, lightSize),
       vec3(lightSize, lightHeight, lightSize),
-      vec3(-lightSize, lightHeight, lightSize));
+      vec3(lightSize, lightHeight, -lightSize));
   }
 
   {
     Material mat;
     mat.diffuse = vec3(0.0, 1.0, 1.0);
-    mat.roughness = 0.4;
+    mat.roughness = 0.05;
+    mat.specular = 0.2.xxx;
     mat.emissive = 0.0.xxx;
     mat.metallic = 0.0;
     pushMaterial(mat);
@@ -226,7 +229,8 @@ void initScene_CornellBox() {
   {
     Material mat;
     mat.diffuse = vec3(0.5, 0.5, 1.0);
-    mat.roughness = 0.4;
+    mat.roughness = 0.1;
+    mat.specular = 0.2.xxx;
     mat.emissive = 0.0.xxx;
     mat.metallic = 0.0;
     pushMaterial(mat);

@@ -3,15 +3,28 @@ enable_feature: perspective_camera
 
 checkbox ACCUMULATE: false
 checkbox JITTER: false
-slider_uint BOUNCES: 2 2 5
-slider_float EXPOSURE: 0.8 0.05 0.99
-slider_uint BRDF_MODE: 0 0 1
-slider_float SPECULAR: 0.1 0.001 0.999
-checkbox OVERRIDE_ROUGHNESS: false
-slider_float ROUGHNESS: 0.4 0.001 0.999 
+slider_uint BOUNCES: 4 2 5
+slider_float EXPOSURE: 0.1 0.05 0.99
+slider_uint BRDF_MODE: 2 0 2
+slider_float BRDF_MIX: 0.5 0.001 0.999
 
-slider_uint RENDER_MODE: 0 0 2
-slider_uint BACKGROUND: 0 0 3
+ui_dropdown_start OVERRIDES:
+  checkbox OVERRIDE_DIFFUSE: false 
+  color_picker DIFFUSE: 0.4 0.4 0.4 1.0
+
+  checkbox OVERRIDE_SPECULAR: false 
+  color_picker SPECULAR: 0.4 0.4 0.4 1.0
+
+  checkbox OVERRIDE_ROUGHNESS: false
+  slider_float ROUGHNESS: 0.4 0.0001 0.999
+ui_dropdown_end
+
+ui_separator
+
+ui_dropdown_start MISC:
+  slider_uint RENDER_MODE: 0 0 2
+  slider_uint BACKGROUND: 0 0 3
+ui_dropdown_end
 
 struct GlobalState {
   uint accumulationFrames;

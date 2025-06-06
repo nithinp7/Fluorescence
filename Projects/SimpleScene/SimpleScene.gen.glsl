@@ -46,6 +46,8 @@ struct Material {
   float roughness;
   vec3 emissive;
   float metallic;
+  vec3 specular;
+  float padding;
 };;
 
 struct SceneVertex {
@@ -77,12 +79,9 @@ layout(set=1, binding=9) uniform _UserUniforms {
 	uint RENDER_MODE;
 	uint BACKGROUND;
 	float EXPOSURE;
-	float SPECULAR;
-	float ROUGHNESS;
 	float SCENE_SCALE;
 	bool ACCUMULATE;
 	bool JITTER;
-	bool OVERRIDE_ROUGHNESS;
 };
 
 #include <FlrLib/Fluorescence.glsl>

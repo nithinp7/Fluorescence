@@ -21,8 +21,10 @@ struct Material {
   float roughness;
   vec3 emissive;
   float metallic;
+  vec3 specular;
+  float padding;
 };
-struct_size: 32
+struct_size: 48
 
 uint MAX_SCENE_VERTS: 8192
 struct SceneVertex {
@@ -38,4 +40,3 @@ structured_buffer triBuffer: Tri MAX_SCENE_TRIS
 structured_buffer sphereBuffer: Sphere MAX_SCENE_SPHERES
 structured_buffer materialBuffer: Material MAX_SCENE_MATERIALS
 structured_buffer sceneVertexBuffer: SceneVertex MAX_SCENE_VERTS
-
