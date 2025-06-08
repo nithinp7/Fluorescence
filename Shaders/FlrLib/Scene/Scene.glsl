@@ -118,14 +118,47 @@ void pushBox(vec3 pos, mat3 dims) {
       pos + dims * vec3(1.0, -1.0, 1.0));
 }
 
+vec3 calcSphereVert(float theta, float phi) {
+  return vec3(cos(theta) * cos(phi), sin(phi), -sin(theta) * cos(phi));
+}
+
 void finishSceneBuild() {
-  globalStateBuffer[0].triCount = g_sceneBuilder.triCount;
-  globalStateBuffer[0].sphereCount = g_sceneBuilder.sphereCount;
+  globalSceneBuffer[0].triCount = g_sceneBuilder.triCount;
+  globalSceneBuffer[0].sphereCount = g_sceneBuilder.sphereCount;
+
+  uint RES = 12;
+  uint sphereVertCount = RES * RES * 2 * 3;
+  float DTHETA = 2.0 * PI / RES;
+  float PHI_LIM = 0.95 * PI / 2.0;
+  float DPHI = 2.0 * PHI_LIM / RES;
+  for(uint i=0;i<RES;i++) for(uint j=0;j<RES;j++) {
+    uint i1=i+1, j1=j+1;
+    float theta0=DTHETA*i, theta1=DTHETA*i1;
+    float phi0=DPHI*j-PHI_LIM, phi1=DPHI*j1-PHI_LIM;
+    
+    sceneVertexBuffer[g_sceneBuilder.vertCount++] = SceneVertex(calcSphereVert(theta0,phi0));
+    sceneVertexBuffer[g_sceneBuilder.vertCount++] = SceneVertex(calcSphereVert(theta1,phi0));
+    sceneVertexBuffer[g_sceneBuilder.vertCount++] = SceneVertex(calcSphereVert(theta1,phi1));
+    
+    sceneVertexBuffer[g_sceneBuilder.vertCount++] = SceneVertex(calcSphereVert(theta0,phi0));
+    sceneVertexBuffer[g_sceneBuilder.vertCount++] = SceneVertex(calcSphereVert(theta1,phi1));
+    sceneVertexBuffer[g_sceneBuilder.vertCount++] = SceneVertex(calcSphereVert(theta0,phi1));
+  }
+
+  trianglesIndirectArgs[0].vertexCount = g_sceneBuilder.triCount*3;
+  trianglesIndirectArgs[0].instanceCount = 1;
+  trianglesIndirectArgs[0].firstVertex = 0; 
+  trianglesIndirectArgs[0].firstInstance = 0; 
+  
+  spheresIndirectArgs[0].vertexCount = sphereVertCount;
+  spheresIndirectArgs[0].instanceCount = g_sceneBuilder.sphereCount;
+  spheresIndirectArgs[0].firstVertex = g_sceneBuilder.triCount*3;
+  spheresIndirectArgs[0].firstInstance = 0;
 }
 
 bool traceScene(Ray ray, out HitResult hit) {
   bool bHit = false;
-  uint triCount = globalStateBuffer[0].triCount;
+  uint triCount = globalSceneBuffer[0].triCount;
   for (int i = 0; i < triCount && i < MAX_SCENE_TRIS; i++) {
     HitResult h;
     if (traceTri(triBuffer[i], ray, h)) {
@@ -136,7 +169,7 @@ bool traceScene(Ray ray, out HitResult hit) {
     }
   }
 
-  uint sphereCount = globalStateBuffer[0].sphereCount;
+  uint sphereCount = globalSceneBuffer[0].sphereCount;
   for (int i = 0; i < sphereCount && i < MAX_SCENE_SPHERES; i++) {
     HitResult h;
     if (traceSphere(sphereBuffer[i], ray, h)) {
@@ -150,9 +183,39 @@ bool traceScene(Ray ray, out HitResult hit) {
   return bHit;
 }
 
+#ifdef IS_VERTEX_SHADER
+SceneVertexOutput VS_SceneTriangles() {
+  uint triIdx = gl_VertexIndex / 3;
+  vec3 v[3] = {
+    sceneVertexBuffer[3*triIdx].pos,
+    sceneVertexBuffer[3*triIdx+1].pos,
+    sceneVertexBuffer[3*triIdx+2].pos};
+  SceneVertexOutput OUT;
+  OUT.pos = v[gl_VertexIndex % 3];
+  OUT.normal = normalize(cross(v[1] - v[0], v[2] - v[0])); 
+  OUT.mat = materialBuffer[triBuffer[triIdx].matID];
+  gl_Position = camera.projection * camera.view * vec4(OUT.pos, 1.0);
+  
+  return OUT;
+}
+
+SceneVertexOutput VS_SceneSpheres() {
+  vec3 v = sceneVertexBuffer[gl_VertexIndex].pos;
+  Sphere s = sphereBuffer[gl_InstanceIndex];
+
+  SceneVertexOutput OUT;
+  OUT.pos = v * s.r + s.c;
+  OUT.normal = normalize(v);
+  OUT.mat = materialBuffer[s.matID];
+  gl_Position = camera.projection * camera.view * vec4(OUT.pos, 1.0);
+  
+  return OUT;
+}
+#endif // IS_VERTEX_SHADER
 
 // EXAMPLE SCENES
-void initScene_CornellBox() {
+#ifdef IS_COMP_SHADER
+void CS_InitCornellBox() {
   startSceneBuild();
   
   float cornellBoxScale = 15.0;
@@ -240,5 +303,6 @@ void initScene_CornellBox() {
 
   finishSceneBuild();
 }
+#endif // IS_COMP_SHADER
 
 #endif // _SCENE_GLSL_

@@ -94,6 +94,7 @@ vec3 sampleMicrofacetBrdf(
     D = 1.0 / (PI * alpha * cos2Theta * cosTheta * (1.0 + e) * (1.0 + e));
   }
 
+  woDotwh = max(woDotwh, 0.0001);
   pdf = D / (4.0 * woDotwh);
   vec3 wi = reflect(-wo, wh);
   wiw = normalize(localToWorld * wi);

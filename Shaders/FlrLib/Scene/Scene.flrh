@@ -1,3 +1,11 @@
+struct GlobalScene {
+  uint triCount;
+  uint sphereCount;
+  uint shereVertCount;
+  uint padding;
+}
+struct_size: 16
+
 uint MAX_SCENE_TRIS: 128
 struct Tri {
   uint i0;
@@ -32,11 +40,40 @@ struct SceneVertex {
 };
 struct_size: 12
 
+struct SceneVertexOutput {
+  vec3 pos;
+  vec3 normal;
+  Material mat;
+}
+struct_size: 56
+
 ui_dropdown_start SCENE:
   slider_float SCENE_SCALE: 10.0 1.0 50.0
 ui_dropdown_end
 
+uint SPHERE_VERT_COUNT: 12*12*2*3
+
+structured_buffer globalSceneBuffer: GlobalScene 1
 structured_buffer triBuffer: Tri MAX_SCENE_TRIS
 structured_buffer sphereBuffer: Sphere MAX_SCENE_SPHERES
 structured_buffer materialBuffer: Material MAX_SCENE_MATERIALS
 structured_buffer sceneVertexBuffer: SceneVertex MAX_SCENE_VERTS
+structured_buffer trianglesIndirectArgs: IndirectArgs 1
+structured_buffer spheresIndirectArgs: IndirectArgs 1
+
+compute_shader CS_InitCornellBox 1 1 1
+
+task_block_start START_SCENE:
+  barrier: trianglesIndirectArgs spheresIndirectArgs globalSceneBuffer triBuffer sphereBuffer materialBuffer sceneVertexBuffer
+task_block_end
+
+task_block_start FINALIZE_SCENE:
+  barrier: globalSceneBuffer triBuffer sphereBuffer materialBuffer sceneVertexBuffer
+  barrier indirectArgs: trianglesIndirectArgs spheresIndirectArgs
+task_block_end
+
+task_block_start INIT_SCENE_CORNELL_BOX:
+  run_task: START_SCENE
+  compute_dispatch: CS_InitCornellBox 1 1 1
+  run_task: FINALIZE_SCENE
+task_block_end
