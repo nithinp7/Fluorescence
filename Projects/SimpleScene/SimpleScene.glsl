@@ -1,6 +1,7 @@
 
 #include <Misc/Constants.glsl>
 #include <Misc/Sampling.glsl>
+#include <Misc/ReconstructPosition.glsl>
 
 #include <FlrLib/Scene/Intersection.glsl>
 #include <FlrLib/Scene/Scene.glsl>
@@ -28,6 +29,24 @@ vec3 sampleEnv(vec3 dir) {
   }
 }
 
+vec3 sampleSpec(inout uvec2 seed, HitResult surfaceHit, Material mat, Ray ray, out float pdf) {
+  vec3 reflDir;
+  vec3 f = sampleMicrofacetBrdf(
+    randVec2(seed), -ray.d, surfaceHit.n,
+    mat,
+    reflDir, pdf);
+  Ray specRay;
+  specRay.d = normalize(reflDir);
+  specRay.o = surfaceHit.p + specRay.d * BOUNCE_BIAS;
+  HitResult specHit;
+  if (traceScene(specRay, specHit)) {
+    Material specMat = materialBuffer[specHit.matID];
+    return f * specMat.emissive;
+  } else {
+    return 0.0.xxx;//sampleEnv(specRay.d) * abs(dot(surfaceHit.n, specRay.d));
+  }
+}
+
 vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat) {
   vec4 color = vec4(0.0.xxx, 1.0);
 
@@ -38,6 +57,18 @@ vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat) {
       bResult = traceScene(ray, hit);
       mat = materialBuffer[hit.matID];
     } 
+    
+    if (OVERRIDE_ROUGHNESS) {
+      mat.roughness = ROUGHNESS;
+    }
+
+    if (OVERRIDE_DIFFUSE) {
+      mat.diffuse = DIFFUSE.xyz;
+    }
+
+    if (OVERRIDE_SPECULAR) {
+      mat.specular = SPECULAR.xyz;
+    }
 
     if (!bResult) {
       color.rgb = throughput * sampleEnv(ray.d);
@@ -50,29 +81,48 @@ vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat) {
       break;
     }
 
-    // float F0 = 0.04;
-    // vec3 F = fresnelSchlick(abs(dot(hit.N, dir)), F0.xxx, mat.roughness);
+    if (length(mat.emissive) > 0.0) {
+      // if (SPEC_SAMPLE) //TODO - we are probably double counting without this...
+      //   break;
+      color.rgb += throughput * mat.emissive;
+      break;
+    }
 
+    uint brdfMode = BRDF_MODE;
+    if (brdfMode == 2) 
+      brdfMode = (rng(seed) < BRDF_MIX) ? 0 : 1;
+    
     vec3 reflDir;
     float pdf;
     vec3 f;
-    if (BRDF_MODE == 0) {
+    if (brdfMode == 0) {
       f = sampleMicrofacetBrdf(
         randVec2(seed), -ray.d, hit.n,
         mat,
         reflDir, pdf);
     }
-    else { // if (BRDF_MODE == 1) {
-      f = 1.0.xxx; // ??
-      reflDir = LocalToWorld(hit.n) * sampleHemisphereCosine(seed, pdf);
-      pdf = 1.0; // pdf and f cancel out...
-    }
-    
-    throughput *= f / pdf;
+    else {
+      if (SPEC_SAMPLE) {
+        float specPdf;
+        vec3 specLo = sampleSpec(seed, hit, mat, ray, specPdf);
+        color.rgb += throughput * specLo / specPdf;
+      }
 
-    const float BOUNCE_BIAS = 0.001;
+      float samplePdf;
+      reflDir = LocalToWorld(hit.n) * sampleHemisphereCosine(seed, samplePdf);
+      f = evaluateMicrofacetBrdf(-ray.d, reflDir, hit.n, mat, pdf);
+      pdf = samplePdf;
+    }
+
+    // if (pdf < 0.005) {
+    //   f = 0.0.xxx;
+    //   pdf = 1.0;
+    // }
+
     ray.d = normalize(reflDir);
     ray.o = hit.p + BOUNCE_BIAS * ray.d;
+
+    throughput *= f / pdf;
   }
 
   return color;
@@ -81,14 +131,6 @@ vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat) {
 ////////////////////////// COMPUTE SHADERS //////////////////////////
 
 #ifdef IS_COMP_SHADER
-void CS_Init() {
-  initScene_CornellBox();
-  sceneIndirectArgs[0].vertexCount = globalStateBuffer[0].triCount * 3;
-  sceneIndirectArgs[0].instanceCount = 1;
-  sceneIndirectArgs[0].firstVertex = 0; 
-  sceneIndirectArgs[0].firstInstance = 0; 
-}
-
 void CS_Tick() {
   if (!ACCUMULATE || (uniforms.inputMask & INPUT_BIT_SPACE) != 0) 
   {
@@ -104,21 +146,6 @@ void CS_Tick() {
 ////////////////////////// VERTEX SHADERS //////////////////////////
 
 #ifdef IS_VERTEX_SHADER
-VertexOutput VS_Lighting() {
-  uint triIdx = gl_VertexIndex / 3;
-  vec3 v[3] = {
-    sceneVertexBuffer[3*triIdx].pos,
-    sceneVertexBuffer[3*triIdx+1].pos,
-    sceneVertexBuffer[3*triIdx+2].pos};
-  VertexOutput OUT;
-  OUT.pos = v[gl_VertexIndex % 3];
-  OUT.normal = normalize(cross(v[1] - v[0], v[2] - v[0])); 
-  OUT.mat = materialBuffer[triBuffer[triIdx].matID];
-  gl_Position = camera.projection * camera.view * vec4(OUT.pos, 1.0);
-  
-  return OUT;
-}
-
 DisplayVertex VS_Display() {
   return DisplayVertex(VS_FullScreen());
 }
@@ -127,31 +154,55 @@ DisplayVertex VS_Display() {
 ////////////////////////// PIXEL SHADERS //////////////////////////
 
 #ifdef IS_PIXEL_SHADER
-void PS_Lighting(VertexOutput IN) {
+#ifdef SCENE_PASS
+void PS_Scene(SceneVertexOutput IN) {
   uvec2 seed = uvec2(gl_FragCoord.xy) * uvec2(uniforms.frameCount, uniforms.frameCount+1);
-  float d = length(IN.pos - camera.inverseView[3].xyz);
-  if (RENDER_MODE == 0)
-  {
-    outColor = vec4(IN.mat.diffuse,1.0);
-    HitResult initHit;
-    initHit.p = IN.pos;
-    initHit.n = IN.normal;
-    initHit.t = 1.0;
-    initHit.matID = 0;
-
-    Ray ray;
-    ray.o = camera.inverseView[3].xyz;
-    ray.d = normalize(IN.pos - ray.o);
-    outColor = samplePath(seed, ray, initHit, IN.mat);
-  }
-  else if (RENDER_MODE == 1) 
-    outColor = vec4(0.5 * IN.normal + 0.5.xxx, 1.0);  
-  else 
-    outColor = vec4(fract(0.1 * d).xxx, 1.0);
+  float emissionIntensity = length(IN.mat.emissive);
+  outGBuffer0 = vec4((emissionIntensity > 0.0) ? IN.mat.emissive / emissionIntensity : IN.mat.diffuse,1.0);
+  outGBuffer1 = vec4(0.5 * IN.normal + 0.5.xxx, 1.0);
+  outGBuffer2 = vec4(IN.mat.roughness, IN.mat.metallic, emissionIntensity, 1.0); // todo should be non-linearly encoded...
 }
+#endif
 
+#ifdef DISPLAY_PASS
 void PS_Display(DisplayVertex IN) {
+  uvec2 seed = uvec2(gl_FragCoord.xy) * uvec2(uniforms.frameCount, uniforms.frameCount+1);
+
   outColor = texture(accumulationTexture, IN.uv);
+  float dRaw = texture(depthTexture, IN.uv).r;
+  vec3 pos = reconstructPosition(IN.uv, dRaw, camera.inverseProjection, camera.inverseView);
+
+  vec3 roughnessMetallicEmissive = texture(gbuffer2Texture, IN.uv).rgb;
+
+  HitResult initHit;
+  initHit.p = pos;
+  initHit.n = texture(gbuffer1Texture, IN.uv).rgb * 2.0 - 1.0.xxx;
+  initHit.t = 1.0;
+  initHit.matID = 0;
+
+  Ray ray;
+  ray.o = camera.inverseView[3].xyz;
+  ray.d = normalize(pos - ray.o);
+
+  Material mat;
+  mat.diffuse = texture(gbuffer0Texture, IN.uv).rgb;
+  mat.roughness = roughnessMetallicEmissive.x;
+  mat.emissive = roughnessMetallicEmissive.z * mat.diffuse;
+  mat.metallic = roughnessMetallicEmissive.y;
+  mat.specular = 0.04.xxx;
+
+  outColor = samplePath(seed, ray, initHit, mat);
+
+  if (GBUFFER_DBG_MODE == 1) {
+    outColor = texture(gbuffer0Texture, IN.uv);
+  } else if (GBUFFER_DBG_MODE == 2) {
+    outColor = texture(gbuffer1Texture, IN.uv);
+  } else if (GBUFFER_DBG_MODE == 3) {
+    outColor = vec4(fract(pos+0.1.xxx), 1.0);
+  } else if (GBUFFER_DBG_MODE == 4) {
+    outColor = texture(gbuffer2Texture, IN.uv);
+  }
 }
+#endif
 #endif // IS_PIXEL_SHADER
 

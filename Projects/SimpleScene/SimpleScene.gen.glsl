@@ -6,6 +6,7 @@
 #define MAX_SCENE_SPHERES 12
 #define MAX_SCENE_MATERIALS 12
 #define MAX_SCENE_VERTS 8192
+#define SPHERE_VERT_COUNT 864
 
 struct IndexedIndirectArgs {
   uint indexCount;
@@ -24,8 +25,13 @@ struct IndirectArgs {
 
 struct GlobalState {
   uint accumulationFrames;
+};
+
+struct GlobalScene {
   uint triCount;
   uint sphereCount;
+  uint shereVertCount;
+  uint padding;
 };
 
 struct Tri {
@@ -54,57 +60,86 @@ struct SceneVertex {
   vec3 pos;
 };;
 
-struct VertexOutput {
+struct SceneVertexOutput {
   vec3 pos;
   vec3 normal;
   Material mat;
-};;
+};
 
 struct DisplayVertex {
   vec2 uv;
 };
 
 layout(set=1,binding=1) buffer BUFFER_globalStateBuffer {  GlobalState globalStateBuffer[]; };
-layout(set=1,binding=2) buffer BUFFER_triBuffer {  Tri triBuffer[]; };
-layout(set=1,binding=3) buffer BUFFER_sphereBuffer {  Sphere sphereBuffer[]; };
-layout(set=1,binding=4) buffer BUFFER_materialBuffer {  Material materialBuffer[]; };
-layout(set=1,binding=5) buffer BUFFER_sceneVertexBuffer {  SceneVertex sceneVertexBuffer[]; };
-layout(set=1,binding=6) buffer BUFFER_sceneIndirectArgs {  IndirectArgs sceneIndirectArgs[]; };
-layout(set=1,binding=7, rgba32f) uniform image2D accumulationBuffer;
-layout(set=1,binding=8) uniform sampler2D accumulationTexture;
+layout(set=1,binding=2) buffer BUFFER_globalSceneBuffer {  GlobalScene globalSceneBuffer[]; };
+layout(set=1,binding=3) buffer BUFFER_triBuffer {  Tri triBuffer[]; };
+layout(set=1,binding=4) buffer BUFFER_sphereBuffer {  Sphere sphereBuffer[]; };
+layout(set=1,binding=5) buffer BUFFER_materialBuffer {  Material materialBuffer[]; };
+layout(set=1,binding=6) buffer BUFFER_sceneVertexBuffer {  SceneVertex sceneVertexBuffer[]; };
+layout(set=1,binding=7) buffer BUFFER_trianglesIndirectArgs {  IndirectArgs trianglesIndirectArgs[]; };
+layout(set=1,binding=8) buffer BUFFER_spheresIndirectArgs {  IndirectArgs spheresIndirectArgs[]; };
+layout(set=1,binding=9, rgba32f) uniform image2D accumulationBuffer;
+layout(set=1,binding=10, rgba8) uniform image2D gbuffer0;
+layout(set=1,binding=11, rgba8) uniform image2D gbuffer1;
+layout(set=1,binding=12, rgba8) uniform image2D gbuffer2;
+layout(set=1,binding=13) uniform sampler2D accumulationTexture;
+layout(set=1,binding=14) uniform sampler2D gbuffer0Texture;
+layout(set=1,binding=15) uniform sampler2D gbuffer1Texture;
+layout(set=1,binding=16) uniform sampler2D gbuffer2Texture;
+layout(set=1,binding=17) uniform sampler2D depthTexture;
 
-layout(set=1, binding=9) uniform _UserUniforms {
+layout(set=1, binding=18) uniform _UserUniforms {
+	vec4 DIFFUSE;
+	vec4 SPECULAR;
 	uint BOUNCES;
 	uint BRDF_MODE;
+	uint GBUFFER_DBG_MODE;
 	uint RENDER_MODE;
 	uint BACKGROUND;
 	float EXPOSURE;
+	float BRDF_MIX;
+	float ROUGHNESS;
+	float BOUNCE_BIAS;
 	float SCENE_SCALE;
 	bool ACCUMULATE;
 	bool JITTER;
+	bool SPEC_SAMPLE;
+	bool OVERRIDE_DIFFUSE;
+	bool OVERRIDE_SPECULAR;
+	bool OVERRIDE_ROUGHNESS;
 };
 
 #include <FlrLib/Fluorescence.glsl>
 
-layout(set=1, binding=10) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=19) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 
 #ifdef IS_PIXEL_SHADER
-#ifdef _ENTRY_POINT_PS_Lighting
-layout(location = 0) out vec4 outColor;
-#endif // _ENTRY_POINT_PS_Lighting
-#ifdef _ENTRY_POINT_PS_Display
+#if defined(_ENTRY_POINT_PS_Scene) && !defined(_ENTRY_POINT_PS_Scene_ATTACHMENTS)
+#define _ENTRY_POINT_PS_Scene_ATTACHMENTS
+layout(location = 0) out vec4 outGBuffer0;
+layout(location = 1) out vec4 outGBuffer1;
+layout(location = 2) out vec4 outGBuffer2;
+#endif // _ENTRY_POINT_PS_Scene
+#if defined(_ENTRY_POINT_PS_Scene) && !defined(_ENTRY_POINT_PS_Scene_ATTACHMENTS)
+#define _ENTRY_POINT_PS_Scene_ATTACHMENTS
+layout(location = 0) out vec4 outGBuffer0;
+layout(location = 1) out vec4 outGBuffer1;
+layout(location = 2) out vec4 outGBuffer2;
+#endif // _ENTRY_POINT_PS_Scene
+#if defined(_ENTRY_POINT_PS_Display) && !defined(_ENTRY_POINT_PS_Display_ATTACHMENTS)
+#define _ENTRY_POINT_PS_Display_ATTACHMENTS
 layout(location = 0) out vec4 outColor;
 #endif // _ENTRY_POINT_PS_Display
 #endif // IS_PIXEL_SHADER
 #include "SimpleScene.glsl"
 
 #ifdef IS_COMP_SHADER
-#ifdef _ENTRY_POINT_CS_Init
+#ifdef _ENTRY_POINT_CS_InitCornellBox
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-void main() { CS_Init(); }
-#endif // _ENTRY_POINT_CS_Init
+void main() { CS_InitCornellBox(); }
+#endif // _ENTRY_POINT_CS_InitCornellBox
 #ifdef _ENTRY_POINT_CS_Tick
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() { CS_Tick(); }
@@ -113,10 +148,14 @@ void main() { CS_Tick(); }
 
 
 #ifdef IS_VERTEX_SHADER
-#ifdef _ENTRY_POINT_VS_Lighting
-layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
-void main() { _VERTEX_OUTPUT = VS_Lighting(); }
-#endif // _ENTRY_POINT_VS_Lighting
+#ifdef _ENTRY_POINT_VS_SceneTriangles
+layout(location = 0) out SceneVertexOutput _VERTEX_OUTPUT;
+void main() { _VERTEX_OUTPUT = VS_SceneTriangles(); }
+#endif // _ENTRY_POINT_VS_SceneTriangles
+#ifdef _ENTRY_POINT_VS_SceneSpheres
+layout(location = 0) out SceneVertexOutput _VERTEX_OUTPUT;
+void main() { _VERTEX_OUTPUT = VS_SceneSpheres(); }
+#endif // _ENTRY_POINT_VS_SceneSpheres
 #ifdef _ENTRY_POINT_VS_Display
 layout(location = 0) out DisplayVertex _VERTEX_OUTPUT;
 void main() { _VERTEX_OUTPUT = VS_Display(); }
@@ -125,11 +164,18 @@ void main() { _VERTEX_OUTPUT = VS_Display(); }
 
 
 #ifdef IS_PIXEL_SHADER
-#ifdef _ENTRY_POINT_PS_Lighting
-layout(location = 0) in VertexOutput _VERTEX_INPUT;
-void main() { PS_Lighting(_VERTEX_INPUT); }
-#endif // _ENTRY_POINT_PS_Lighting
-#ifdef _ENTRY_POINT_PS_Display
+#if defined(_ENTRY_POINT_PS_Scene) && !defined(_ENTRY_POINT_PS_Scene_INTERPOLANTS)
+#define _ENTRY_POINT_PS_Scene_INTERPOLANTS
+layout(location = 0) in SceneVertexOutput _VERTEX_INPUT;
+void main() { PS_Scene(_VERTEX_INPUT); }
+#endif // _ENTRY_POINT_PS_Scene
+#if defined(_ENTRY_POINT_PS_Scene) && !defined(_ENTRY_POINT_PS_Scene_INTERPOLANTS)
+#define _ENTRY_POINT_PS_Scene_INTERPOLANTS
+layout(location = 0) in SceneVertexOutput _VERTEX_INPUT;
+void main() { PS_Scene(_VERTEX_INPUT); }
+#endif // _ENTRY_POINT_PS_Scene
+#if defined(_ENTRY_POINT_PS_Display) && !defined(_ENTRY_POINT_PS_Display_INTERPOLANTS)
+#define _ENTRY_POINT_PS_Display_INTERPOLANTS
 layout(location = 0) in DisplayVertex _VERTEX_INPUT;
 void main() { PS_Display(_VERTEX_INPUT); }
 #endif // _ENTRY_POINT_PS_Display

@@ -4,70 +4,88 @@ enable_feature: perspective_camera
 checkbox ACCUMULATE: false
 checkbox JITTER: false
 slider_uint BOUNCES: 2 2 5
+checkbox SPEC_SAMPLE: true 
 slider_float EXPOSURE: 0.8 0.05 0.99
-slider_uint BRDF_MODE: 0 0 1
-checkbox OVERRIDE_SPECULAR: false 
-color_picker SPECULAR: 0.4 0.4 0.4
+slider_uint BRDF_MODE: 0 0 2
+slider_float BRDF_MIX: 0.5 0.001 0.999
 
-checkbox OVERRIDE_ROUGHNESS: false
-slider_float ROUGNESS: 0.4 0.0001 0.999
-slider_uint RENDER_MODE: 0 0 2
-slider_uint BACKGROUND: 0 0 3
+ui_dropdown_start OVERRIDES:
+  checkbox OVERRIDE_DIFFUSE: false 
+  color_picker DIFFUSE: 0.4 0.4 0.4 1.0
+
+  checkbox OVERRIDE_SPECULAR: false 
+  color_picker SPECULAR: 0.4 0.4 0.4 1.0
+
+  checkbox OVERRIDE_ROUGHNESS: false
+  slider_float ROUGHNESS: 0.4 0.0001 0.999
+ui_dropdown_end
+
+ui_dropdown_start GBUFFER:
+  slider_uint GBUFFER_DBG_MODE: 0 0 4
+ui_dropdown_end
+
+ui_dropdown_start MISC:
+  slider_float BOUNCE_BIAS: 0.001 0.00001 0.01;
+  slider_uint RENDER_MODE: 0 0 2
+  slider_uint BACKGROUND: 0 0 3
+ui_dropdown_end
 
 struct GlobalState {
   uint accumulationFrames;
-  uint triCount;
-  uint sphereCount;
 }
-struct_size: 12
+struct_size: 4
 structured_buffer globalStateBuffer: GlobalState 1
 
 include "FlrLib/Scene/Scene.flrh"
 
-structured_buffer sceneIndirectArgs: IndirectArgs 1
 image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
   texture_alias accumulationTexture
 
-compute_shader CS_Init: 1 1 1
+# TODO move gbuffer resources to flrh lib
+image gbuffer0: SCREEN_WIDTH SCREEN_HEIGHT rgba8
+  texture_alias gbuffer0Texture
+image gbuffer1: SCREEN_WIDTH SCREEN_HEIGHT rgba8
+  texture_alias gbuffer1Texture
+image gbuffer2: SCREEN_WIDTH SCREEN_HEIGHT rgba8
+  texture_alias gbuffer2Texture
+depth_image depthBuffer: SCREEN_WIDTH SCREEN_HEIGHT
+  texture_alias depthTexture
+
 compute_shader CS_Tick: 1 1 1
 
-task_block_start RECREATE_SCENE
-  barrier: sceneIndirectArgs
-  compute_dispatch: CS_Init 1 1 1
-  barrier: globalStateBuffer triBuffer sphereBuffer materialBuffer
-  barrier indirectArgs: sceneIndirectArgs
-task_block_end
+initialization_task: INIT_SCENE_CORNELL_BOX
 
 compute_dispatch: CS_Tick 1 1 1
 barrier: globalStateBuffer
 
-task_button: RECREATE_SCENE
-
-# TODO not ideal to embed and interpolate all material properties
-struct VertexOutput {
-  vec3 pos;
-  vec3 normal;
-  Material mat;
-};
-struct_size: 56
+task_button: INIT_SCENE_CORNELL_BOX
 
 display_image DisplayImage
 
-render_pass LIGHTING_PASS:
-  store_attachments: outColor=accumulationBuffer
+render_pass SCENE_PASS:
+  store_attachments: outGBuffer0=gbuffer0 outGBuffer1=gbuffer1 outGBuffer2=gbuffer2
+  store_depth: depthBuffer
 
-  draw_indirect: VS_Lighting PS_Lighting sceneIndirectArgs
-    vertex_output: VertexOutput
+  draw_indirect: VS_SceneTriangles PS_Scene trianglesIndirectArgs
+    vertex_output: SceneVertexOutput
+  draw_indirect: VS_SceneSpheres PS_Scene spheresIndirectArgs
+    vertex_output: SceneVertexOutput
+
+transition_layout: gbuffer0 texture
+transition_layout: gbuffer1 texture
+transition_layout: gbuffer2 texture
+transition_layout: depthBuffer texture
+transition_layout: accumulationBuffer texture
 
 struct DisplayVertex {
   vec2 uv;
 }
 struct_size: 8 
 
-transition_layout: accumulationBuffer texture
-
 render_pass DISPLAY_PASS:
   store_attachments: outColor=DisplayImage
 
   draw: VS_Display PS_Display 3 1
     vertex_output: DisplayVertex
+    disable_depth
+
