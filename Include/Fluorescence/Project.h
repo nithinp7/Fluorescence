@@ -156,6 +156,7 @@ private:
   GenericPush m_pushData;
 
   bool m_bHasDynamicData;
+  bool m_bFirstDraw;
 
   bool m_failedShaderCompile;
   char m_shaderCompileErrMsg[2048];

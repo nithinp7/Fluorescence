@@ -252,7 +252,8 @@ struct ParsedFlr {
     TT_COMPUTE = 0,
     TT_BARRIER,
     TT_RENDER,
-    TT_TRANSITION
+    TT_TRANSITION,
+    TT_TASK
   };
   struct Task {
     uint32_t idx;
@@ -274,6 +275,7 @@ struct ParsedFlr {
   uint32_t m_featureFlags;
 
   int m_displayImageIdx;
+  int m_initializationTaskIdx;
 
   bool isFeatureEnabled(FeatureFlag feature) const {
     return (m_featureFlags & feature) != 0;
@@ -331,6 +333,8 @@ struct ParsedFlr {
     I_TRANSITION,
     I_TASK_BLOCK_START,
     I_TASK_BLOCK_END,
+    I_RUN_TASK,
+    I_INITIALIZATION_TASK,
     I_INCLUDE,
     I_COUNT
   };
@@ -379,6 +383,8 @@ struct ParsedFlr {
       "transition_layout",
       "task_block_start",
       "task_block_end",
+      "run_task",
+      "initialization_task",
       "include"};
 
   struct ImageFormatTableEntry {

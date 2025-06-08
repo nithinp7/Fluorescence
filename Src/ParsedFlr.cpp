@@ -59,6 +59,7 @@ findIndexByName(char* const (&names)[N], std::string_view n) {
 ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
     : m_featureFlags(FF_NONE),
       m_displayImageIdx(-1),
+      m_initializationTaskIdx(-1),
       m_failed(true),
       m_errMsg() {
 
@@ -1169,6 +1170,24 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
     case I_TASK_BLOCK_END: {
       PARSER_VERIFY(bTaskBlockActive, "Encountered task_block_end without corresponding task_block_start.");
       bTaskBlockActive = false;
+      break;
+    };
+    case I_RUN_TASK: {
+      auto taskName = p.parseName();
+      PARSER_VERIFY(taskName, "Could not parse task name specified in run_task instruction.");
+      auto taskIdx = findIndexByName(m_taskBlocks, *taskName);
+      PARSER_VERIFY(taskIdx, "Could not find task block with specified name.");
+      if (bTaskBlockActive) 
+        PARSER_VERIFY(taskIdx < (m_taskBlocks.size() - 1), "A task block cannot be invoked within itself, invalid usage of run_task");
+      pushTask(*taskIdx, TT_TASK);
+      break;
+    };
+    case I_INITIALIZATION_TASK: {
+      auto taskName = p.parseName();
+      PARSER_VERIFY(taskName, "Could not parse task name specified in initialization_task instruction.");
+      auto taskIdx = findIndexByName(m_taskBlocks, *taskName);
+      PARSER_VERIFY(taskIdx, "Could not find task block with specified name.");
+      m_initializationTaskIdx = *taskIdx;
       break;
     };
     case I_INCLUDE: {

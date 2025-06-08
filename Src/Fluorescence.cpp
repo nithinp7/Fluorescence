@@ -223,8 +223,14 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
             m_pProject->hasFailed() ? m_pProject->getErrorMessage()
                                     : m_pProject->getShaderCompileErrors());
         ImGui::PushStyleColor(0, ImVec4(0.9f, 0.2f, 0.4f, 1.0f));
-
-        ImGui::TextUnformatted(buf, buf + strlen(buf));
+        size_t errOffset = 0;
+        size_t errStrLen = strlen(buf);
+        while (errOffset < errStrLen) {
+          size_t lineLen = errStrLen - errOffset;
+          if (lineLen > 64) lineLen = 64;
+          ImGui::TextUnformatted(&buf[errOffset], &buf[errOffset+lineLen]);
+          errOffset += lineLen;
+        }
 
         ImGui::PopStyleColor();
       }

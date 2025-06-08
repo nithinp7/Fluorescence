@@ -50,6 +50,7 @@ Project::Project(
       m_pAudio(nullptr),
       m_pendingSaveImage(std::nullopt),
       m_bHasDynamicData(false),
+      m_bFirstDraw(true),
       m_failedShaderCompile(false),
       m_shaderCompileErrMsg() {
   // TODO: split out resource creation vs code generation
@@ -423,7 +424,8 @@ Project::Project(
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
-        CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
+        CODE_APPEND("#if defined(_ENTRY_POINT_%s) && !defined(_ENTRY_POINT_%s_ATTACHMENTS)\n", draw.pixelShader.c_str(), draw.pixelShader.c_str());
+        CODE_APPEND("#define _ENTRY_POINT_%s_ATTACHMENTS\n", draw.pixelShader.c_str());
         uint32_t colorAttachmentIdx = 0;
         for (const auto& attachmentRef : pass.attachments) {
           const auto& img = m_images[attachmentRef.imageIdx];
@@ -488,7 +490,8 @@ Project::Project(
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
-        CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
+        CODE_APPEND("#if defined(_ENTRY_POINT_%s) && !defined(_ENTRY_POINT_%s_INTERPOLANTS)\n", draw.pixelShader.c_str(), draw.pixelShader.c_str());
+        CODE_APPEND("#define _ENTRY_POINT_%s_INTERPOLANTS\n", draw.pixelShader.c_str());
 
         if (draw.vertexOutputStructIdx >= 0) {
           CODE_APPEND(
@@ -1031,6 +1034,12 @@ void Project::executeTaskList(
       }
       break;
     }
+
+    case ParsedFlr::TT_TASK: {
+      // TODO: would be nice to handle this without recursion, but this should be safe since it is validated during parsing
+      executeTaskBlock(TaskBlockId(task.idx), commandBuffer, frame);
+      break;
+    }
     };
   }
 }
@@ -1120,8 +1129,14 @@ void Project::draw(VkCommandBuffer commandBuffer, const FrameContext& frame) {
     m_pendingSaveBuffer = std::nullopt;
   }
 
+  if (m_bFirstDraw) {
+    if (m_parsed.m_initializationTaskIdx >= 0)
+      executeTaskBlock(TaskBlockId(m_parsed.m_initializationTaskIdx), commandBuffer, frame);
+    m_bFirstDraw = false;
+  }
+
   for (uint32_t taskBlockIdx : m_pendingTaskBlockExecs)
-    executeTaskList(m_parsed.m_taskBlocks[taskBlockIdx].tasks, commandBuffer, frame);
+    executeTaskBlock(TaskBlockId(taskBlockIdx), commandBuffer, frame);
   m_pendingTaskBlockExecs.clear();
 
   executeTaskList(m_parsed.m_taskList, commandBuffer, frame);
