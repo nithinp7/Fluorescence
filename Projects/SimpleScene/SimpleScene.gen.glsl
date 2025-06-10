@@ -78,15 +78,15 @@ layout(set=1,binding=5) buffer BUFFER_materialBuffer {  Material materialBuffer[
 layout(set=1,binding=6) buffer BUFFER_sceneVertexBuffer {  SceneVertex sceneVertexBuffer[]; };
 layout(set=1,binding=7) buffer BUFFER_trianglesIndirectArgs {  IndirectArgs trianglesIndirectArgs[]; };
 layout(set=1,binding=8) buffer BUFFER_spheresIndirectArgs {  IndirectArgs spheresIndirectArgs[]; };
-layout(set=1,binding=9, rgba32f) uniform image2D accumulationBuffer;
-layout(set=1,binding=10, rgba8) uniform image2D gbuffer0;
-layout(set=1,binding=11, rgba8) uniform image2D gbuffer1;
-layout(set=1,binding=12, rgba8) uniform image2D gbuffer2;
-layout(set=1,binding=13) uniform sampler2D accumulationTexture;
-layout(set=1,binding=14) uniform sampler2D gbuffer0Texture;
-layout(set=1,binding=15) uniform sampler2D gbuffer1Texture;
-layout(set=1,binding=16) uniform sampler2D gbuffer2Texture;
-layout(set=1,binding=17) uniform sampler2D depthTexture;
+layout(set=1,binding=9, rgba8) uniform image2D gbuffer0;
+layout(set=1,binding=10, rgba8) uniform image2D gbuffer1;
+layout(set=1,binding=11, rgba8) uniform image2D gbuffer2;
+layout(set=1,binding=12, rgba32f) uniform image2D accumulationBuffer;
+layout(set=1,binding=13) uniform sampler2D gbuffer0Texture;
+layout(set=1,binding=14) uniform sampler2D gbuffer1Texture;
+layout(set=1,binding=15) uniform sampler2D gbuffer2Texture;
+layout(set=1,binding=16) uniform sampler2D depthTexture;
+layout(set=1,binding=17) uniform sampler2D accumulationTexture;
 
 layout(set=1, binding=18) uniform _UserUniforms {
 	vec4 DIFFUSE;
@@ -103,7 +103,6 @@ layout(set=1, binding=18) uniform _UserUniforms {
 	float SCENE_SCALE;
 	bool ACCUMULATE;
 	bool JITTER;
-	bool SPEC_SAMPLE;
 	bool OVERRIDE_DIFFUSE;
 	bool OVERRIDE_SPECULAR;
 	bool OVERRIDE_ROUGHNESS;
@@ -144,6 +143,10 @@ void main() { CS_InitCornellBox(); }
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() { CS_Tick(); }
 #endif // _ENTRY_POINT_CS_Tick
+#ifdef _ENTRY_POINT_CS_PathTrace
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+void main() { CS_PathTrace(); }
+#endif // _ENTRY_POINT_CS_PathTrace
 #endif // IS_COMP_SHADER
 
 

@@ -3,10 +3,9 @@ enable_feature: perspective_camera
 
 checkbox ACCUMULATE: false
 checkbox JITTER: false
-slider_uint BOUNCES: 2 2 5
-checkbox SPEC_SAMPLE: true 
-slider_float EXPOSURE: 0.8 0.05 0.99
-slider_uint BRDF_MODE: 0 0 2
+slider_uint BOUNCES: 4 2 5
+slider_float EXPOSURE: 0.2 0.05 0.99
+slider_uint BRDF_MODE: 1 0 2
 slider_float BRDF_MIX: 0.5 0.001 0.999
 
 ui_dropdown_start OVERRIDES:
@@ -37,19 +36,10 @@ struct_size: 4
 structured_buffer globalStateBuffer: GlobalState 1
 
 include "FlrLib/Scene/Scene.flrh"
+include "FlrLib/Deferred/Deferred.flrh"
 
 image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
   texture_alias accumulationTexture
-
-# TODO move gbuffer resources to flrh lib
-image gbuffer0: SCREEN_WIDTH SCREEN_HEIGHT rgba8
-  texture_alias gbuffer0Texture
-image gbuffer1: SCREEN_WIDTH SCREEN_HEIGHT rgba8
-  texture_alias gbuffer1Texture
-image gbuffer2: SCREEN_WIDTH SCREEN_HEIGHT rgba8
-  texture_alias gbuffer2Texture
-depth_image depthBuffer: SCREEN_WIDTH SCREEN_HEIGHT
-  texture_alias depthTexture
 
 compute_shader CS_Tick: 1 1 1
 
@@ -71,11 +61,11 @@ render_pass SCENE_PASS:
   draw_indirect: VS_SceneSpheres PS_Scene spheresIndirectArgs
     vertex_output: SceneVertexOutput
 
-transition_layout: gbuffer0 texture
-transition_layout: gbuffer1 texture
-transition_layout: gbuffer2 texture
-transition_layout: depthBuffer texture
+run_task: GBUFFER_TRANSITION_TO_TEXTURES
 transition_layout: accumulationBuffer texture
+
+compute_shader CS_PathTrace: 8 8 1
+compute_dispatch: CS_PathTrace SCREEN_WIDTH SCREEN_HEIGHT 1
 
 struct DisplayVertex {
   vec2 uv;
@@ -84,7 +74,6 @@ struct_size: 8
 
 render_pass DISPLAY_PASS:
   store_attachments: outColor=DisplayImage
-
   draw: VS_Display PS_Display 3 1
     vertex_output: DisplayVertex
     disable_depth

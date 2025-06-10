@@ -6,6 +6,14 @@
 #include <FlrLib/Scene/Scene.glsl>
 #include <FlrLib/PBR/BRDF.glsl>
 
+vec4 sampleAccumulationTexture(vec2 uv, uint phase) {
+  if (phase == 0) {
+    return texture(accumulationTexture, uv);
+  } else {
+    return texture(accumulationTexture2, uv);
+  }
+}
+
 vec3 computeDir(vec2 uv) {
 	vec2 d = uv * 2.0 - 1.0;
 
@@ -25,6 +33,24 @@ vec3 sampleEnv(vec3 dir) {
   } else {
     float f = n.x + n.y + n.z;
     return max(round(fract(f * c)), 0.2).xxx;
+  }
+}
+
+vec3 sampleSpec(inout uvec2 seed, HitResult surfaceHit, Material mat, Ray ray, out float pdf) {
+  vec3 reflDir;
+  vec3 f = sampleMicrofacetBrdf(
+    randVec2(seed), -ray.d, surfaceHit.n,
+    mat,
+    reflDir, pdf);
+  Ray specRay;
+  specRay.d = normalize(reflDir);
+  specRay.o = surfaceHit.p + specRay.d * BOUNCE_BIAS;
+  HitResult specHit;
+  if (traceScene(specRay, specHit)) {
+    Material specMat = materialBuffer[specHit.matID];
+    return f * specMat.emissive;
+  } else {
+    return 0.0.xxx;//sampleEnv(specRay.d) * abs(dot(surfaceHit.n, specRay.d));
   }
 }
 
@@ -55,6 +81,8 @@ vec4 samplePath(inout uvec2 seed, Ray ray) {
     }
 
     if (length(mat.emissive) > 0.0) {
+      // if (SPEC_SAMPLE) //TODO - we are probably double counting without this...
+      //   break;
       color.rgb += throughput * mat.emissive;
       break;
     }
@@ -73,17 +101,27 @@ vec4 samplePath(inout uvec2 seed, Ray ray) {
         reflDir, pdf);
     }
     else {
+      if (SPEC_SAMPLE) {
+        float specPdf;
+        vec3 specLo = sampleSpec(seed, hit, mat, ray, specPdf);
+        color.rgb += throughput * specLo / specPdf;
+      }
+
       float samplePdf;
       reflDir = LocalToWorld(hit.n) * sampleHemisphereCosine(seed, samplePdf);
       f = evaluateMicrofacetBrdf(-ray.d, reflDir, hit.n, mat, pdf);
       pdf = samplePdf;
     }
 
-    throughput *= f / pdf;
+    // if (pdf < 0.005) {
+    //   f = 0.0.xxx;
+    //   pdf = 1.0;
+    // }
 
-    const float BOUNCE_BIAS = 0.001;
     ray.d = normalize(reflDir);
     ray.o = hit.p + BOUNCE_BIAS * ray.d;
+
+    throughput *= f / pdf;
   }
 
   return color;
@@ -92,10 +130,7 @@ vec4 samplePath(inout uvec2 seed, Ray ray) {
 ////////////////////////// COMPUTE SHADERS //////////////////////////
 
 #ifdef IS_COMP_SHADER
-void CS_Tick() {
-  if (globalStateBuffer[0].triCount == 0 || (uniforms.inputMask & INPUT_BIT_R) != 0)
-    initScene_CornellBox();
-  
+void CS_Tick() {  
   if (!ACCUMULATE || (uniforms.inputMask & INPUT_BIT_SPACE) != 0) 
   {
     globalStateBuffer[0].accumulationFrames = 1;
@@ -112,14 +147,22 @@ void CS_PathTrace() {
     return;
   }
 
-  vec4 prevColor = imageLoad(accumulationBuffer, ivec2(pixelCoord));
-
   uvec2 seed = pixelCoord * uvec2(uniforms.frameCount, uniforms.frameCount + 1);
   
-  vec2 uv = vec2(pixelCoord) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
+  vec2 uv = (vec2(pixelCoord)+0.5.xx) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
+
   if (JITTER) {
-    uv += randVec2(seed) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
+    // uv += randVec2(seed) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
+    vec2 x = 2.0 * (randVec2(seed) - 1.0.xx);
+    uv += (randVec2(seed) - 0.5.xx) * 0.001 * BLUR_RADIUS * exp(-10.0 * x * x);
   }
+
+  vec4 prevColor = sampleAccumulationTexture(uv, (uniforms.frameCount & 1)^1);
+  /*if (bool(uniforms.frameCount & 1)) {
+    prevColor = sampleAccumulationTexture(uv, 0);// imageLoad(accumulationBuffer, ivec2(pixelCoord));
+  } else {
+    prevColor = sampleAccumulationTexture(uv, 1);//imageLoad(accumulationBuffer2, ivec2(pixelCoord));
+  }*/
 
   Ray ray;
   ray.o = camera.inverseView[3].xyz;
@@ -144,7 +187,12 @@ void CS_PathTrace() {
   }
 
   color.rgb = mix(prevColor.rgb, color.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
-  imageStore(accumulationBuffer, ivec2(pixelCoord), color);
+  
+  if (bool(uniforms.frameCount & 1)) {
+    imageStore(accumulationBuffer2, ivec2(pixelCoord), color);
+  } else {
+    imageStore(accumulationBuffer, ivec2(pixelCoord), color);
+  }
 }
 #endif // IS_COMP_SHADER
 
@@ -163,7 +211,7 @@ VertexOutput VS_Render() {
 
 #ifdef IS_PIXEL_SHADER
 void PS_Render(VertexOutput IN) {
-  outColor = texture(accumulationTexture, IN.screenUV);
+  outColor = sampleAccumulationTexture(IN.screenUV, uniforms.frameCount & 1);
   outColor.rgb = vec3(1.0) - exp(-outColor.rgb * EXPOSURE);
 }
 #endif // IS_PIXEL_SHADER

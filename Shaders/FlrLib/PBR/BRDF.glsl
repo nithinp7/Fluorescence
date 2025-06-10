@@ -110,9 +110,6 @@ vec3 sampleMicrofacetBrdf(
   float LdotH = abs(woDotwh);
   vec3 F0 = mat.specular;
   vec3 F = fresnelSchlick(LdotH, F0, mat.roughness);
-  // vec3 F = F0 + (1.0.xxx - F0) * pow(1.0 - LdotH, 5.0);
-
-  // vec3 F = vec3(1.0);
   float G = 1.0 / (1.0 + Lambda(wo, mat.roughness) + Lambda(wi, mat.roughness));
 
   vec3 ggx = D*G*F / (4.0 * wo.z /**wh.z*/);
@@ -159,7 +156,6 @@ vec3 evaluateMicrofacetBrdf(
     pdf = D / (4.0 * VdotH);
 
     vec3 F0 = mat.specular;
-    // vec3 F = F0 + (1.0.xxx - F0) * pow(1.0 - VdotH, 5.0);
     vec3 F = fresnelSchlick(VdotH, F0, mat.roughness);
     float G = 1.0 / (1.0 + Lambda(NdotV, a) + Lambda(NdotL, a));
 
