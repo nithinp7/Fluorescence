@@ -16,6 +16,7 @@ vec3 computeDir(vec2 uv) {
 }
 
 vec3 sampleEnv(vec3 dir) {
+  return 1.0.xxx;
   float c = 5.0;
   vec3 n = 0.5 * normalize(dir) + 0.5.xxx;
   if (BACKGROUND == 0) {
@@ -30,24 +31,6 @@ vec3 sampleEnv(vec3 dir) {
   }
 }
 
-vec3 sampleSpec(inout uvec2 seed, HitResult surfaceHit, Material mat, Ray ray, out float pdf) {
-  vec3 reflDir;
-  vec3 f = sampleMicrofacetBrdf(
-    randVec2(seed), -ray.d, surfaceHit.n,
-    mat,
-    reflDir, pdf);
-  Ray specRay;
-  specRay.d = normalize(reflDir);
-  specRay.o = surfaceHit.p + specRay.d * BOUNCE_BIAS;
-  HitResult specHit;
-  if (traceScene(specRay, specHit)) {
-    Material specMat = materialBuffer[specHit.matID];
-    return f * specMat.emissive;
-  } else {
-    return 0.0.xxx;//sampleEnv(specRay.d) * abs(dot(surfaceHit.n, specRay.d));
-  }
-}
-
 void applyOverrides(inout Material mat) {
   if (OVERRIDE_ROUGHNESS)
     mat.roughness = ROUGHNESS;
@@ -57,7 +40,9 @@ void applyOverrides(inout Material mat) {
     mat.specular = SPECULAR.xyz;
 }
 
-vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat) {
+#define TRACE_MODE_DIFFUSE 0
+#define TRACE_MODE_SPEC 1
+vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat, uint traceMode) {
   vec4 color = vec4(0.0.xxx, 1.0);
 
   vec3 throughput = 1.0.xxx;
@@ -70,7 +55,7 @@ vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat) {
     } 
     
     if (!bResult) {
-      color.rgb = throughput * sampleEnv(ray.d);
+      color.rgb += throughput * sampleEnv(ray.d);
       break;
     }
 
@@ -86,6 +71,10 @@ vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat) {
     }
 
     uint brdfMode = BRDF_MODE;
+    if (traceMode == TRACE_MODE_SPEC && bounce == 0) {
+      brdfMode = 0;
+      mat.diffuse = 0.0.xxx;
+    } 
     
     vec3 reflDir;
     float pdf;
@@ -138,18 +127,15 @@ void CS_Tick() {
   }
 }
 
-void CS_PathTrace() {
+void CS_TraceDiffuse() {
   uvec2 pixelId = uvec2(gl_GlobalInvocationID.xy);
-  if (pixelId.x >= SCREEN_WIDTH || pixelId.y >= SCREEN_HEIGHT) return;
+  if (pixelId.x >= DIFFUSE_BUF_WIDTH || pixelId.y >= DIFFUSE_BUF_HEIGHT) return;
   
-  vec2 uv = vec2(pixelId + 0.5.xx) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
+  vec2 uv = vec2(pixelId + 0.5.xx) / vec2(DIFFUSE_BUF_WIDTH, DIFFUSE_BUF_HEIGHT);
   uvec2 seed = pixelId * uvec2(uniforms.frameCount, uniforms.frameCount+1);
 
-  vec4 prevColor = texture(accumulationTexture, uv);
   float dRaw = texture(depthTexture, uv).r;
   vec3 pos = reconstructPosition(uv, dRaw, camera.inverseProjection, camera.inverseView);
-
-  vec3 roughnessMetallicEmissive = texture(gbuffer2Texture, uv).rgb;
 
   PackedGBuffer packed = PackedGBuffer(
       texture(gbuffer0Texture, uv),
@@ -169,12 +155,50 @@ void CS_PathTrace() {
   ray.o = camera.inverseView[3].xyz;
   ray.d = normalize(pos - ray.o);
 
-  vec4 color = samplePath(seed, ray, initHit, mat);
-
-  if (ACCUMULATE && (uniforms.inputMask & INPUT_BIT_SPACE) == 0)
-    color.rgb = mix(prevColor.rgb, color.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
+  vec4 diffuse = samplePath(seed, ray, initHit, mat, TRACE_MODE_DIFFUSE);
+  vec4 prevDiffuse = imageLoad(diffuseBuffer, ivec2(pixelId));
+  if (ACCUMULATE && (uniforms.inputMask & INPUT_BIT_SPACE) == 0) {
+    diffuse.rgb = mix(prevDiffuse.rgb, diffuse.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
+  }
   
-  imageStore(accumulationBuffer, ivec2(pixelId), color);
+  imageStore(diffuseBuffer, ivec2(pixelId), diffuse);
+}
+
+void CS_TraceSpec() {
+  uvec2 pixelId = uvec2(gl_GlobalInvocationID.xy);
+  if (pixelId.x >= SPEC_BUF_WIDTH || pixelId.y >= SPEC_BUF_HEIGHT) return;
+  
+  vec2 uv = vec2(pixelId + 0.5.xx) / vec2(SPEC_BUF_WIDTH, SPEC_BUF_HEIGHT);
+  uvec2 seed = pixelId * uvec2(uniforms.frameCount, uniforms.frameCount+1);
+
+  float dRaw = texture(depthTexture, uv).r;
+  vec3 pos = reconstructPosition(uv, dRaw, camera.inverseProjection, camera.inverseView);
+
+  PackedGBuffer packed = PackedGBuffer(
+      texture(gbuffer0Texture, uv),
+      texture(gbuffer1Texture, uv),
+      texture(gbuffer2Texture, uv));
+  
+  HitResult initHit;
+  Material mat;
+  unpackGBuffer(packed, mat, initHit.n);
+  applyOverrides(mat);
+  
+  initHit.p = pos;
+  initHit.t = 1.0;
+  initHit.matID = 0;
+
+  Ray ray;
+  ray.o = camera.inverseView[3].xyz;
+  ray.d = normalize(pos - ray.o);
+
+  vec4 spec = samplePath(seed, ray, initHit, mat, TRACE_MODE_SPEC);
+  vec4 prevSpec = imageLoad(specularBuffer, ivec2(pixelId));
+  if (ACCUMULATE && (uniforms.inputMask & INPUT_BIT_SPACE) == 0) {
+    spec.rgb = mix(prevSpec.rgb, spec.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
+  }
+  
+  imageStore(specularBuffer, ivec2(pixelId), spec);
 }
 #endif // IS_COMP_SHADER
 
@@ -207,9 +231,16 @@ void PS_Scene(SceneVertexOutput IN) {
 
 #ifdef DISPLAY_PASS
 void PS_Display(DisplayVertex IN) {
-  outColor = texture(accumulationTexture, IN.uv);
+  vec3 diffuse = texture(diffuseTexture, IN.uv).rgb;
+  vec3 spec = texture(specularTexture, IN.uv).rgb;
+  if (RENDER_MODE == 0)
+    outColor = vec4(0.5 * (diffuse + spec), 1.0);
+  else if (RENDER_MODE == 1)
+    outColor = vec4(diffuse, 1.0);
+  else 
+    outColor = vec4(spec, 1.0);
   outColor.rgb = vec3(1.0) - exp(-outColor.rgb * EXPOSURE);
-
+  
   if (GBUFFER_DBG_MODE == 1) {
     outColor = texture(gbuffer0Texture, IN.uv);
   } else if (GBUFFER_DBG_MODE == 2) {
