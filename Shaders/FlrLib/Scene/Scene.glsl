@@ -2,6 +2,7 @@
 #define _SCENE_GLSL_
 
 #include <Misc/Constants.glsl>
+#include <Misc/Sampling.glsl>
 #include <FlrLib/Scene/Intersection.glsl>
 
 struct SceneBuilder {
@@ -10,6 +11,7 @@ struct SceneBuilder {
   uint vertCount;
   uint triCount;
   uint sphereCount;
+  uint lightCount;
   bool bFlipNormal;
 };
 
@@ -25,6 +27,7 @@ void startSceneBuild() {
   g_sceneBuilder.vertCount = 0;
   g_sceneBuilder.triCount = 0;
   g_sceneBuilder.sphereCount = 0;
+  g_sceneBuilder.lightCount = 0;
   g_sceneBuilder.bFlipNormal = false;
 
   Material defaultMat;
@@ -47,6 +50,11 @@ void pushTri(vec3 a, vec3 b, vec3 c) {
   pushVert(g_sceneBuilder.bFlipNormal ? b : c);
   pushVert(g_sceneBuilder.bFlipNormal ? c : b);
   triBuffer[g_sceneBuilder.triCount++] = Tri(i0, i0+1, i0+2, g_sceneBuilder.matID - 1);
+
+  Material mat = materialBuffer[g_sceneBuilder.matID-1];
+  if (mat.emissive != 0.0.xxx) {
+    lightBuffer[g_sceneBuilder.lightCount++] = Light(g_sceneBuilder.triCount-1, LIGHT_TYPE_TRI);
+  }
 }
 
 void popTri() {
@@ -68,6 +76,11 @@ void popQuad() {
 void pushSphere(vec3 c, float r) {
   c += g_sceneBuilder.translation;
   sphereBuffer[g_sceneBuilder.sphereCount++] = Sphere(c, r, g_sceneBuilder.matID - 1);
+
+  Material mat = materialBuffer[g_sceneBuilder.matID-1];
+  if (mat.emissive != 0.0.xxx) {
+    lightBuffer[g_sceneBuilder.lightCount++] = Light(g_sceneBuilder.sphereCount-1, LIGHT_TYPE_SPHERE);
+  }
 }
 
 void popSphere() {
@@ -125,6 +138,7 @@ vec3 calcSphereVert(float theta, float phi) {
 void finishSceneBuild() {
   globalSceneBuffer[0].triCount = g_sceneBuilder.triCount;
   globalSceneBuffer[0].sphereCount = g_sceneBuilder.sphereCount;
+  globalSceneBuffer[0].lightCount = g_sceneBuilder.lightCount;
 
   uint RES = 12;
   uint sphereVertCount = RES * RES * 2 * 3;
@@ -183,6 +197,48 @@ bool traceScene(Ray ray, out HitResult hit) {
   return bHit;
 }
 
+vec3 sampleRandomLight(inout uvec2 seed, vec3 o, out vec3 dir, out float pdf) {
+  uint lightCount = globalSceneBuffer[0].lightCount;
+  pdf = 1.0 / float(lightCount); // TODO not quite right...
+  uint lightIdx = uint(rng(seed) * lightCount) % lightCount;
+  Light light = lightBuffer[lightIdx];
+  if (light.type == LIGHT_TYPE_TRI) {
+    Tri t = triBuffer[light.idx];
+    Material mat = materialBuffer[t.matID];
+
+    vec3 a = sceneVertexBuffer[t.i0].pos;
+    vec3 ab = sceneVertexBuffer[t.i1].pos - a;
+    vec3 ac = sceneVertexBuffer[t.i2].pos - a;
+
+    vec3 uvw = randVec3(seed);
+    uvw /= uvw.x + uvw.y + uvw.z;
+
+    vec3 lightPos = a + uvw.x * ab + uvw.y * ac;
+    vec3 lightDiff = lightPos - o;
+    float lightDist = length(lightDiff);
+
+    Ray ray;
+    ray.d = lightDiff / lightDist;
+    ray.o = o;
+    
+    vec3 lightNormal = normalize(cross(ab, ac));
+    float LdotNl = dot(ray.d, lightNormal);
+    if (LdotNl >= 0.0)
+      return 0.0.xxx;
+    
+    HitResult hit;
+    if (!traceScene(ray, hit) || hit.t < (lightDist - BOUNCE_BIAS))
+      return 0.0.xxx;
+
+    dir = ray.d;
+    return -LdotNl * mat.emissive; // TODO: any other attenuation needed here?
+  }
+  // TODO support sphere lights..
+
+  return 0.0.xxx;
+}
+
+
 #ifdef IS_VERTEX_SHADER
 SceneVertexOutput VS_SceneTriangles() {
   uint triIdx = gl_VertexIndex / 3;
@@ -205,7 +261,7 @@ SceneVertexOutput VS_SceneSpheres() {
 
   SceneVertexOutput OUT;
   OUT.pos = v * s.r + s.c;
-  OUT.normal = normalize(v);
+  OUT.normal = v;
   OUT.mat = materialBuffer[s.matID];
   gl_Position = camera.projection * camera.view * vec4(OUT.pos, 1.0);
   

@@ -6,7 +6,8 @@ checkbox JITTER: false
 slider_uint RENDER_MODE: 0 0 2
 slider_uint BOUNCES: 4 2 5
 slider_float EXPOSURE: 0.2 0.05 0.99
-slider_uint BRDF_MODE: 2 0 2
+slider_uint BRDF_MODE: 1 0 3
+slider_float BRDF_MIX: 0.5 0.001 0.999
 
 ui_dropdown_start OVERRIDES:
   checkbox OVERRIDE_DIFFUSE: false 
@@ -37,15 +38,8 @@ structured_buffer globalStateBuffer: GlobalState 1
 include "FlrLib/Scene/Scene.flrh"
 include "FlrLib/Deferred/Deferred.flrh"
 
-uint DIFFUSE_BUF_WIDTH: SCREEN_WIDTH
-uint DIFFUSE_BUF_HEIGHT: SCREEN_HEIGHT
-uint SPEC_BUF_WIDTH: SCREEN_WIDTH
-uint SPEC_BUF_HEIGHT: SCREEN_HEIGHT
-
-image diffuseBuffer: DIFFUSE_BUF_WIDTH DIFFUSE_BUF_HEIGHT rgba32f
-  texture_alias diffuseTexture
-image specularBuffer: SPEC_BUF_WIDTH SPEC_BUF_HEIGHT rgba32f
-  texture_alias specularTexture
+image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
+  texture_alias accumulationTexture
 
 compute_shader CS_Tick: 1 1 1
 
@@ -68,13 +62,10 @@ render_pass SCENE_PASS:
     vertex_output: SceneVertexOutput
 
 run_task: GBUFFER_TRANSITION_TO_TEXTURES
-transition_layout: diffuseBuffer texture
-transition_layout: specularBuffer texture
+transition_layout: accumulationBuffer texture
 
-compute_shader CS_TraceDiffuse: 8 8 1
-compute_shader CS_TraceSpec: 8 8 1
-compute_dispatch: CS_TraceDiffuse DIFFUSE_BUF_WIDTH DIFFUSE_BUF_HEIGHT 1
-compute_dispatch: CS_TraceSpec SPEC_BUF_WIDTH SPEC_BUF_HEIGHT 1
+compute_shader CS_PathTrace: 8 8 1
+compute_dispatch: CS_PathTrace SCREEN_WIDTH SCREEN_HEIGHT 1
 
 struct DisplayVertex {
   vec2 uv;

@@ -1,16 +1,15 @@
 #version 460 core
 
-#define SCREEN_WIDTH 1440
-#define SCREEN_HEIGHT 1280
+#define SCREEN_WIDTH 2560
+#define SCREEN_HEIGHT 1334
 #define MAX_SCENE_TRIS 128
 #define MAX_SCENE_SPHERES 12
+#define MAX_LIGHT_COUNT 128
+#define LIGHT_TYPE_TRI 0
+#define LIGHT_TYPE_SPHERE 0
 #define MAX_SCENE_MATERIALS 12
 #define MAX_SCENE_VERTS 8192
 #define SPHERE_VERT_COUNT 864
-#define DIFFUSE_BUF_WIDTH 1440
-#define DIFFUSE_BUF_HEIGHT 1280
-#define SPEC_BUF_WIDTH 1440
-#define SPEC_BUF_HEIGHT 1280
 
 struct IndexedIndirectArgs {
   uint indexCount;
@@ -34,8 +33,8 @@ struct GlobalState {
 struct GlobalScene {
   uint triCount;
   uint sphereCount;
+  uint lightCount;
   uint shereVertCount;
-  uint padding;
 };
 
 struct Tri {
@@ -49,6 +48,11 @@ struct Sphere {
   vec3 c;
   float r;
   uint matID;
+};;
+
+struct Light {
+  uint idx;
+  uint type;
 };;
 
 struct Material {
@@ -80,21 +84,20 @@ layout(set=1,binding=3) buffer BUFFER_triBuffer {  Tri triBuffer[]; };
 layout(set=1,binding=4) buffer BUFFER_sphereBuffer {  Sphere sphereBuffer[]; };
 layout(set=1,binding=5) buffer BUFFER_materialBuffer {  Material materialBuffer[]; };
 layout(set=1,binding=6) buffer BUFFER_sceneVertexBuffer {  SceneVertex sceneVertexBuffer[]; };
-layout(set=1,binding=7) buffer BUFFER_trianglesIndirectArgs {  IndirectArgs trianglesIndirectArgs[]; };
-layout(set=1,binding=8) buffer BUFFER_spheresIndirectArgs {  IndirectArgs spheresIndirectArgs[]; };
-layout(set=1,binding=9, rgba8) uniform image2D gbuffer0;
-layout(set=1,binding=10, rgba8) uniform image2D gbuffer1;
-layout(set=1,binding=11, rgba8) uniform image2D gbuffer2;
-layout(set=1,binding=12, rgba32f) uniform image2D diffuseBuffer;
-layout(set=1,binding=13, rgba32f) uniform image2D specularBuffer;
+layout(set=1,binding=7) buffer BUFFER_lightBuffer {  Light lightBuffer[]; };
+layout(set=1,binding=8) buffer BUFFER_trianglesIndirectArgs {  IndirectArgs trianglesIndirectArgs[]; };
+layout(set=1,binding=9) buffer BUFFER_spheresIndirectArgs {  IndirectArgs spheresIndirectArgs[]; };
+layout(set=1,binding=10, rgba8) uniform image2D gbuffer0;
+layout(set=1,binding=11, rgba8) uniform image2D gbuffer1;
+layout(set=1,binding=12, rgba8) uniform image2D gbuffer2;
+layout(set=1,binding=13, rgba32f) uniform image2D accumulationBuffer;
 layout(set=1,binding=14) uniform sampler2D gbuffer0Texture;
 layout(set=1,binding=15) uniform sampler2D gbuffer1Texture;
 layout(set=1,binding=16) uniform sampler2D gbuffer2Texture;
 layout(set=1,binding=17) uniform sampler2D depthTexture;
-layout(set=1,binding=18) uniform sampler2D diffuseTexture;
-layout(set=1,binding=19) uniform sampler2D specularTexture;
+layout(set=1,binding=18) uniform sampler2D accumulationTexture;
 
-layout(set=1, binding=20) uniform _UserUniforms {
+layout(set=1, binding=19) uniform _UserUniforms {
 	vec4 DIFFUSE;
 	vec4 SPECULAR;
 	uint RENDER_MODE;
@@ -103,6 +106,7 @@ layout(set=1, binding=20) uniform _UserUniforms {
 	uint GBUFFER_DBG_MODE;
 	uint BACKGROUND;
 	float EXPOSURE;
+	float BRDF_MIX;
 	float ROUGHNESS;
 	float BOUNCE_BIAS;
 	float SCENE_SCALE;
@@ -115,7 +119,7 @@ layout(set=1, binding=20) uniform _UserUniforms {
 
 #include <FlrLib/Fluorescence.glsl>
 
-layout(set=1, binding=21) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=20) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 
@@ -148,14 +152,10 @@ void main() { CS_InitCornellBox(); }
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() { CS_Tick(); }
 #endif // _ENTRY_POINT_CS_Tick
-#ifdef _ENTRY_POINT_CS_TraceDiffuse
+#ifdef _ENTRY_POINT_CS_PathTrace
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-void main() { CS_TraceDiffuse(); }
-#endif // _ENTRY_POINT_CS_TraceDiffuse
-#ifdef _ENTRY_POINT_CS_TraceSpec
-layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-void main() { CS_TraceSpec(); }
-#endif // _ENTRY_POINT_CS_TraceSpec
+void main() { CS_PathTrace(); }
+#endif // _ENTRY_POINT_CS_PathTrace
 #endif // IS_COMP_SHADER
 
 

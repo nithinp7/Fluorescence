@@ -40,9 +40,7 @@ void applyOverrides(inout Material mat) {
     mat.specular = SPECULAR.xyz;
 }
 
-#define TRACE_MODE_DIFFUSE 0
-#define TRACE_MODE_SPEC 1
-vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat, uint traceMode) {
+vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat) {
   vec4 color = vec4(0.0.xxx, 1.0);
 
   vec3 throughput = 1.0.xxx;
@@ -70,24 +68,45 @@ vec4 samplePath(inout uvec2 seed, Ray ray, HitResult hit, Material mat, uint tra
       break;
     }
 
-    uint brdfMode = BRDF_MODE;
-    if (traceMode == TRACE_MODE_SPEC && bounce == 0) {
-      brdfMode = 0;
-      mat.diffuse = 0.0.xxx;
-    } 
-    
     vec3 reflDir;
     float pdf;
     vec3 f;
+
+    uint brdfMode = BRDF_MODE;
+    // TODO - this is the new "direct light + indirect continuation" impl
+    // might want to consolidate with the old code below or cleanup in general
+    if (brdfMode == 3) {
+      // TODO the light pdf is definitely not correct,
+      // test with 
+      float pdfLight;
+      vec3 Li = sampleRandomLight(seed, hit.p, reflDir, pdfLight);
+      float pdf2;
+      vec3 fLight = evaluateMicrofacetBrdf(-ray.d, reflDir, hit.n, mat, pdf2);
+      color.rgb += throughput * fLight * Li / pdfLight;
+
+      if (rng(seed) < BRDF_MIX) {
+        // choose spec lobe for continuation
+        mat.diffuse = 0.0.xxx;
+        f = sampleMicrofacetBrdf(
+          randVec2(seed), -ray.d, hit.n,
+          mat,
+          reflDir, pdf);
+      } else {
+        // choose diffuse lobe for continuation
+        float samplePdf;
+        reflDir = LocalToWorld(hit.n) * sampleHemisphereCosine(seed, samplePdf);
+        f = mat.diffuse;
+        pdf = 1.0;
+      }
+    }
+
+    // TODO - old paths... single lobe sampling, no direct light sampling...
     if (brdfMode == 0) {
       f = sampleMicrofacetBrdf(
         randVec2(seed), -ray.d, hit.n,
         mat,
         reflDir, pdf);
-      float pdf2;
-      // f = evaluateMicrofacetBrdf(-ray.d, reflDir, hit.n, mat, pdf2);
-    } 
-    else if (brdfMode == 1) {
+    } else if (brdfMode == 1) {
       float samplePdf;
       reflDir = LocalToWorld(hit.n) * sampleHemisphereCosine(seed, samplePdf);
       f = evaluateMicrofacetBrdf(-ray.d, reflDir, hit.n, mat, pdf);
@@ -127,11 +146,11 @@ void CS_Tick() {
   }
 }
 
-void CS_TraceDiffuse() {
+void CS_PathTrace() {
   uvec2 pixelId = uvec2(gl_GlobalInvocationID.xy);
-  if (pixelId.x >= DIFFUSE_BUF_WIDTH || pixelId.y >= DIFFUSE_BUF_HEIGHT) return;
+  if (pixelId.x >= SCREEN_WIDTH || pixelId.y >= SCREEN_HEIGHT) return;
   
-  vec2 uv = vec2(pixelId + 0.5.xx) / vec2(DIFFUSE_BUF_WIDTH, DIFFUSE_BUF_HEIGHT);
+  vec2 uv = vec2(pixelId + 0.5.xx) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
   uvec2 seed = pixelId * uvec2(uniforms.frameCount, uniforms.frameCount+1);
 
   float dRaw = texture(depthTexture, uv).r;
@@ -155,50 +174,13 @@ void CS_TraceDiffuse() {
   ray.o = camera.inverseView[3].xyz;
   ray.d = normalize(pos - ray.o);
 
-  vec4 diffuse = samplePath(seed, ray, initHit, mat, TRACE_MODE_DIFFUSE);
-  vec4 prevDiffuse = imageLoad(diffuseBuffer, ivec2(pixelId));
+  vec4 color = samplePath(seed, ray, initHit, mat);
+  vec4 prevColor = imageLoad(accumulationBuffer, ivec2(pixelId));
   if (ACCUMULATE && (uniforms.inputMask & INPUT_BIT_SPACE) == 0) {
-    diffuse.rgb = mix(prevDiffuse.rgb, diffuse.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
+    color.rgb = mix(prevColor.rgb, color.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
   }
   
-  imageStore(diffuseBuffer, ivec2(pixelId), diffuse);
-}
-
-void CS_TraceSpec() {
-  uvec2 pixelId = uvec2(gl_GlobalInvocationID.xy);
-  if (pixelId.x >= SPEC_BUF_WIDTH || pixelId.y >= SPEC_BUF_HEIGHT) return;
-  
-  vec2 uv = vec2(pixelId + 0.5.xx) / vec2(SPEC_BUF_WIDTH, SPEC_BUF_HEIGHT);
-  uvec2 seed = pixelId * uvec2(uniforms.frameCount, uniforms.frameCount+1);
-
-  float dRaw = texture(depthTexture, uv).r;
-  vec3 pos = reconstructPosition(uv, dRaw, camera.inverseProjection, camera.inverseView);
-
-  PackedGBuffer packed = PackedGBuffer(
-      texture(gbuffer0Texture, uv),
-      texture(gbuffer1Texture, uv),
-      texture(gbuffer2Texture, uv));
-  
-  HitResult initHit;
-  Material mat;
-  unpackGBuffer(packed, mat, initHit.n);
-  applyOverrides(mat);
-  
-  initHit.p = pos;
-  initHit.t = 1.0;
-  initHit.matID = 0;
-
-  Ray ray;
-  ray.o = camera.inverseView[3].xyz;
-  ray.d = normalize(pos - ray.o);
-
-  vec4 spec = samplePath(seed, ray, initHit, mat, TRACE_MODE_SPEC);
-  vec4 prevSpec = imageLoad(specularBuffer, ivec2(pixelId));
-  if (ACCUMULATE && (uniforms.inputMask & INPUT_BIT_SPACE) == 0) {
-    spec.rgb = mix(prevSpec.rgb, spec.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
-  }
-  
-  imageStore(specularBuffer, ivec2(pixelId), spec);
+  imageStore(accumulationBuffer, ivec2(pixelId), color);
 }
 #endif // IS_COMP_SHADER
 
@@ -231,14 +213,7 @@ void PS_Scene(SceneVertexOutput IN) {
 
 #ifdef DISPLAY_PASS
 void PS_Display(DisplayVertex IN) {
-  vec3 diffuse = texture(diffuseTexture, IN.uv).rgb;
-  vec3 spec = texture(specularTexture, IN.uv).rgb;
-  if (RENDER_MODE == 0)
-    outColor = vec4(0.5 * (diffuse + spec), 1.0);
-  else if (RENDER_MODE == 1)
-    outColor = vec4(diffuse, 1.0);
-  else 
-    outColor = vec4(spec, 1.0);
+  outColor = texture(accumulationTexture, IN.uv);
   outColor.rgb = vec3(1.0) - exp(-outColor.rgb * EXPOSURE);
   
   if (GBUFFER_DBG_MODE == 1) {

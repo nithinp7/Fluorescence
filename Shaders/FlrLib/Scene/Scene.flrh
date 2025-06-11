@@ -1,8 +1,8 @@
 struct GlobalScene {
   uint triCount;
   uint sphereCount;
+  uint lightCount;
   uint shereVertCount;
-  uint padding;
 }
 struct_size: 16
 
@@ -22,6 +22,15 @@ struct Sphere {
   uint matID;
 };
 struct_size: 20
+
+uint MAX_LIGHT_COUNT: 128
+uint LIGHT_TYPE_TRI: 0
+uint LIGHT_TYPE_SPHERE: 0
+struct Light {
+  uint idx;
+  uint type;
+};
+struct_size: 8
 
 uint MAX_SCENE_MATERIALS: 12
 struct Material {
@@ -58,6 +67,7 @@ structured_buffer triBuffer: Tri MAX_SCENE_TRIS
 structured_buffer sphereBuffer: Sphere MAX_SCENE_SPHERES
 structured_buffer materialBuffer: Material MAX_SCENE_MATERIALS
 structured_buffer sceneVertexBuffer: SceneVertex MAX_SCENE_VERTS
+structured_buffer lightBuffer: Light MAX_LIGHT_COUNT
 structured_buffer trianglesIndirectArgs: IndirectArgs 1
 structured_buffer spheresIndirectArgs: IndirectArgs 1
 
