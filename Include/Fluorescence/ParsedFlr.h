@@ -1,6 +1,7 @@
 
 #include <Althea/Application.h>
 #include <Althea/Utilities.h>
+#include <Althea/GraphicsPipeline.h>
 
 #include <cstdint>
 #include <string>
@@ -217,6 +218,7 @@ struct ParsedFlr {
     DM_DRAW_INDIRECT,
     //DM_DRAW_INDEXED_INDIRECT
   };
+
   struct Draw {
     // TODO: re-usable subpasses that can be used multiple times...
     std::string vertexShader;
@@ -230,6 +232,7 @@ struct ParsedFlr {
     uint32_t param2;
     int vertexOutputStructIdx;
     DrawMode drawMode;
+    AltheaEngine::PrimitiveType primType;
     bool bDisableDepth;
   };
 
@@ -324,6 +327,7 @@ struct ParsedFlr {
     I_DRAW,
     I_DRAW_INDIRECT,
     I_DRAW_OBJ,
+    I_PRIM_TYPE,
     I_VERTEX_OUTPUT,
     I_FEATURE,
     I_IMAGE,
@@ -374,6 +378,7 @@ struct ParsedFlr {
       "draw",
       "draw_indirect",
       "draw_obj",
+      "primitive_type",
       "vertex_output",
       "enable_feature",
       "image",

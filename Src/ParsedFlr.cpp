@@ -877,6 +877,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
            0,
            -1,
            DM_DRAW,
+           AltheaEngine::PrimitiveType::TRIANGLES,
            false});
       break;
     }
@@ -914,6 +915,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
          0,
          -1,
          DM_DRAW_INDIRECT, 
+         AltheaEngine::PrimitiveType::TRIANGLES,
          false });
       break;
     }
@@ -956,9 +958,29 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
            0,
            -1,
            DM_DRAW_OBJ,
+           AltheaEngine::PrimitiveType::TRIANGLES,
            false});
       break;
     }
+    case I_PRIM_TYPE: {
+      auto primType = p.parseName();
+      PARSER_VERIFY(primType, "Could not parse primitive type for draw call");
+
+      PARSER_VERIFY(m_renderPasses.size(), "primitive_type must be preceded by a render-pass.");
+      PARSER_VERIFY(m_renderPasses.back().draws.size(), "primitive_type must be preceded by a draw call.");
+
+      if (!primType->compare("triangles")) {
+        m_renderPasses.back().draws.back().primType = AltheaEngine::PrimitiveType::TRIANGLES;
+      }
+      else if (!primType->compare("lines")) {
+        m_renderPasses.back().draws.back().primType = AltheaEngine::PrimitiveType::LINES;
+      }
+      else {
+        PARSER_VERIFY(false, "Unexpected primitive type - expecting triangles or lines.");
+      }
+
+      break;
+    };
     case I_VERTEX_OUTPUT: {
       PARSER_VERIFY(
           m_renderPasses.size() > 0,

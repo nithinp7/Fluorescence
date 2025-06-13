@@ -585,6 +585,7 @@ Project::Project(
     for (const auto& draw : pass.draws) {
       SubpassBuilder& subpass = subpassBuilders.emplace_back();
       subpass.colorAttachments = colorAttachments;
+      subpass.pipelineBuilder.setPrimitiveType(draw.primType);
 
       GraphicsPipelineBuilder& builder = subpass.pipelineBuilder;
 
