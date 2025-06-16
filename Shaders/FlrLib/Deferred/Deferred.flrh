@@ -6,6 +6,8 @@ image gbuffer1: SCREEN_WIDTH SCREEN_HEIGHT rgba8
   texture_alias gbuffer1Texture
 image gbuffer2: SCREEN_WIDTH SCREEN_HEIGHT rgba8
   texture_alias gbuffer2Texture
+image gbuffer3: SCREEN_WIDTH SCREEN_HEIGHT rgba8
+  texture_alias gbuffer3Texture
 depth_image depthBuffer: SCREEN_WIDTH SCREEN_HEIGHT
   texture_alias depthTexture
 
@@ -13,5 +15,6 @@ task_block_start GBUFFER_TRANSITION_TO_TEXTURES:
   transition_layout: gbuffer0 texture
   transition_layout: gbuffer1 texture
   transition_layout: gbuffer2 texture
+  transition_layout: gbuffer3 texture
   transition_layout: depthBuffer texture
 task_block_end

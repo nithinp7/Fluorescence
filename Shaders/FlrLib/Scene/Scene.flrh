@@ -32,7 +32,7 @@ struct Light {
 };
 struct_size: 8
 
-uint MAX_SCENE_MATERIALS: 12
+uint MAX_SCENE_MATERIALS: 24
 struct Material {
   vec3 diffuse;
   float roughness;
@@ -41,7 +41,7 @@ struct Material {
   vec3 specular;
   float padding;
 };
-struct_size: 48
+struct_size: 64
 
 uint MAX_SCENE_VERTS: 8192
 struct SceneVertex {

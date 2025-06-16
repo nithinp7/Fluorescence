@@ -304,6 +304,10 @@ void CS_InitCornellBox() {
       boxT[2] = vec3(-s, 0.0, c) * 0.25 * cornellBoxScale;
       pushBox(vec3(0.45, -1.0 + 0.6, 0.15) * cornellBoxScale, boxT);
     }
+    
+    mat.diffuse = 0.8.xxx;
+    
+    pushMaterial(mat);
 
     // main room
     g_sceneBuilder.bFlipNormal = true;
@@ -312,17 +316,27 @@ void CS_InitCornellBox() {
     g_sceneBuilder.bFlipNormal = false;
     
     // color side-walls
-    mat.diffuse = vec3(1.0, 0.0, 0.0);
+    mat.diffuse = vec3(0.4, 0.0, 0.0);
+    mat.specular = 0.1.xxx;
     triBuffer[g_sceneBuilder.triCount-8].matID = g_sceneBuilder.matID;
     triBuffer[g_sceneBuilder.triCount-7].matID = g_sceneBuilder.matID;
     pushMaterial(mat);
-    mat.diffuse = vec3(0.0, 1.0, 0.0);
+
+    mat.diffuse = vec3(0.0, 0.4, 0.0);
     triBuffer[g_sceneBuilder.triCount-6].matID = g_sceneBuilder.matID;
     triBuffer[g_sceneBuilder.triCount-5].matID = g_sceneBuilder.matID;
     pushMaterial(mat);
 
+    // glossy back wall
+    mat.diffuse = 0.05.xxx;
+    mat.specular = 0.45.xxx;
+    mat.roughness = 0.025;
+    triBuffer[g_sceneBuilder.triCount-4].matID = g_sceneBuilder.matID;
+    triBuffer[g_sceneBuilder.triCount-3].matID = g_sceneBuilder.matID;
+    pushMaterial(mat);
+
     // add light
-    mat.emissive = 50.0.xxx;
+    mat.emissive = 2.0 * vec3(40.0, 40.0, 30.0);
     pushMaterial(mat);
     float lightSize = 6.0;
     float lightHeight = cornellBoxScale - 0.5;
@@ -335,8 +349,8 @@ void CS_InitCornellBox() {
 
   {
     Material mat;
-    mat.diffuse = vec3(0.0, 1.0, 1.0);
-    mat.roughness = 0.05;
+    mat.diffuse = vec3(0.0, 1.0, 1.0);// * 0.1;
+    mat.roughness = 0.1;
     mat.specular = 0.2.xxx;
     mat.emissive = 0.0.xxx;
     mat.metallic = 0.0;
@@ -348,8 +362,8 @@ void CS_InitCornellBox() {
   {
     Material mat;
     mat.diffuse = vec3(0.5, 0.5, 1.0);
-    mat.roughness = 0.1;
-    mat.specular = 0.2.xxx;
+    mat.roughness = 0.04;
+    mat.specular = 0.02.xxx;
     mat.emissive = 0.0.xxx;
     mat.metallic = 0.0;
     pushMaterial(mat);
