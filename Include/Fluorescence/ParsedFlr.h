@@ -233,6 +233,7 @@ struct ParsedFlr {
     int vertexOutputStructIdx;
     DrawMode drawMode;
     AltheaEngine::PrimitiveType primType;
+    float lineWidth; 
     bool bDisableDepth;
   };
 

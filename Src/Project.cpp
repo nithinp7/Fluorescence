@@ -586,6 +586,7 @@ Project::Project(
       SubpassBuilder& subpass = subpassBuilders.emplace_back();
       subpass.colorAttachments = colorAttachments;
       subpass.pipelineBuilder.setPrimitiveType(draw.primType);
+      subpass.pipelineBuilder.setLineWidth(draw.lineWidth);
 
       GraphicsPipelineBuilder& builder = subpass.pipelineBuilder;
 

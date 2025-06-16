@@ -267,6 +267,8 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
   uniforms.prevInputMask = prevInputMask;
   uniforms.inputMask = inputMask;
 
+  prevInputMask = inputMask;
+
   m_uniforms.getCurrentUniformBuffer(frame).updateUniforms(uniforms);
 }
 
