@@ -5,8 +5,8 @@ checkbox ACCUMULATE: false
 checkbox JITTER: false
 slider_uint RENDER_MODE: 0 0 2
 slider_uint BOUNCES: 4 2 5
-slider_float EXPOSURE: 0.2 0.05 0.99
-slider_uint BRDF_MODE: 1 0 3
+slider_float EXPOSURE: 0.06 0.05 0.99
+slider_uint BRDF_MODE: 3 0 3
 slider_float BRDF_MIX: 0.5 0.001 0.999
 
 ui_dropdown_start OVERRIDES:
@@ -21,7 +21,7 @@ ui_dropdown_start OVERRIDES:
 ui_dropdown_end
 
 ui_dropdown_start GBUFFER:
-  slider_uint GBUFFER_DBG_MODE: 0 0 4
+  slider_uint GBUFFER_DBG_MODE: 5 0 5
 ui_dropdown_end
 
 ui_dropdown_start MISC:
@@ -30,13 +30,26 @@ ui_dropdown_start MISC:
 ui_dropdown_end
 
 struct GlobalState {
+  vec4 errColor;
+  uvec2 dbgPixelId;
   uint accumulationFrames;
+  uint dbgGen;
 }
-struct_size: 4
+struct_size: 32
 structured_buffer globalStateBuffer: GlobalState 1
 
 include "FlrLib/Scene/Scene.flrh"
 include "FlrLib/Deferred/Deferred.flrh"
+
+uint MAX_LINE_VERTS: 2048
+struct LineVert {
+  vec4 pos;
+  vec4 color;
+}
+struct_size: 32
+
+structured_buffer rayDbgLines: LineVert MAX_LINE_VERTS
+structured_buffer rayDbgIndirectArgs: IndirectArgs 1
 
 image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
   texture_alias accumulationTexture
@@ -52,8 +65,10 @@ task_button: INIT_SCENE_CORNELL_BOX
 
 display_image DisplayImage
 
+barrier indirectArgs: rayDbgIndirectArgs
+
 render_pass SCENE_PASS:
-  store_attachments: outGBuffer0=gbuffer0 outGBuffer1=gbuffer1 outGBuffer2=gbuffer2
+  store_attachments: outGBuffer0=gbuffer0 outGBuffer1=gbuffer1 outGBuffer2=gbuffer2 outGBuffer3=gbuffer3
   store_depth: depthBuffer
 
   draw_indirect: VS_SceneTriangles PS_Scene trianglesIndirectArgs
@@ -63,18 +78,30 @@ render_pass SCENE_PASS:
 
 run_task: GBUFFER_TRANSITION_TO_TEXTURES
 transition_layout: accumulationBuffer texture
+barrier: rayDbgIndirectArgs
 
+uint TEMPORAL_UPSCALE_RATIO: 1
+uint RAY_DIMS_X: SCREEN_WIDTH/TEMPORAL_UPSCALE_RATIO
+uint RAY_DIMS_Y: SCREEN_HEIGHT/TEMPORAL_UPSCALE_RATIO
 compute_shader CS_PathTrace: 8 8 1
-compute_dispatch: CS_PathTrace SCREEN_WIDTH SCREEN_HEIGHT 1
+
+compute_dispatch: CS_PathTrace RAY_DIMS_X RAY_DIMS_Y 1
 
 struct DisplayVertex {
   vec2 uv;
 }
 struct_size: 8 
 
+
 render_pass DISPLAY_PASS:
   store_attachments: outColor=DisplayImage
+  loadstore_depth: depthBuffer
+
   draw: VS_Display PS_Display 3 1
     vertex_output: DisplayVertex
     disable_depth
+
+  draw_indirect: VS_RayDbgLines PS_RayDbgLines rayDbgIndirectArgs
+    vertex_output: SceneVertexOutput
+    primitive_type: lines 5.0
 

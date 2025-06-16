@@ -1,15 +1,19 @@
 #version 460 core
 
-#define SCREEN_WIDTH 2560
-#define SCREEN_HEIGHT 1334
+#define SCREEN_WIDTH 1440
+#define SCREEN_HEIGHT 1280
 #define MAX_SCENE_TRIS 128
 #define MAX_SCENE_SPHERES 12
 #define MAX_LIGHT_COUNT 128
 #define LIGHT_TYPE_TRI 0
 #define LIGHT_TYPE_SPHERE 0
-#define MAX_SCENE_MATERIALS 12
+#define MAX_SCENE_MATERIALS 24
 #define MAX_SCENE_VERTS 8192
 #define SPHERE_VERT_COUNT 864
+#define MAX_LINE_VERTS 2048
+#define TEMPORAL_UPSCALE_RATIO 1
+#define RAY_DIMS_X 1440
+#define RAY_DIMS_Y 1280
 
 struct IndexedIndirectArgs {
   uint indexCount;
@@ -27,7 +31,10 @@ struct IndirectArgs {
 };
 
 struct GlobalState {
+  vec4 errColor;
+  uvec2 dbgPixelId;
   uint accumulationFrames;
+  uint dbgGen;
 };
 
 struct GlobalScene {
@@ -74,6 +81,11 @@ struct SceneVertexOutput {
   Material mat;
 };
 
+struct LineVert {
+  vec4 pos;
+  vec4 color;
+};
+
 struct DisplayVertex {
   vec2 uv;
 };
@@ -87,17 +99,21 @@ layout(set=1,binding=6) buffer BUFFER_sceneVertexBuffer {  SceneVertex sceneVert
 layout(set=1,binding=7) buffer BUFFER_lightBuffer {  Light lightBuffer[]; };
 layout(set=1,binding=8) buffer BUFFER_trianglesIndirectArgs {  IndirectArgs trianglesIndirectArgs[]; };
 layout(set=1,binding=9) buffer BUFFER_spheresIndirectArgs {  IndirectArgs spheresIndirectArgs[]; };
-layout(set=1,binding=10, rgba8) uniform image2D gbuffer0;
-layout(set=1,binding=11, rgba8) uniform image2D gbuffer1;
-layout(set=1,binding=12, rgba8) uniform image2D gbuffer2;
-layout(set=1,binding=13, rgba32f) uniform image2D accumulationBuffer;
-layout(set=1,binding=14) uniform sampler2D gbuffer0Texture;
-layout(set=1,binding=15) uniform sampler2D gbuffer1Texture;
-layout(set=1,binding=16) uniform sampler2D gbuffer2Texture;
-layout(set=1,binding=17) uniform sampler2D depthTexture;
-layout(set=1,binding=18) uniform sampler2D accumulationTexture;
+layout(set=1,binding=10) buffer BUFFER_rayDbgLines {  LineVert rayDbgLines[]; };
+layout(set=1,binding=11) buffer BUFFER_rayDbgIndirectArgs {  IndirectArgs rayDbgIndirectArgs[]; };
+layout(set=1,binding=12, rgba8) uniform image2D gbuffer0;
+layout(set=1,binding=13, rgba8) uniform image2D gbuffer1;
+layout(set=1,binding=14, rgba8) uniform image2D gbuffer2;
+layout(set=1,binding=15, rgba8) uniform image2D gbuffer3;
+layout(set=1,binding=16, rgba32f) uniform image2D accumulationBuffer;
+layout(set=1,binding=17) uniform sampler2D gbuffer0Texture;
+layout(set=1,binding=18) uniform sampler2D gbuffer1Texture;
+layout(set=1,binding=19) uniform sampler2D gbuffer2Texture;
+layout(set=1,binding=20) uniform sampler2D gbuffer3Texture;
+layout(set=1,binding=21) uniform sampler2D depthTexture;
+layout(set=1,binding=22) uniform sampler2D accumulationTexture;
 
-layout(set=1, binding=19) uniform _UserUniforms {
+layout(set=1, binding=23) uniform _UserUniforms {
 	vec4 DIFFUSE;
 	vec4 SPECULAR;
 	uint RENDER_MODE;
@@ -119,7 +135,7 @@ layout(set=1, binding=19) uniform _UserUniforms {
 
 #include <FlrLib/Fluorescence.glsl>
 
-layout(set=1, binding=20) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=24) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 
@@ -129,17 +145,23 @@ layout(set=1, binding=20) uniform _CameraUniforms { PerspectiveCamera camera; };
 layout(location = 0) out vec4 outGBuffer0;
 layout(location = 1) out vec4 outGBuffer1;
 layout(location = 2) out vec4 outGBuffer2;
+layout(location = 3) out vec4 outGBuffer3;
 #endif // _ENTRY_POINT_PS_Scene
 #if defined(_ENTRY_POINT_PS_Scene) && !defined(_ENTRY_POINT_PS_Scene_ATTACHMENTS)
 #define _ENTRY_POINT_PS_Scene_ATTACHMENTS
 layout(location = 0) out vec4 outGBuffer0;
 layout(location = 1) out vec4 outGBuffer1;
 layout(location = 2) out vec4 outGBuffer2;
+layout(location = 3) out vec4 outGBuffer3;
 #endif // _ENTRY_POINT_PS_Scene
 #if defined(_ENTRY_POINT_PS_Display) && !defined(_ENTRY_POINT_PS_Display_ATTACHMENTS)
 #define _ENTRY_POINT_PS_Display_ATTACHMENTS
 layout(location = 0) out vec4 outColor;
 #endif // _ENTRY_POINT_PS_Display
+#if defined(_ENTRY_POINT_PS_RayDbgLines) && !defined(_ENTRY_POINT_PS_RayDbgLines_ATTACHMENTS)
+#define _ENTRY_POINT_PS_RayDbgLines_ATTACHMENTS
+layout(location = 0) out vec4 outColor;
+#endif // _ENTRY_POINT_PS_RayDbgLines
 #endif // IS_PIXEL_SHADER
 #include "SimpleScene.glsl"
 
@@ -172,6 +194,10 @@ void main() { _VERTEX_OUTPUT = VS_SceneSpheres(); }
 layout(location = 0) out DisplayVertex _VERTEX_OUTPUT;
 void main() { _VERTEX_OUTPUT = VS_Display(); }
 #endif // _ENTRY_POINT_VS_Display
+#ifdef _ENTRY_POINT_VS_RayDbgLines
+layout(location = 0) out SceneVertexOutput _VERTEX_OUTPUT;
+void main() { _VERTEX_OUTPUT = VS_RayDbgLines(); }
+#endif // _ENTRY_POINT_VS_RayDbgLines
 #endif // IS_VERTEX_SHADER
 
 
@@ -191,4 +217,9 @@ void main() { PS_Scene(_VERTEX_INPUT); }
 layout(location = 0) in DisplayVertex _VERTEX_INPUT;
 void main() { PS_Display(_VERTEX_INPUT); }
 #endif // _ENTRY_POINT_PS_Display
+#if defined(_ENTRY_POINT_PS_RayDbgLines) && !defined(_ENTRY_POINT_PS_RayDbgLines_INTERPOLANTS)
+#define _ENTRY_POINT_PS_RayDbgLines_INTERPOLANTS
+layout(location = 0) in SceneVertexOutput _VERTEX_INPUT;
+void main() { PS_RayDbgLines(_VERTEX_INPUT); }
+#endif // _ENTRY_POINT_PS_RayDbgLines
 #endif // IS_PIXEL_SHADER
