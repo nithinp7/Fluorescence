@@ -3,6 +3,21 @@
 #define SCREEN_WIDTH 1440
 #define SCREEN_HEIGHT 1280
 
+struct IndexedIndirectArgs {
+  uint indexCount;
+  uint instanceCount;
+  uint firstIndex;
+  uint vertexOffset;
+  uint firstInstance;
+};
+
+struct IndirectArgs {
+  uint vertexCount;
+  uint instanceCount;
+  uint firstVertex;
+  uint firstInstance;
+};
+
 struct VertexOutput {
   vec4 worldPosition;
   vec4 position;
@@ -70,7 +85,7 @@ layout(set=1, binding=21) uniform _UserUniforms {
 	bool ENABLE_SSS_EPI;
 };
 
-#include <Fluorescence.glsl>
+#include <FlrLib/Fluorescence.glsl>
 
 layout(set=1, binding=22) uniform _CameraUniforms { PerspectiveCamera camera; };
 

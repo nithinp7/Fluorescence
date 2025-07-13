@@ -1,0 +1,33 @@
+struct VertexOutput {
+  vec2 uv;
+};
+struct_size: 8
+
+display_image DisplayImage
+
+uint GRID_LEN: 100
+uint GRID_POINTS: GRID_LEN * GRID_LEN
+uint GRID_CELLS: (GRID_LEN-1) * (GRID_LEN-1)
+
+struct Gradient {
+  vec2 dir;
+}
+struct_size: 8
+structured_buffer gradients: Gradient GRID_POINTS
+
+slider_uint SEED: 1 1 100000
+
+compute_shader CS_InitGradients: 8 8 1
+task_block_start INIT_GRADIENTS:
+  compute_dispatch: CS_InitGradients GRID_POINTS GRID_POINTS 1
+  barrier: gradients
+task_block_end
+
+initialization_task: INIT_GRADIENTS
+task_button: INIT_GRADIENTS
+
+render_pass DISPLAY_PASS:
+  store_attachments: outDisplay=DisplayImage
+
+  draw: VS_DrawNoise PS_DrawNoise 3 1
+    vertex_output: VertexOutput

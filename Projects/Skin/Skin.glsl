@@ -48,7 +48,7 @@ vec3 sampleEnv(vec3 dir) {
   if (BACKGROUND == 0) {
     float x = dot(dir, L);
     if (x < LIGHT_COVERAGE)
-      return 0.1 * sampleEnvMap(dir);
+      return 10.0 * sampleEnvMap(dir);
     x *= LIGHT_STRENGTH;
     // x = pow(2.0 * LIGHT_STRENGTH * x, 8.0);
     // x = LIGHT_STRENGTH * pow(x, LIGHT_STRENGTH * 10.0) + 0.01;
@@ -308,7 +308,7 @@ void PS_SkinIrr(VertexOutput IN) {
             for (int i = 0; i < PDF_RETRIES; i++) {
               f = sampleMicrofacetBrdf(
                 randVec2(seed), -dir, IN.normal,
-                /*diffuse*/1.0.xxx, METALLIC, roughness, 
+                /*diffuse*/1.0.xxx, METALLIC, roughness, 0.04.xxx, 
                 reflDir, pdf);
               if (pdf >= PDF_CUTOFF)
                 break;
@@ -429,7 +429,7 @@ void PS_SkinResolve(VertexOutput IN) {
     outDisplay = texture(DebugTexture, screenUv);
   }
 
-  outDisplay.rgb = vec3(1.0) - exp(-outDisplay.rgb * EXPOSURE);
+  // outDisplay.rgb = vec3(1.0) - exp(-outDisplay.rgb * EXPOSURE);
 }
 #endif // DISPLAY_PASS
 

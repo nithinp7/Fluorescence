@@ -401,7 +401,7 @@ void CS_PathTrace() {
   vec3 dir = normalize(computeDir(uv));
   vec3 pos = camera.inverseView[3].xyz;
 
-  vec4 color = samplePath(seed, pos, dir);
+  vec4 color = vec4(sampleSky(pos, dir), 1.0);//samplePath(seed, pos, dir);
   color.rgb = mix(prevColor.rgb, color.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
   imageStore(accumulationBuffer, ivec2(pixelCoord), color);
 }
@@ -410,12 +410,11 @@ void CS_PathTrace() {
 ////////////////////////// VERTEX SHADERS //////////////////////////
 
 #ifdef IS_VERTEX_SHADER
-layout(location = 0) out vec2 outScreenUv;
 
-void VS_SDF() {
+VertexOutput VS_SDF() {
   vec2 uv = VS_FullScreen();
   gl_Position = vec4(uv * 2.0 - 1.0, 0.0, 1.0);
-  outScreenUv = uv;
+  return VertexOutput(uv);
 }
 
 #endif // IS_VERTEX_SHADER
@@ -423,16 +422,12 @@ void VS_SDF() {
 ////////////////////////// PIXEL SHADERS //////////////////////////
 
 #ifdef IS_PIXEL_SHADER
-layout(location = 0) in vec2 inScreenUv;
-
-layout(location = 0) out vec4 outColor;
-
-void PS_SDF() {
-  vec3 dir = normalize(computeDir(inScreenUv));
+void PS_SDF(VertexOutput IN) {
+  vec3 dir = normalize(computeDir(IN.uv));
   vec3 pos = camera.inverseView[3].xyz;
   
   if (RENDER_MODE == 0) {
-    outColor = texture(accumulationTexture, inScreenUv);
+    outColor = texture(accumulationTexture, IN.uv);
   }
   if (RENDER_MODE == 1) {
     HitResult hit;

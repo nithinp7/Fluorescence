@@ -29,7 +29,7 @@ struct GlobalState {
 struct_size 4
 structured_buffer globalStateBuffer: GlobalState 1
 
-image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba8
+image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
 texture_alias accumulationTexture
 
 compute_shader CS_Tick: 1 1 1
@@ -41,5 +41,13 @@ transition_layout: accumulationBuffer image
 compute_dispatch: CS_PathTrace SCREEN_WIDTH SCREEN_HEIGHT 1
 transition_layout: accumulationBuffer texture
 
-display_pass:
+struct VertexOutput {
+  vec2 uv;
+}
+struct_size: 8
+
+display_image DisplayImage
+render_pass FULL_SCREEN_PASS:
+  store_attachments: outColor=DisplayImage
   draw: VS_SDF PS_SDF 3 1
+    vertex_output: VertexOutput

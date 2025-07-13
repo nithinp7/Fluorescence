@@ -136,6 +136,7 @@ render_pass DISPLAY_PASS:
   store_depth: DepthImage
 
   draw: VS_Background PS_Background 3 1
+    vertex_output: VertexOutput
     disable_depth
 
   draw_obj: HeadModel VS_SkinResolve PS_SkinResolve
