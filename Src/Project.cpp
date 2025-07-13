@@ -92,12 +92,19 @@ Project::Project(
         structdef.size * desc.elemCount,
         usageFlags,
         allocInfo));
-      vkCmdFillBuffer(
-        commandBuffer,
-        bufCollection.back().getBuffer(),
-        0,
-        structdef.size * desc.elemCount,
-        0);
+      if (desc.bCpuVisible) {
+        void* pMapped = bufCollection.back().mapMemory();
+        memset(pMapped, 0, structdef.size * desc.elemCount);
+        bufCollection.back().unmapMemory();
+      }
+      else {
+        vkCmdFillBuffer(
+          commandBuffer,
+          bufCollection.back().getBuffer(),
+          0,
+          structdef.size * desc.elemCount,
+          0);
+      }
     }
   }
 
@@ -976,7 +983,7 @@ void Project::executeTaskList(
           {
             const auto& b = m_buffers[draw.param0];
             assert(b.size() == 1);
-            vkCmdDrawIndirect(commandBuffer, b[0].getBuffer(), 0, draw.param1, 16);
+            vkCmdDrawIndirect(commandBuffer, b[draw.param2].getBuffer(), 0, draw.param1, 16);
             break;
           }
           case ParsedFlr::DM_DRAW_OBJ:
@@ -1193,13 +1200,6 @@ TId getElemIdByName(const char* name, const std::vector<TElem>& elems) {
   }
   return TId();
 }
-
-template <typename TValue, typename TUi>
-std::optional<TValue> getUiElemByName(const char* name, const std::vector<TUi>& elems) {
-  if (auto pElem = getElemByName(name, elems))
-    return *reinterpret_cast<TValue*>(pElem->pValue);
-  return std::nullopt;
-}
 } // namespace
 
 TaskBlockId Project::findTaskBlock(const char* name) const {
@@ -1214,19 +1214,19 @@ ComputeShaderId Project::findComputeShader(const char* name) const {
   return getElemIdByName<ComputeShaderId>(name, m_parsed.m_computeShaders);
 }
 
-std::optional<bool> Project::getCheckBoxValue(const char* name) const {
+FlrUiView<bool> Project::getCheckBox(const char* name) const {
   return getUiElemByName<bool>(name, m_parsed.m_checkboxes);
 }
-std::optional<float> Project::getSliderFloatValue(const char* name) const {
+FlrUiView<float> Project::getSliderFloat(const char* name) const {
   return getUiElemByName<float>(name, m_parsed.m_sliderFloats);
 }
-std::optional<uint32_t> Project::getSliderUintValue(const char* name) const {
+FlrUiView<uint32_t> Project::getSliderUint(const char* name) const {
   return getUiElemByName<uint32_t>(name, m_parsed.m_sliderUints);
 }
-std::optional<int> Project::getSliderIntValue(const char* name) const {
+FlrUiView<int> Project::getSliderInt(const char* name) const {
   return getUiElemByName<int>(name, m_parsed.m_sliderInts);
 }
-std::optional<glm::vec4> Project::getColorPickerValue(const char* name) const {
+FlrUiView<glm::vec4> Project::getColorPicker(const char* name) const {
   return getUiElemByName<glm::vec4>(name, m_parsed.m_colorPickers);
 }
 

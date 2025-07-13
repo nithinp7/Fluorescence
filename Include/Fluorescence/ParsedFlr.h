@@ -225,7 +225,7 @@ struct ParsedFlr {
     std::string pixelShader;
     // param0/1/2 are used as follows
     // if drawMode==DM_DRAW: vertexCount, instanceCount, UNUSED
-    // if drawMode==DM_DRAW_INDIRECT, indirectBufferIdx, drawCount, UNUSED
+    // if drawMode==DM_DRAW_INDIRECT, indirectBufferIdx, drawCount, subBufferIdx(optional)
     // if drawMode==DM_DRAW_OBJ, objIdx, UNUSED, UNUSED
     uint32_t param0;
     uint32_t param1;

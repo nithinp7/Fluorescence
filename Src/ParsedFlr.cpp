@@ -907,13 +907,18 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       const auto& s = m_structDefs[m_buffers[*bufIdx].structIdx];
       PARSER_VERIFY(s.name == "IndirectArgs", "Unexpected struct type for structured buffer passed to draw_indirect instruction - expecting IndirectArgs or IndexedIndirectArgs");
 
+      uint32_t subBufferIdx = 0;
+      p.parseWhitespace();
+      if (auto subBufferIdx_ = p.parseUint())
+        subBufferIdx = *subBufferIdx_;
+      
       uint32_t renderPassIdx = m_renderPasses.size() - 1;
       m_renderPasses.back().draws.push_back(
         { std::string(*vertShader),
          std::string(*pixelShader),
          *bufIdx,
          m_buffers[*bufIdx].elemCount,
-         0,
+         subBufferIdx,
          -1,
          DM_DRAW_INDIRECT, 
          AltheaEngine::PrimitiveType::TRIANGLES,

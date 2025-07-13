@@ -44,6 +44,21 @@ CREATE_ID_TYPE(TaskBlockId);
 CREATE_ID_TYPE(ComputeShaderId);
 CREATE_ID_TYPE(BufferId);
 
+template <typename T>
+struct FlrUiView {
+  friend class Project;
+public:
+  FlrUiView() : m_ptr(nullptr) {}
+  FlrUiView(const FlrUiView<T>& other) : m_ptr(other.m_ptr) {}
+
+  T& operator->() { return *m_ptr; }
+  T& operator*() { return *m_ptr; }
+  operator bool() const { return m_ptr != nullptr; }
+private:
+  FlrUiView(T* ptr) : m_ptr(ptr) {}
+  T* m_ptr;
+};
+
 class Project {
 public:
   Project(
@@ -79,11 +94,11 @@ public:
   void dispatch(ComputeShaderId compShader, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ, VkCommandBuffer commandBuffer, const FrameContext& frame) const;
   void dispatchThreads(ComputeShaderId compShader, uint32_t threadCountX, uint32_t threadCountY, uint32_t threadCountZ, VkCommandBuffer commandBuffer, const FrameContext& frame) const;
 
-  std::optional<bool> getCheckBoxValue(const char* name) const;
-  std::optional<float> getSliderFloatValue(const char* name) const;
-  std::optional<uint32_t> getSliderUintValue(const char* name) const;
-  std::optional<int> getSliderIntValue(const char* name) const;
-  std::optional<glm::vec4> getColorPickerValue(const char* name) const;
+  FlrUiView<bool> getCheckBox(const char* name) const;
+  FlrUiView<float> getSliderFloat(const char* name) const;
+  FlrUiView<uint32_t> getSliderUint(const char* name) const;
+  FlrUiView<int> getSliderInt(const char* name) const;
+  FlrUiView<glm::vec4> getColorPicker(const char* name) const;
 
   std::optional<float> getConstFloat(const char* name) const;
   std::optional<uint32_t> getConstUint(const char* name) const;
@@ -97,6 +112,14 @@ public:
   void setPushConstants(uint32_t push0, uint32_t push1 = 0, uint32_t push2 = 0, uint32 push3 = 0);
 
 private:
+
+  template <typename TValue, typename TUi>
+  static FlrUiView<TValue> getUiElemByName(const char* name, const std::vector<TUi>& elems) {
+    if (auto pElem = getElemByName(name, elems))
+      return FlrUiView<TValue>(reinterpret_cast<TValue*>(pElem->pValue));
+    return FlrUiView<TValue>();
+  }
+
   void executeTaskList(const std::vector<ParsedFlr::Task>& tasks, VkCommandBuffer commandBuffer, const FrameContext& frame);
 
   ParsedFlr m_parsed;

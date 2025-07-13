@@ -130,6 +130,8 @@ uint32_t Fluorescence::getFrameCount() { return s_frameCount; }
 
 void Fluorescence::tick(Application& app, const FrameContext& frame) {
   {
+    ++s_frameCount;
+
     Gui::startRecordingImgui();
 
     const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
@@ -263,7 +265,7 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
   uniforms.mouseUv.y =
       static_cast<float>(0.5 - 0.5 * mpos.y);
   uniforms.time = m_time;
-  uniforms.frameCount = ++s_frameCount;
+  uniforms.frameCount = s_frameCount;
   uniforms.prevInputMask = prevInputMask;
   uniforms.inputMask = inputMask;
 
