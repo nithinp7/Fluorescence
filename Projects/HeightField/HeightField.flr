@@ -1,0 +1,38 @@
+enable_feature: perspective_camera
+
+uint GRID_LEN: 1000
+uint GRID_CELLS: GRID_LEN*GRID_LEN
+uint GRID_VERT_COUNT: (GRID_LEN-1)*(GRID_LEN-1)*6
+
+struct Cell {
+  float height;
+}
+struct_size: 4
+
+structured_buffer cellBuffer: Cell GRID_CELLS
+
+compute_shader CS_Init: 32 1 1
+
+task_block_start INIT_BLOCK:
+  compute_dispatch: CS_Init GRID_CELLS 1 1
+  barrier: cellBuffer
+task_block_end
+
+initialization_task: INIT_BLOCK
+
+struct VertexOutput {
+  vec4 vertColor;
+  vec2 uv;
+}
+struct_size: 24
+
+display_image DisplayImage
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+
+  draw: VS_Background PS_Background 3 1
+    vertex_output: VertexOutput
+    disable_depth
+  
+  draw: VS_HeightField PS_HeightField GRID_VERT_COUNT 1
+    vertex_output: VertexOutput
