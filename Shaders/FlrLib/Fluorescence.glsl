@@ -50,7 +50,7 @@ vec2 VS_Circle(uint vertexIdx, vec2 pos, float radius, uint circleVerts) {
     uint tidx = vertexIdx / 3;
     float theta = (tidx + (vertexIdx % 3)) * dtheta;
     float c = cos(theta);
-    float s = sin(theta);
+    float s = -sin(theta);
     pos += radius * vec2(c, s);
   }
 

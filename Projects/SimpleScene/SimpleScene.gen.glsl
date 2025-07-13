@@ -11,9 +11,6 @@
 #define MAX_SCENE_VERTS 8192
 #define SPHERE_VERT_COUNT 864
 #define MAX_LINE_VERTS 2048
-#define TEMPORAL_UPSCALE_RATIO 1
-#define RAY_DIMS_X 1440
-#define RAY_DIMS_Y 1280
 
 struct IndexedIndirectArgs {
   uint indexCount;
@@ -28,13 +25,6 @@ struct IndirectArgs {
   uint instanceCount;
   uint firstVertex;
   uint firstInstance;
-};
-
-struct GlobalState {
-  vec4 errColor;
-  uvec2 dbgPixelId;
-  uint accumulationFrames;
-  uint dbgGen;
 };
 
 struct GlobalScene {
@@ -81,6 +71,13 @@ struct SceneVertexOutput {
   Material mat;
 };
 
+struct GlobalState {
+  vec4 errColor;
+  uvec2 dbgPixelId;
+  uint accumulationFrames;
+  uint dbgGen;
+};
+
 struct LineVert {
   vec4 pos;
   vec4 color;
@@ -90,15 +87,15 @@ struct DisplayVertex {
   vec2 uv;
 };
 
-layout(set=1,binding=1) buffer BUFFER_globalStateBuffer {  GlobalState globalStateBuffer[]; };
-layout(set=1,binding=2) buffer BUFFER_globalSceneBuffer {  GlobalScene globalSceneBuffer[]; };
-layout(set=1,binding=3) buffer BUFFER_triBuffer {  Tri triBuffer[]; };
-layout(set=1,binding=4) buffer BUFFER_sphereBuffer {  Sphere sphereBuffer[]; };
-layout(set=1,binding=5) buffer BUFFER_materialBuffer {  Material materialBuffer[]; };
-layout(set=1,binding=6) buffer BUFFER_sceneVertexBuffer {  SceneVertex sceneVertexBuffer[]; };
-layout(set=1,binding=7) buffer BUFFER_lightBuffer {  Light lightBuffer[]; };
-layout(set=1,binding=8) buffer BUFFER_trianglesIndirectArgs {  IndirectArgs trianglesIndirectArgs[]; };
-layout(set=1,binding=9) buffer BUFFER_spheresIndirectArgs {  IndirectArgs spheresIndirectArgs[]; };
+layout(set=1,binding=1) buffer BUFFER_globalSceneBuffer {  GlobalScene globalSceneBuffer[]; };
+layout(set=1,binding=2) buffer BUFFER_triBuffer {  Tri triBuffer[]; };
+layout(set=1,binding=3) buffer BUFFER_sphereBuffer {  Sphere sphereBuffer[]; };
+layout(set=1,binding=4) buffer BUFFER_materialBuffer {  Material materialBuffer[]; };
+layout(set=1,binding=5) buffer BUFFER_sceneVertexBuffer {  SceneVertex sceneVertexBuffer[]; };
+layout(set=1,binding=6) buffer BUFFER_lightBuffer {  Light lightBuffer[]; };
+layout(set=1,binding=7) buffer BUFFER_trianglesIndirectArgs {  IndirectArgs trianglesIndirectArgs[]; };
+layout(set=1,binding=8) buffer BUFFER_spheresIndirectArgs {  IndirectArgs spheresIndirectArgs[]; };
+layout(set=1,binding=9) buffer BUFFER_globalStateBuffer {  GlobalState globalStateBuffer[]; };
 layout(set=1,binding=10) buffer BUFFER_rayDbgLines {  LineVert rayDbgLines[]; };
 layout(set=1,binding=11) buffer BUFFER_rayDbgIndirectArgs {  IndirectArgs rayDbgIndirectArgs[]; };
 layout(set=1,binding=12, rgba8) uniform image2D gbuffer0;
@@ -121,11 +118,11 @@ layout(set=1, binding=23) uniform _UserUniforms {
 	uint BRDF_MODE;
 	uint GBUFFER_DBG_MODE;
 	uint BACKGROUND;
+	float SCENE_SCALE;
 	float EXPOSURE;
 	float BRDF_MIX;
 	float ROUGHNESS;
 	float BOUNCE_BIAS;
-	float SCENE_SCALE;
 	bool ACCUMULATE;
 	bool JITTER;
 	bool OVERRIDE_DIFFUSE;

@@ -1,5 +1,12 @@
-
+# ---- FEATURES ----
 enable_feature: perspective_camera
+
+# ---- INCLUDES ----
+include "FlrLib/Scene/Scene.flrh"
+include "FlrLib/Deferred/Deferred.flrh"
+
+# ---- UI ----
+task_button: INIT_SCENE_CORNELL_BOX
 
 checkbox ACCUMULATE: false
 checkbox JITTER: false
@@ -29,6 +36,7 @@ ui_dropdown_start MISC:
   slider_uint BACKGROUND: 0 0 3
 ui_dropdown_end
 
+# ---- STRUCTS ----
 struct GlobalState {
   vec4 errColor;
   uvec2 dbgPixelId;
@@ -36,10 +44,6 @@ struct GlobalState {
   uint dbgGen;
 }
 struct_size: 32
-structured_buffer globalStateBuffer: GlobalState 1
-
-include "FlrLib/Scene/Scene.flrh"
-include "FlrLib/Deferred/Deferred.flrh"
 
 uint MAX_LINE_VERTS: 2048
 struct LineVert {
@@ -48,20 +52,28 @@ struct LineVert {
 }
 struct_size: 32
 
+struct DisplayVertex {
+  vec2 uv;
+}
+struct_size: 8 
+
+# ---- RESOURCES ----
+structured_buffer globalStateBuffer: GlobalState 1
 structured_buffer rayDbgLines: LineVert MAX_LINE_VERTS
 structured_buffer rayDbgIndirectArgs: IndirectArgs 1
 
 image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
   texture_alias accumulationTexture
 
+# ---- SHADERS ----
 compute_shader CS_Tick: 1 1 1
+compute_shader CS_PathTrace: 8 8 1
 
+# ---- TASK LISTS ----
 initialization_task: INIT_SCENE_CORNELL_BOX
 
 compute_dispatch: CS_Tick 1 1 1
 barrier: globalStateBuffer
-
-task_button: INIT_SCENE_CORNELL_BOX
 
 display_image DisplayImage
 
@@ -80,18 +92,7 @@ run_task: GBUFFER_TRANSITION_TO_TEXTURES
 transition_layout: accumulationBuffer texture
 barrier: rayDbgIndirectArgs
 
-uint TEMPORAL_UPSCALE_RATIO: 1
-uint RAY_DIMS_X: SCREEN_WIDTH/TEMPORAL_UPSCALE_RATIO
-uint RAY_DIMS_Y: SCREEN_HEIGHT/TEMPORAL_UPSCALE_RATIO
-compute_shader CS_PathTrace: 8 8 1
-
-compute_dispatch: CS_PathTrace RAY_DIMS_X RAY_DIMS_Y 1
-
-struct DisplayVertex {
-  vec2 uv;
-}
-struct_size: 8 
-
+compute_dispatch: CS_PathTrace SCREEN_WIDTH SCREEN_HEIGHT 1
 
 render_pass DISPLAY_PASS:
   store_attachments: outColor=DisplayImage

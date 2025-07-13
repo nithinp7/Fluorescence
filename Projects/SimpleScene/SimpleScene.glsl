@@ -196,10 +196,10 @@ void CS_Tick() {
 }
 
 void CS_PathTrace() {
-  uint phase = uniforms.frameCount % (TEMPORAL_UPSCALE_RATIO * TEMPORAL_UPSCALE_RATIO);
-  uvec2 localPixelId = uvec2(0, 0);//uvec2(phase/TEMPORAL_UPSCALE_RATIO, phase%TEMPORAL_UPSCALE_RATIO);
+  // uint phase = uniforms.frameCount % (TEMPORAL_UPSCALE_RATIO * TEMPORAL_UPSCALE_RATIO);
+  // uvec2 localPixelId = uvec2(0, 0);//uvec2(phase/TEMPORAL_UPSCALE_RATIO, phase%TEMPORAL_UPSCALE_RATIO);
 
-  uvec2 pixelId = uvec2(TEMPORAL_UPSCALE_RATIO * gl_GlobalInvocationID.xy) + localPixelId;
+  uvec2 pixelId = uvec2(gl_GlobalInvocationID.xy);//uvec2(TEMPORAL_UPSCALE_RATIO * gl_GlobalInvocationID.xy) + localPixelId;
   if (pixelId.x >= SCREEN_WIDTH || pixelId.y >= SCREEN_HEIGHT) return;
   
   vec2 uv = vec2(pixelId + 0.5.xx) / vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -311,10 +311,10 @@ void PS_Scene(SceneVertexOutput IN) {
 
 #ifdef DISPLAY_PASS
 void PS_Display(DisplayVertex IN) {
-  if (IN.uv.x < 0.05 && IN.uv.y < 0.05) {
-    outColor = globalStateBuffer[0].errColor;
-    return;
-  }
+  // if (IN.uv.x < 0.05 && IN.uv.y < 0.05) {
+  //   outColor = globalStateBuffer[0].errColor;
+  //   return;
+  // }
 
   outColor = texture(accumulationTexture, IN.uv);
   outColor.rgb = vec3(1.0) - exp(-outColor.rgb * EXPOSURE);

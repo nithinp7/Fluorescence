@@ -1,3 +1,4 @@
+# ---- STRUCTS / CONSTANTS ----
 struct GlobalScene {
   uint triCount;
   uint sphereCount;
@@ -56,12 +57,14 @@ struct SceneVertexOutput {
 }
 struct_size: 56
 
+uint SPHERE_VERT_COUNT: 12*12*2*3
+
+# ---- UI ----
 ui_dropdown_start SCENE:
   slider_float SCENE_SCALE: 10.0 1.0 50.0
 ui_dropdown_end
 
-uint SPHERE_VERT_COUNT: 12*12*2*3
-
+# ---- RESOURCES ----
 structured_buffer globalSceneBuffer: GlobalScene 1
 structured_buffer triBuffer: Tri MAX_SCENE_TRIS
 structured_buffer sphereBuffer: Sphere MAX_SCENE_SPHERES
@@ -71,8 +74,10 @@ structured_buffer lightBuffer: Light MAX_LIGHT_COUNT
 structured_buffer trianglesIndirectArgs: IndirectArgs 1
 structured_buffer spheresIndirectArgs: IndirectArgs 1
 
+# ---- SHADERS ----
 compute_shader CS_InitCornellBox 1 1 1
 
+# ---- TASK BLOCKS ----
 task_block_start START_SCENE:
   barrier: trianglesIndirectArgs spheresIndirectArgs globalSceneBuffer triBuffer sphereBuffer materialBuffer sceneVertexBuffer
 task_block_end
