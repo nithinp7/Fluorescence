@@ -911,6 +911,8 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       p.parseWhitespace();
       if (auto subBufferIdx_ = p.parseUint())
         subBufferIdx = *subBufferIdx_;
+
+      PARSER_VERIFY(subBufferIdx < m_buffers[*bufIdx].bufferCount, "Out-of-range subBufferIdx provided to draw_indirect instruction.");
       
       uint32_t renderPassIdx = m_renderPasses.size() - 1;
       m_renderPasses.back().draws.push_back(
