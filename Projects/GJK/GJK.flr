@@ -1,0 +1,89 @@
+# ---- FEATURES ----
+enable_feature: perspective_camera
+
+# ---- STRUCTS ----
+struct Vertex {
+  vec4 position;
+  vec4 color;
+}
+struct_size: 32
+
+struct SimpleVertex {
+  vec4 position;
+}
+struct_size: 16
+
+struct ScreenVertexOutput {
+  vec2 uv;
+}
+struct_size: 8
+
+struct VertexOutput {
+  vec4 color;
+  vec3 normal;
+}
+struct_size: 28
+
+struct CurrentTet {
+  uint indices[12];
+}
+struct_size: 48
+
+struct GlobalState {
+  vec4 dbgColor;
+}
+struct_size: 16
+
+# ---- CONSTANTS ----
+uint MAX_VERTS 100
+uint SPHERE_RES: 12
+uint SPHERE_VERT_COUNT: SPHERE_RES*SPHERE_RES*2*3
+uint MAX_LINE_VERT_COUNT: 100
+float POINT_RADIUS: 0.01
+
+# ---- RESOURCES ----
+structured_buffer globalState: GlobalState 1
+structured_buffer vertexBuffer: Vertex MAX_VERTS
+structured_buffer currentTet: CurrentTet 1
+structured_buffer trianglesIndirect: IndirectArgs 1
+structured_buffer spheresIndirect(2): IndirectArgs 1
+structured_buffer linesIndirect: IndirectArgs 1
+structured_buffer sphereVertexBuffer: SimpleVertex SPHERE_VERT_COUNT
+structured_buffer lineVertexBuffer: Vertex MAX_LINE_VERT_COUNT
+display_image DisplayImage
+
+# ---- SHADERS ----
+compute_shader CS_Init: 1 1 1
+compute_shader CS_Update: 1 1 1
+
+# ---- TASK LIST ----
+task_block_start INIT_BLOCK:
+  compute_dispatch: CS_Init 1 1 1
+  barrier: sphereVertexBuffer vertexBuffer
+  barrier indirectArgs: trianglesIndirect spheresIndirect currentTet globalState
+task_block_end
+
+initialization_task: INIT_BLOCK
+task_button: INIT_BLOCK
+
+barrier: linesIndirect lineVertexBuffer
+compute_dispatch: CS_Update 1 1 1
+barrier: vertexBuffer lineVertexBuffer currentTet globalState
+barrier indirectArgs: linesIndirect
+
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+  draw: VS_Background PS_Background 3 1
+    vertex_output: ScreenVertexOutput
+    disable_depth
+  draw_indirect: VS_Points PS_Points spheresIndirect 0
+    vertex_output: VertexOutput
+  draw_indirect: VS_Origin PS_Points spheresIndirect 1
+    vertex_output: VertexOutput
+  draw_indirect: VS_Triangles PS_Triangles trianglesIndirect
+    vertex_output: VertexOutput
+    primitive_type: lines
+  draw_indirect: VS_Lines PS_Lines linesIndirect
+    vertex_output: VertexOutput
+    primitive_type: lines
+
