@@ -1,5 +1,7 @@
 #include "Util.glsl"
 
+#define FLT_MAX 3.402823466e+38
+
 // INPUT
 #define IS_PRESSED(K) ((uniforms.inputMask & INPUT_BIT_##K) != 0)
 void updateInputs() {
@@ -46,46 +48,26 @@ void updateInputs() {
   }
 }
 
-void checkIntersection() {
-  vec3 a = vertexBuffer[1].position.xyz;
-  vec3 b = vertexBuffer[2].position.xyz;
-  vec3 c = vertexBuffer[3].position.xyz;
-  vec3 d = vertexBuffer[4].position.xyz;
-
-  mat3 bcMat;
-  bcMat[0] = b-a;
-  bcMat[1] = c-a;
-  bcMat[2] = d-a;
-
-  vec3 bc = inverse(bcMat) * -a;
-  float bcSum = bc.x + bc.y + bc.z;
-
-  if (bcSum < 1.0 && all(greaterThanEqual(bc, 0.0.xxx)) && all(lessThanEqual(bc, 1.0.xxx))) {
-    vertexBuffer[0].color = vec4(0.0, 1.0, 0.0, 1.0);
-  } else {
-    vertexBuffer[0].color = vec4(1.0 , 0.0, 0.0, 1.0);
-  }
-
-  finishLines();
-}
-
-float projectionSquared(vec3 v, vec3 n) {
-  float n2 = dot(n, n);
-  float p = dot(v, n);
-  return p * p / n2;
-}
-
-struct FaceProjection {
-  vec4 dbgColor;
+struct TetChecker {
   vec3 projPos;
-  float dist2;
+  float closestDist2;
+  vec3 dbgColor;
+  bool bInside;
 };
+TetChecker createTetChecker() {
+  return TetChecker(0.0.xxx, FLT_MAX, 0.0.xxx, true);
+}
 
-FaceProjection projectToFace(vec3 a, vec3 b, vec3 c) {
+void checkFace(inout TetChecker tetCheck, vec3 a, vec3 b, vec3 c, vec3 d) {
+  vec3 dbgColor;
+  vec3 projPos;
+
   vec3 ab = b-a;
   vec3 ac = c-a;
   vec3 bc = c-b;
   vec3 n = cross(ab, ac);
+  
+  tetCheck.bInside = bool(tetCheck.bInside) && (dot(n, -a) * dot(n, d-a) >= 0.0);
 
   vec3 perpAB = cross(ab, n);
   vec3 perpAC = cross(n, ac);
@@ -96,85 +78,83 @@ FaceProjection projectToFace(vec3 a, vec3 b, vec3 c) {
       dot(perpAC, -a),
       dot(perpBC, -b));
 
-  FaceProjection p;
-
   bvec3 lt0 = lessThan(t, 0.0.xxx);
   vec3 planeProj = dot(n, a) / dot(n, n) * n;
   if (all(lt0)) {
     // inside triangle
-    p.dbgColor = vec4(0.0, 1.0, 0.0, 1.0);
-    p.projPos = planeProj;
+    dbgColor = vec3(0.0, 1.0, 0.0);
+    projPos = planeProj;
   } else if (!any(lt0.xy)) {
-    p.dbgColor = vec4(1.0, 0.0, 0.0, 1.0);
-    p.projPos = a;
+    // corner a
+    dbgColor = vec3(1.0, 0.0, 0.0);
+    projPos = a;
   } else if (!any(lt0.xz)) {
-    p.dbgColor = vec4(1.0, 0.0, 0.0, 1.0);
-    p.projPos = b;
+    // corner b
+    dbgColor = vec3(1.0, 0.0, 0.0);
+    projPos = b;
   } else if (!any(lt0.yz)) {
-    p.dbgColor = vec4(1.0, 0.0, 0.0, 1.0);
-    p.projPos = c;
+    // corner c
+    dbgColor = vec3(1.0, 0.0, 0.0);
+    projPos = c;
   } else if (!lt0.x) {
-    p.dbgColor = vec4(1.0, 0.0, 1.0, 1.0);
+    // line ab
+    dbgColor = vec3(1.0, 0.0, 1.0);
     if (dot(ab, -a) < 0.0)
-      p.projPos = a;
+      projPos = a;
     else if (dot(ab, b) < 0.0)
-      p.projPos = b;
+      projPos = b;
     else
-      p.projPos = planeProj - t.x / dot(perpAB, perpAB) * perpAB;
+      projPos = planeProj - t.x / dot(perpAB, perpAB) * perpAB;
   } else if (!lt0.y) {
-    p.dbgColor = vec4(0.0, 1.0, 1.0, 1.0);
+    // line ac
+    dbgColor = vec3(0.0, 1.0, 1.0);
     if (dot(ac, -a) < 0.0)
-      p.projPos = a;
+      projPos = a;
     else if (dot(ac, c) < 0.0)
-      p.projPos = c;
+      projPos = c;
     else
-      p.projPos = planeProj - t.y / dot(perpAC, perpAC) * perpAC;
+      projPos = planeProj - t.y / dot(perpAC, perpAC) * perpAC;
   } else if (!lt0.z) {
-    p.dbgColor = vec4(0.0, 0.0, 1.0, 1.0);
+    // line bc
+    dbgColor = vec3(0.0, 0.0, 1.0);
     if (dot(bc, -b) < 0.0)
-      p.projPos = b;
+      projPos = b;
     else if (dot(bc, c) < 0.0)
-      p.projPos = c;
+      projPos = c;
     else
-      p.projPos = planeProj - t.z / dot(perpBC, perpBC) * perpBC;
+      projPos = planeProj - t.z / dot(perpBC, perpBC) * perpBC;
   }
 
-  p.dist2 = dot(p.projPos, p.projPos);
-
-  return p;
-}
-
-void drawNearest(FaceProjection p) {
-  setLineColor(p.dbgColor);
-  addLine(p.projPos, 0.0.xxx);
+  float dist2 = dot(projPos, projPos);
+  if (dist2 < tetCheck.closestDist2) {
+    tetCheck.projPos = projPos;
+    tetCheck.closestDist2 = dist2;
+    tetCheck.dbgColor = dbgColor;
+  }
 }
 
 void nearestSimplex() {
+  TetChecker checker = createTetChecker();
+
   vec3 a = vertexBuffer[1].position.xyz;
   vec3 b = vertexBuffer[2].position.xyz;
   vec3 c = vertexBuffer[3].position.xyz;
   vec3 d = vertexBuffer[4].position.xyz;
 
-  FaceProjection abc = projectToFace(a, b, c);
-  FaceProjection acd = projectToFace(a, c, d);
-  FaceProjection adb = projectToFace(a, d, b);
+  checkFace(checker, a, b, c, d);
+  checkFace(checker, a, c, d, b);
+  checkFace(checker, a, d, b, c);
 
   // not needed in gjk
-  FaceProjection cdb = projectToFace(c, d, b);
+  checkFace(checker, c, d, b, a);
 
-  if (IS_PRESSED(SPACE)) {
-    drawNearest(abc);
-    drawNearest(acd);
-    drawNearest(adb);
-    drawNearest(cdb);
-  } else if (all(lessThanEqual(abc.dist2.xxx, vec3(acd.dist2, adb.dist2, cdb.dist2)))) {
-    drawNearest(abc);
-  } else if (all(lessThanEqual(acd.dist2.xx, vec2(adb.dist2, cdb.dist2)))) {
-    drawNearest(acd);
-  } else if (adb.dist2 <= cdb.dist2) {
-    drawNearest(adb);
+  setLineColor(checker.dbgColor);
+  addLine(checker.projPos, 0.0.xxx);
+
+  if (checker.bInside) {
+    vertexBuffer[0].color = vec4(0.0, 1.0, 0.0, 1.0);
   } else {
-    drawNearest(cdb);
+    vertexBuffer[0].color = vec4(1.0 , 0.0, 0.0, 1.0);
   }
 
   finishLines();
@@ -239,7 +219,6 @@ void CS_Init() {
 
 void CS_Update() { 
   updateInputs();
-  checkIntersection();
   nearestSimplex();
 }
 
@@ -282,7 +261,6 @@ VertexOutput VS_Triangles() {
 
   VertexOutput OUT;
   OUT.color = v.color;
-  // OUT.color = vec4(0.5 * n + 0.5.xxx, 1.0);
   return OUT;
 }
 

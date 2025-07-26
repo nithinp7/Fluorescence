@@ -33,7 +33,7 @@ void addLine(vec3 a, vec3 b) {
   lineVertexBuffer[g_lineVertexCount++] = Vertex(vec4(b, 1.0), g_currentLineColor);
 }
 
-void setLineColor(vec4 color) { g_currentLineColor = color; }
+void setLineColor(vec3 color) { g_currentLineColor = vec4(color, 1.0); }
 
 void finishLines() {
   IndirectArgs args;
