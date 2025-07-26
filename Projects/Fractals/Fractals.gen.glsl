@@ -7,6 +7,21 @@
 #define IMAGE_PIXEL_COUNT 1843200
 #define MIN_ZOOM 0.500000
 
+struct IndexedIndirectArgs {
+  uint indexCount;
+  uint instanceCount;
+  uint firstIndex;
+  uint vertexOffset;
+  uint firstInstance;
+};
+
+struct IndirectArgs {
+  uint vertexCount;
+  uint instanceCount;
+  uint firstVertex;
+  uint firstInstance;
+};
+
 struct GlobalState {
   vec2 pan;
   float zoom;
@@ -19,8 +34,16 @@ layout(set=1, binding=2) uniform _UserUniforms {
 	float TEST_SLIDER;
 };
 
-#include <Fluorescence.glsl>
+#include <FlrLib/Fluorescence.glsl>
 
+
+
+#ifdef IS_PIXEL_SHADER
+#if defined(_ENTRY_POINT_PS_FractalDisplay) && !defined(_ENTRY_POINT_PS_FractalDisplay_ATTACHMENTS)
+#define _ENTRY_POINT_PS_FractalDisplay_ATTACHMENTS
+layout(location = 0) out vec4 outColor;
+#endif // _ENTRY_POINT_PS_FractalDisplay
+#endif // IS_PIXEL_SHADER
 #include "Fractals.glsl"
 
 #ifdef IS_COMP_SHADER
@@ -39,7 +62,8 @@ void main() { VS_FractalDisplay(); }
 
 
 #ifdef IS_PIXEL_SHADER
-#ifdef _ENTRY_POINT_PS_FractalDisplay
+#if defined(_ENTRY_POINT_PS_FractalDisplay) && !defined(_ENTRY_POINT_PS_FractalDisplay_INTERPOLANTS)
+#define _ENTRY_POINT_PS_FractalDisplay_INTERPOLANTS
 void main() { PS_FractalDisplay(); }
 #endif // _ENTRY_POINT_PS_FractalDisplay
 #endif // IS_PIXEL_SHADER

@@ -4,7 +4,10 @@
 #define SCREEN_HEIGHT 1280
 #define MAX_SCENE_TRIS 128
 #define MAX_SCENE_SPHERES 12
-#define MAX_SCENE_MATERIALS 12
+#define MAX_LIGHT_COUNT 128
+#define LIGHT_TYPE_TRI 0
+#define LIGHT_TYPE_SPHERE 0
+#define MAX_SCENE_MATERIALS 24
 #define MAX_SCENE_VERTS 8192
 #define SPHERE_VERT_COUNT 864
 
@@ -30,8 +33,8 @@ struct GlobalState {
 struct GlobalScene {
   uint triCount;
   uint sphereCount;
+  uint lightCount;
   uint shereVertCount;
-  uint padding;
 };
 
 struct Tri {
@@ -45,6 +48,11 @@ struct Sphere {
   vec3 c;
   float r;
   uint matID;
+};;
+
+struct Light {
+  uint idx;
+  uint type;
 };;
 
 struct Material {
@@ -76,14 +84,15 @@ layout(set=1,binding=3) buffer BUFFER_triBuffer {  Tri triBuffer[]; };
 layout(set=1,binding=4) buffer BUFFER_sphereBuffer {  Sphere sphereBuffer[]; };
 layout(set=1,binding=5) buffer BUFFER_materialBuffer {  Material materialBuffer[]; };
 layout(set=1,binding=6) buffer BUFFER_sceneVertexBuffer {  SceneVertex sceneVertexBuffer[]; };
-layout(set=1,binding=7) buffer BUFFER_trianglesIndirectArgs {  IndirectArgs trianglesIndirectArgs[]; };
-layout(set=1,binding=8) buffer BUFFER_spheresIndirectArgs {  IndirectArgs spheresIndirectArgs[]; };
-layout(set=1,binding=9, rgba32f) uniform image2D accumulationBuffer;
-layout(set=1,binding=10, rgba32f) uniform image2D accumulationBuffer2;
-layout(set=1,binding=11) uniform sampler2D accumulationTexture;
-layout(set=1,binding=12) uniform sampler2D accumulationTexture2;
+layout(set=1,binding=7) buffer BUFFER_lightBuffer {  Light lightBuffer[]; };
+layout(set=1,binding=8) buffer BUFFER_trianglesIndirectArgs {  IndirectArgs trianglesIndirectArgs[]; };
+layout(set=1,binding=9) buffer BUFFER_spheresIndirectArgs {  IndirectArgs spheresIndirectArgs[]; };
+layout(set=1,binding=10, rgba32f) uniform image2D accumulationBuffer;
+layout(set=1,binding=11, rgba32f) uniform image2D accumulationBuffer2;
+layout(set=1,binding=12) uniform sampler2D accumulationTexture;
+layout(set=1,binding=13) uniform sampler2D accumulationTexture2;
 
-layout(set=1, binding=13) uniform _UserUniforms {
+layout(set=1, binding=14) uniform _UserUniforms {
 	vec4 DIFFUSE;
 	vec4 SPECULAR;
 	uint BOUNCES;
@@ -106,7 +115,7 @@ layout(set=1, binding=13) uniform _UserUniforms {
 
 #include <FlrLib/Fluorescence.glsl>
 
-layout(set=1, binding=14) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=15) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 

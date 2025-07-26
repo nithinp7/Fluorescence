@@ -30,5 +30,7 @@ transition_layout: accumulationBuffer image
 compute_dispatch: CS_PathTrace SCREEN_WIDTH SCREEN_HEIGHT 1
 transition_layout: accumulationBuffer texture
 
-display_pass:
+display_image DisplayImage
+render_pass RENDER_PASS:
+  store_attachments: outColor=DisplayImage
   draw: VS_SDF PS_SDF 3 1

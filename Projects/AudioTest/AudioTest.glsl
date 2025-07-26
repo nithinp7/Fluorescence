@@ -38,7 +38,7 @@ void CS_DCT_II() {
   for (uint i = 0; i < SAMPLE_COUNT; i += DISPATCH_SIZE) {
     float freqScale = PI / SAMPLE_COUNT * (i + 0.5);
     // for (uint j = 0; j < )
-    float c = cos(freqScale * )
+    // float c = cos(freqScale * uniforms.time)sdf
   }
 }
 #endif // IS_COMP_SHADER
@@ -78,8 +78,6 @@ void VS_FrequencyPlot() {
 
 #ifdef IS_PIXEL_SHADER
 layout(location = 0) in vec2 inScreenUv;
-
-layout(location = 0) out vec4 outColor;
 
 void PS_Test() {
   outColor = 1.0.xxxx;

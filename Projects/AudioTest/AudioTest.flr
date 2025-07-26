@@ -15,6 +15,8 @@ uint DISPATCH_SIZE: GROUP_SIZE
 
 # compute_dispatch: CS_DCT_II DISPATCH_SIZE 1 1
 
-display_pass:
+display_image DisplayImage
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
   draw: VS_Test PS_Test 3 1
   draw: VS_FrequencyPlot PS_SamplePlot 6 2048

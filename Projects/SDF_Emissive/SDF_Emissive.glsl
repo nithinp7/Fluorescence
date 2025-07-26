@@ -172,8 +172,6 @@ void VS_SDF() {
 #ifdef IS_PIXEL_SHADER
 layout(location = 0) in vec2 inScreenUv;
 
-layout(location = 0) out vec4 outColor;
-
 void PS_SDF() {
   vec3 dir = normalize(computeDir(inScreenUv));
   vec3 pos = camera.inverseView[3].xyz;

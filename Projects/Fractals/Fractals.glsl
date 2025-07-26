@@ -68,8 +68,6 @@ void VS_FractalDisplay() {
 #ifdef IS_PIXEL_SHADER
 layout(location = 0) in vec2 inScreenUv;
 
-layout(location = 0) out vec4 outColor;
-
 void PS_FractalDisplay() {
   GlobalState state = globalStateBuffer[0];
 

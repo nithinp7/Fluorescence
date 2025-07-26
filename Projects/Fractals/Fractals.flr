@@ -27,5 +27,7 @@ compute_shader CS_HandleInput: 1 1 1
 compute_dispatch: CS_HandleInput 1 1 1
 barrier: globalStateBuffer
 
-display_pass:
+display_image DisplayImage 
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
   draw: VS_FractalDisplay PS_FractalDisplay 3 1
