@@ -19,15 +19,19 @@ struct ScreenVertexOutput {
 struct_size: 8
 
 struct VertexOutput {
+  vec4 position;
   vec4 color;
   vec3 normal;
 }
-struct_size: 28
+struct_size: 40
 
-struct CurrentTet {
-  uint indices[12];
+struct Tetrahedron {
+  uint a;
+  uint b;
+  uint c;
+  uint d;
 }
-struct_size: 48
+struct_size: 16
 
 struct GlobalState {
   vec4 dbgColor;
@@ -44,7 +48,7 @@ float POINT_RADIUS: 0.01
 # ---- RESOURCES ----
 structured_buffer globalState: GlobalState 1
 structured_buffer vertexBuffer: Vertex MAX_VERTS
-structured_buffer currentTet: CurrentTet 1
+structured_buffer currentTet: Tetrahedron 1
 structured_buffer trianglesIndirect: IndirectArgs 1
 structured_buffer spheresIndirect(2): IndirectArgs 1
 structured_buffer linesIndirect: IndirectArgs 1
@@ -82,7 +86,6 @@ render_pass DISPLAY_PASS:
     vertex_output: VertexOutput
   draw_indirect: VS_Triangles PS_Triangles trianglesIndirect
     vertex_output: VertexOutput
-    primitive_type: lines
   draw_indirect: VS_Lines PS_Lines linesIndirect
     vertex_output: VertexOutput
     primitive_type: lines

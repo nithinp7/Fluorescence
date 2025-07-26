@@ -37,12 +37,16 @@ struct ScreenVertexOutput {
 };
 
 struct VertexOutput {
+  vec4 position;
   vec4 color;
   vec3 normal;
 };
 
-struct CurrentTet {
-  uint indices[12];
+struct Tetrahedron {
+  uint a;
+  uint b;
+  uint c;
+  uint d;
 };
 
 struct GlobalState {
@@ -51,7 +55,7 @@ struct GlobalState {
 
 layout(set=1,binding=1) buffer BUFFER_globalState {  GlobalState globalState[]; };
 layout(set=1,binding=2) buffer BUFFER_vertexBuffer {  Vertex vertexBuffer[]; };
-layout(set=1,binding=3) buffer BUFFER_currentTet {  CurrentTet currentTet[]; };
+layout(set=1,binding=3) buffer BUFFER_currentTet {  Tetrahedron currentTet[]; };
 layout(set=1,binding=4) buffer BUFFER_trianglesIndirect {  IndirectArgs trianglesIndirect[]; };
 layout(set=1,binding=5) buffer BUFFER_spheresIndirect {  IndirectArgs _INNER_spheresIndirect[]; } _HEAP_spheresIndirect [2];
 #define spheresIndirect(IDX) _HEAP_spheresIndirect[IDX]._INNER_spheresIndirect

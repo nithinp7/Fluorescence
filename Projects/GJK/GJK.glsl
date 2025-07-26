@@ -94,12 +94,13 @@ void checkFace(inout TetChecker tetCheck, vec3 a, vec3 b, vec3 c, vec3 d) {
 }
 
 void checkTet() {
+  Tetrahedron tet = currentTet[0];
   TetChecker checker = createTetChecker();
 
-  vec3 a = vertexBuffer[0].position.xyz;
-  vec3 b = vertexBuffer[1].position.xyz;
-  vec3 c = vertexBuffer[2].position.xyz;
-  vec3 d = vertexBuffer[3].position.xyz;
+  vec3 a = vertexBuffer[tet.a].position.xyz;
+  vec3 b = vertexBuffer[tet.b].position.xyz;
+  vec3 c = vertexBuffer[tet.c].position.xyz;
+  vec3 d = vertexBuffer[tet.d].position.xyz;
 
   checkFace(checker, a, b, c, d);
   checkFace(checker, a, c, d, b);
@@ -138,7 +139,7 @@ void CS_Init() {
       vertexBuffer[vertexCount++] = Vertex(vec4(r * randVec3(seed), 1.0), blue);
     }
 
-    selectTet(0, 1, 2, 3);
+    currentTet[0] = Tetrahedron(0, 1, 2, 3);
   }
 
   // SPHERE VERT BUFFER

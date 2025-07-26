@@ -65,7 +65,6 @@ void finishLines() {
   linesIndirect[0] = args;
 }
 
-
 // INPUT
 #define IS_PRESSED(K) ((uniforms.inputMask & INPUT_BIT_##K) != 0)
 void updateInputs() {
@@ -113,25 +112,21 @@ void updateInputs() {
   }
 }
 
-void selectTet(uint a, uint b, uint c, uint d) {
-  uint i = 0;
-  currentTet[0].indices[i++] = a;
-  currentTet[0].indices[i++] = c;
-  currentTet[0].indices[i++] = b;
-
-  currentTet[0].indices[i++] = a;
-  currentTet[0].indices[i++] = b;
-  currentTet[0].indices[i++] = d;
-  
-  currentTet[0].indices[i++] = b;
-  currentTet[0].indices[i++] = c;
-  currentTet[0].indices[i++] = d;
-  
-  currentTet[0].indices[i++] = a;
-  currentTet[0].indices[i++] = d;
-  currentTet[0].indices[i++] = c;
-}
-
+uint indices[12] = {
+  0, 2, 1,
+  0, 1, 3,
+  1, 2, 3,
+  0, 3, 2
+};
 Vertex getTetVertex(uint i) {
-  return vertexBuffer[currentTet[0].indices[i]];
+  i = indices[i];
+  if (i == 0)
+    i = currentTet[0].a;
+  else if (i == 1)
+    i = currentTet[0].b;
+  else if (i == 2)
+    i = currentTet[0].c;
+  else 
+    i = currentTet[0].d;
+  return vertexBuffer[i];
 }
