@@ -8,20 +8,23 @@ ScreenVertexOutput VS_Background() {
 
 VertexOutput VS_Points() { 
   Vertex v = vertexBuffer[gl_InstanceIndex];
-  vec3 pos = v.position.xyz + POINT_RADIUS * sphereVertexBuffer[gl_VertexIndex].position.xyz;
-  gl_Position = camera.projection * camera.view * vec4(pos, 1.0);
-
+  vec3 localPos = sphereVertexBuffer[gl_VertexIndex].position.xyz;
+  vec3 pos = v.position.xyz + POINT_RADIUS * localPos;
   VertexOutput OUT;
+  OUT.position = vec4(pos, 1.0);
   OUT.color = v.color;
+  OUT.normal = normalize(localPos);
+  gl_Position = camera.projection * camera.view * OUT.position;
   return OUT;
 }
 
 VertexOutput VS_Origin() {
   vec3 pos = POINT_RADIUS * sphereVertexBuffer[gl_VertexIndex].position.xyz;
-  gl_Position = camera.projection * camera.view * vec4(pos, 1.0);
-
   VertexOutput OUT;
+  OUT.position = vec4(pos, 1.0);
   OUT.color = globalState[0].dbgColor;
+  OUT.normal = normalize(pos);
+  gl_Position = camera.projection * camera.view * OUT.position;
   return OUT;
 }
 
@@ -38,10 +41,10 @@ VertexOutput VS_Triangles() {
   if (bool(uniforms.inputMask & INPUT_BIT_SPACE))
     v.position = 0.0.xxxx;
   VertexOutput OUT;
-  OUT.position = camera.projection * camera.view * v.position;
+  OUT.position = v.position;
   OUT.color = vec4(0.0, 0.0, 1.0, 1.0);
   OUT.normal = calcNormal();
-  gl_Position = OUT.position;
+  gl_Position = camera.projection * camera.view * OUT.position;
   return OUT;
 }
 
@@ -49,7 +52,7 @@ VertexOutput VS_TriangleLines() {
   Vertex v = getTetVertex(gl_VertexIndex);
   VertexOutput OUT;
   OUT.position = camera.projection * camera.view * v.position;
-  OUT.color = vec4(0.0, 0.0, 1.0, 1.0);
+  OUT.color = vec4(0.0, 0.0, 100.0, 1.0);
   OUT.normal = calcNormal();
   gl_Position = OUT.position;
   return OUT;
@@ -67,26 +70,36 @@ VertexOutput VS_Lines() {
 #endif // IS_VERTEX_SHADER
 
 #ifdef IS_PIXEL_SHADER
+vec3 simpleShading(VertexOutput IN) {
+  vec3 n = normalize(IN.normal);
+  vec3 pos = IN.position.xyz;// / IN.position.w;
+  vec3 wo = normalize(camera.inverseView[3].xyz - pos);
+  
+  vec3 Li = 1.0.xxx;
+  vec3 Lpos = 1.0.xxx;
+  vec3 wi = normalize(Lpos - pos);
+  vec3 h = normalize(wi+wo);
+
+  float nDotWi = dot(n, wi);
+  float nDotWo = dot(n, wo);
+  float cull = (nDotWi * nDotWo > 0.0) ? 1.0 : 0.0;
+  vec3 diff = cull * IN.color.rgb * abs(nDotWi) / PI;
+  vec3 spec = cull * pow(abs(dot(h, n)), 50.0) * Li;
+  vec3 amb = 0.1.xxx * IN.color.rgb;
+
+  return spec + diff + amb;
+}
+
 void PS_Background(ScreenVertexOutput IN) {
   outColor = vec4(0.1 * sampleEnv(computeDir(IN.uv)), 1.0);
 }
 
 void PS_Points(VertexOutput IN) {
-  outColor = vec4(IN.color.rgb, 1.0);
+  outColor = vec4(simpleShading(IN), 1.0);
 }
 
 void PS_Triangles(VertexOutput IN) {
-  vec3 n = normalize(IN.normal);
-  
-	vec4 target = camera.inverseProjection * IN.position / IN.position.w;//vec4(d, 1.0.xx);
-	vec3 wo = -(camera.inverseView * vec4(normalize(target.xyz), 0)).xyz;
-
-  vec3 wi = normalize(vec3(1.0.xxx));
-  float nDotWi = abs(dot(n, wo));
-  vec3 Li = 1.0.xxx;
-  vec3 color = IN.color.rgb * nDotWi * Li / PI;
-
-  outColor = vec4(color, 1.0);
+  outColor = vec4(simpleShading(IN), 1.0);
 }
 
 void PS_Lines(VertexOutput IN) {

@@ -1,8 +1,8 @@
 #version 460 core
 
-#define SCREEN_WIDTH 1954
-#define SCREEN_HEIGHT 1032
-#define MAX_VERTS 100
+#define SCREEN_WIDTH 1440
+#define SCREEN_HEIGHT 1280
+#define MAX_VERTS 1000
 #define SPHERE_RES 12
 #define SPHERE_VERT_COUNT 864
 #define MAX_LINE_VERT_COUNT 100

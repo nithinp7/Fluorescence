@@ -35,7 +35,7 @@ vec3 sampleEnv(vec3 dir) {
   vec3 n = 0.5 * normalize(dir) + 0.5.xxx;
   uint BACKGROUND = 0;
   if (BACKGROUND == 0) {
-    return 0.1 * round(n * c) / c;
+    return 0.5 * round(n * c) / c;
   } else if (BACKGROUND == 1) {
     return round(fract(n * c));
   } else if (BACKGROUND == 2) {
@@ -139,7 +139,7 @@ Vertex getTetVertex(uint i) {
 }
 
 void selectVertex(uint a) {
-  vertexBuffer[a].color = vec4(1.0, 1.0, 0.0, 1.0);
+  vertexBuffer[a].color = vec4(100.0, 100.0, 0.0, 1.0);
 }
 
 void selectTet(uint a, uint b, uint c, uint d) {

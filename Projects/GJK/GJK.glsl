@@ -4,15 +4,15 @@
 
 #define FLT_MAX 3.402823466e+38
 
-uint support(vec3 dir) {
+uint support(vec3 dir, out float proj) {
   uint vertexCount = spheresIndirect(0)[0].instanceCount;
-  float maxDot = dot(vertexBuffer[0].position.xyz, dir);
+  proj = dot(vertexBuffer[0].position.xyz, dir);
   uint candidateIdx = 0;
   for (uint i = 1; i < vertexCount; i++) {
     float d = dot(vertexBuffer[i].position.xyz, dir);
-    if (d > maxDot) {
+    if (d > proj) {
       candidateIdx = i;
-      maxDot = d;
+      proj = d;
     }
   }
   return candidateIdx;
@@ -120,15 +120,18 @@ void checkTet() {
   addLine(checker.projPos, 0.0.xxx);
 
   if (checker.bInside) {
-    globalState[0].dbgColor = vec4(0.0, 1.0, 0.0, 1.0);
+    globalState[0].dbgColor = vec4(0.0, 100.0, 0.0, 1.0);
   } else {
     sortTet(-checker.projPos);
-    uint supportIdx = support(-checker.projPos);
-    vec3 supportPos = vertexBuffer[supportIdx].position.xyz;
-    setLineColor(vec3(1.0, 1.0, 0.0));
-    addLine(checker.projPos, supportPos);
-    selectVertex(supportIdx);
-    globalState[0].dbgColor = vec4(1.0 , 0.0, 0.0, 1.0);
+    float supportProj;
+    uint supportIdx = support(-checker.projPos, supportProj);
+    if (supportProj >= 0.0) {
+      vec3 supportPos = vertexBuffer[supportIdx].position.xyz;
+      setLineColor(vec3(1.0, 1.0, 0.0));
+      addLine(checker.projPos, supportPos);
+      selectVertex(supportIdx);
+    }
+    globalState[0].dbgColor = vec4(100.0 , 0.0, 0.0, 1.0);
   }
 
   selectTet(tet.a, tet.b, tet.c, tet.d);
@@ -145,9 +148,9 @@ void CS_Init() {
     vec4 blue = vec4(0.0, 0.0, 1.0, 1.0);
 
     uvec2 seed = uvec2(INIT_SEED, INIT_SEED+4);
-    for (int i=0; i<15; i++) {
+    for (int i=0; i<100; i++) {
       float r = 2.5;
-      vertexBuffer[vertexCount++] = Vertex(vec4(r * randVec3(seed), 1.0), blue);
+      vertexBuffer[vertexCount++] = Vertex(vec4(r * (randVec3(seed) - 0.5.xxx), 1.0), blue);
     }
 
     selectTet(0, 1, 2, 3);
@@ -210,8 +213,9 @@ void CS_GjkStep() {
   checkFace(checker, c, d, b, a);
 
   if (!checker.bInside) {
-    uint supportIdx = support(-checker.projPos);
-    if (!any(equal(supportIdx.xxxx, uvec4(tet.a, tet.b, tet.c, tet.d))))
+    float supportProj;
+    uint supportIdx = support(-checker.projPos, supportProj);
+    if (supportProj >= 0.0 && !any(equal(supportIdx.xxxx, uvec4(tet.a, tet.b, tet.c, tet.d))))
       selectTet(supportIdx, tet.a, tet.b, tet.c);
   }
 }

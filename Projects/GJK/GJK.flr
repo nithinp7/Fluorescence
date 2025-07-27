@@ -39,7 +39,7 @@ struct GlobalState {
 struct_size: 16
 
 # ---- CONSTANTS ----
-uint MAX_VERTS 100
+uint MAX_VERTS 1000
 uint SPHERE_RES: 12
 uint SPHERE_VERT_COUNT: SPHERE_RES*SPHERE_RES*2*3
 uint MAX_LINE_VERT_COUNT: 100
