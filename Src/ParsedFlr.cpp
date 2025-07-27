@@ -67,15 +67,18 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
   m_constUints.push_back({"SCREEN_HEIGHT", app.getSwapChainExtent().height});
 
   struct File {
-    File(const char* filename) : m_filename(filename), m_stream(filename), m_lineNumber(0) {}
-    File(const std::string& filename) : m_filename(filename), m_stream(filename), m_lineNumber(0) {}
+    File(const char* filename)
+        : m_filename(filename), m_stream(filename), m_lineNumber(0) {}
+    File(const std::string& filename)
+        : m_filename(filename), m_stream(filename), m_lineNumber(0) {}
     std::string m_filename;
     std::ifstream m_stream;
     uint32_t m_lineNumber;
   };
   std::vector<File> flrFileStack;
   flrFileStack.emplace_back(flrFileName);
-  flrFileStack.emplace_back(GProjectDirectory + "/Shaders/FlrLib/Fluorescence.flrh");
+  flrFileStack.emplace_back(
+      GProjectDirectory + "/Shaders/FlrLib/Fluorescence.flrh");
 
   char lineBuf[1024];
 
@@ -85,22 +88,22 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
 
   auto emitParserError = [&](const char* msg) {
     sprintf(
-      m_errMsg,
-      "ERROR: %s ON LINE: %u IN FILE: %s\n",
-      msg,
-      flrFileStack.back().m_lineNumber,
-      flrFileStack.back().m_filename.c_str());
-    std::cerr << m_errMsg << std::endl;       
+        m_errMsg,
+        "ERROR: %s ON LINE: %u IN FILE: %s\n",
+        msg,
+        flrFileStack.back().m_lineNumber,
+        flrFileStack.back().m_filename.c_str());
+    std::cerr << m_errMsg << std::endl;
     while (!flrFileStack.empty()) {
       flrFileStack.back().m_stream.close();
       flrFileStack.pop_back();
     }
   };
 
-#define PARSER_VERIFY(X, MSG)   \
-  if (!(X)) {                   \
-    emitParserError(MSG);       \
-    return;                     \
+#define PARSER_VERIFY(X, MSG)                                                  \
+  if (!(X)) {                                                                  \
+    emitParserError(MSG);                                                      \
+    return;                                                                    \
   }
 
   while (!flrFileStack.empty()) {
@@ -175,13 +178,10 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
     };
 
     auto findVkAccessFlags =
-      [&](std::string_view brsName) -> std::optional<VkAccessFlags> {
+        [&](std::string_view brsName) -> std::optional<VkAccessFlags> {
       for (const auto& entry : BUFFER_RESOURCE_STATE_TABLE) {
         if (brsName.size() == strlen(entry.name) &&
-          !strncmp(
-            brsName.data(),
-            entry.name,
-            brsName.size()))
+            !strncmp(brsName.data(), entry.name, brsName.size()))
           return entry.accessFlags;
       }
       return std::nullopt;
@@ -209,9 +209,9 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
 
     auto pushTask = [&](uint32_t idx, TaskType type) {
       if (bTaskBlockActive)
-        m_taskBlocks.back().tasks.push_back(Task{ idx, type });
+        m_taskBlocks.back().tasks.push_back(Task{idx, type});
       else
-        m_taskList.push_back(Task{ idx, type });
+        m_taskList.push_back(Task{idx, type});
     };
 
     p.parseWhitespace();
@@ -232,10 +232,15 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
     if (p.parseChar('(')) {
       p.parseWhitespace();
       arrayCount = parseUintOrVar();
-      PARSER_VERIFY(arrayCount, "Encountered malformed array syntax, could not read array elem count");
+      PARSER_VERIFY(
+          arrayCount,
+          "Encountered malformed array syntax, could not read array elem "
+          "count");
       p.parseWhitespace();
       auto closingBracket = p.parseChar(')');
-      PARSER_VERIFY(closingBracket, "Encountered malformed array syntax, expecting closing parenthesis");
+      PARSER_VERIFY(
+          closingBracket,
+          "Encountered malformed array syntax, expecting closing parenthesis");
       p.parseWhitespace();
     }
     p.parseChar(':');
@@ -286,7 +291,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       auto max = p.parseUint();
       PARSER_VERIFY(value, "Could not parse max value for uint slider.");
 
-      m_uiElements.push_back({ UET_SLIDER_UINT, (uint32_t)m_sliderUints.size() });
+      m_uiElements.push_back({UET_SLIDER_UINT, (uint32_t)m_sliderUints.size()});
       m_sliderUints.push_back(
           {std::string(*name), *value, *min, *max, uiIdx++, nullptr});
       break;
@@ -305,7 +310,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       auto max = p.parseInt();
       PARSER_VERIFY(value, "Could not parse max value for int slider.");
 
-      m_uiElements.push_back({ UET_SLIDER_INT, (uint32_t)m_sliderInts.size() });
+      m_uiElements.push_back({UET_SLIDER_INT, (uint32_t)m_sliderInts.size()});
       m_sliderInts.push_back(
           {std::string(*name), *value, *min, *max, uiIdx++, nullptr});
       break;
@@ -324,7 +329,8 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       auto max = p.parseFloat();
       PARSER_VERIFY(max, "Could not parse max value for float slider.");
 
-      m_uiElements.push_back({ UET_SLIDER_FLOAT, (uint32_t)m_sliderFloats.size() });
+      m_uiElements.push_back(
+          {UET_SLIDER_FLOAT, (uint32_t)m_sliderFloats.size()});
       m_sliderFloats.push_back(
           {std::string(*name), *value, *min, *max, uiIdx++, nullptr});
       break;
@@ -355,7 +361,8 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
           a,
           "Could not parse default color component A for color_picker.");
 
-      m_uiElements.push_back({ UET_COLOR_PICKER, (uint32_t)m_colorPickers.size() });
+      m_uiElements.push_back(
+          {UET_COLOR_PICKER, (uint32_t)m_colorPickers.size()});
       m_colorPickers.push_back(
           {std::string(*name), glm::vec4(*r, *g, *b, *a), uiIdx++, nullptr});
 
@@ -367,7 +374,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       auto value = p.parseBool();
       PARSER_VERIFY(value, "Could not parse default value for checkbox.");
 
-      m_uiElements.push_back({ UET_CHECKBOX, (uint32_t)m_checkboxes.size() });
+      m_uiElements.push_back({UET_CHECKBOX, (uint32_t)m_checkboxes.size()});
       m_checkboxes.push_back({std::string(*name), *value, uiIdx++, nullptr});
 
       break;
@@ -391,7 +398,8 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       m_images[*imageIdx].createOptions.usage |=
           VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
-      m_uiElements.push_back({ UET_SAVE_IMAGE_BUTTON, (uint32_t)m_saveImageButtons.size() });
+      m_uiElements.push_back(
+          {UET_SAVE_IMAGE_BUTTON, (uint32_t)m_saveImageButtons.size()});
       m_saveImageButtons.push_back({*imageIdx, uiIdx++});
 
       break;
@@ -399,48 +407,49 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
     case I_SAVE_BUFFER_BUTTON: {
       auto bufferName = p.parseName();
       PARSER_VERIFY(
-        bufferName,
-        "Could not parse buffer name in save_buffer_button instruction.");
+          bufferName,
+          "Could not parse buffer name in save_buffer_button instruction.");
       auto bufferIdx = findIndexByName(m_buffers, *bufferName);
       PARSER_VERIFY(
-        bufferIdx,
-        "Could not find specified buffer in save_buffer_button "
-        "instruction.");
+          bufferIdx,
+          "Could not find specified buffer in save_buffer_button "
+          "instruction.");
 
       m_buffers[*bufferIdx].bTransferSrc = true;
 
-      m_uiElements.push_back({ UET_SAVE_BUFFER_BUTTON, (uint32_t)m_saveBufferButtons.size() });
-      m_saveBufferButtons.push_back({ *bufferIdx, uiIdx++ });
+      m_uiElements.push_back(
+          {UET_SAVE_BUFFER_BUTTON, (uint32_t)m_saveBufferButtons.size()});
+      m_saveBufferButtons.push_back({*bufferIdx, uiIdx++});
 
       break;
     }
-    case I_TASK_BUTTON:
-    {
+    case I_TASK_BUTTON: {
       auto taskName = p.parseName();
       PARSER_VERIFY(
-        taskName,
-        "Could not parse task name in task_button instruction.");
+          taskName,
+          "Could not parse task name in task_button instruction.");
       auto taskIdx = findIndexByName(m_taskBlocks, *taskName);
       PARSER_VERIFY(
-        taskIdx,
-        "Could not find specified task in task_button instruction.");
+          taskIdx,
+          "Could not find specified task in task_button instruction.");
 
-      m_uiElements.push_back({ UET_TASK_BUTTON, (uint32_t)m_taskButtons.size() });
-      m_taskButtons.push_back({ *taskIdx, uiIdx++ });
+      m_uiElements.push_back({UET_TASK_BUTTON, (uint32_t)m_taskButtons.size()});
+      m_taskButtons.push_back({*taskIdx, uiIdx++});
       break;
     }
     case I_SEPARATOR: {
-      m_uiElements.push_back({ UET_SEPARATOR, ~0ul });
+      m_uiElements.push_back({UET_SEPARATOR, ~0ul});
       break;
     }
     case I_DROPDOWN_START: {
       PARSER_VERIFY(name, "Could not parse ui dropdown name.");
-      m_uiElements.push_back({ UET_DROPDOWN_START, (uint32_t)m_genericNamedElements.size() });
-      m_genericNamedElements.push_back({ std::string(*name) });
+      m_uiElements.push_back(
+          {UET_DROPDOWN_START, (uint32_t)m_genericNamedElements.size()});
+      m_genericNamedElements.push_back({std::string(*name)});
       break;
     }
     case I_DROPDOWN_END: {
-      m_uiElements.push_back({ UET_DROPDOWN_END, ~0ul });
+      m_uiElements.push_back({UET_DROPDOWN_END, ~0ul});
       break;
     }
     case I_STRUCT: {
@@ -471,7 +480,8 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
         offs++;
 
         if (!flrFileStack.back().m_stream.getline(lineBuf, 1024)) {
-          flrFileStack.back().m_lineNumber = structStartLine; // reset line to start of struct
+          flrFileStack.back().m_lineNumber =
+              structStartLine; // reset line to start of struct
           PARSER_VERIFY(
               false,
               "Found unterminated struct declaration, expected \'}\'.");
@@ -503,7 +513,8 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
           "Could not find struct referenced in structured-buffer declaration.");
 
       const auto& s = m_structDefs[*structIdx];
-      bool bIndirectArgs = s.name == "IndirectArgs" || s.name == "IndexedIndirectArgs";
+      bool bIndirectArgs =
+          s.name == "IndirectArgs" || s.name == "IndexedIndirectArgs";
 
       p.parseWhitespace();
       auto elemCount = parseUintOrVar();
@@ -511,13 +522,23 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
           elemCount,
           "Could not parse element count in structured-buffer declaration.");
 
-      m_buffers.push_back({std::string(*name), *structIdx, *elemCount, arrayCount ? *arrayCount : 1, false, false, bIndirectArgs });
+      m_buffers.push_back(
+          {std::string(*name),
+           *structIdx,
+           *elemCount,
+           arrayCount ? *arrayCount : 1,
+           false,
+           false,
+           bIndirectArgs});
       arrayCount = std::nullopt;
 
       break;
     }
     case I_ENABLE_CPU_ACCESS: {
-      PARSER_VERIFY(m_buffers.size(), "Instruction enable_cpu_access must be preceded by structured buffer declaration.");
+      PARSER_VERIFY(
+          m_buffers.size(),
+          "Instruction enable_cpu_access must be preceded by structured buffer "
+          "declaration.");
       m_buffers.back().bCpuVisible = true;
       break;
     }
@@ -588,11 +609,16 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       break;
     }
     case I_BARRIER: {
-      VkAccessFlags accessFlags = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+      VkAccessFlags accessFlags =
+          VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
       if (name) {
-        // TODO: this syntax is a bit awkward, since the name token ends up being treated like an argument...
+        // TODO: this syntax is a bit awkward, since the name token ends up
+        // being treated like an argument...
         auto accessFlags_ = findVkAccessFlags(*name);
-        PARSER_VERIFY(accessFlags_, "Could not parse buffer resource state specified in barrier declaration.");
+        PARSER_VERIFY(
+            accessFlags_,
+            "Could not parse buffer resource state specified in barrier "
+            "declaration.");
         accessFlags = *accessFlags_;
       }
 
@@ -674,6 +700,17 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
           m_renderPasses.back().draws.size() > 0,
           "Expected draw-call to precede disable-depth");
       m_renderPasses.back().draws.back().bDisableDepth = true;
+      break;
+    }
+    case I_DISABLE_BACKFACE_CULLING: {
+      PARSER_VERIFY(
+        m_renderPasses.size() > 0,
+        "Expected render-pass or display-pass declaration to precede "
+        "disable_backface_culling.");
+      PARSER_VERIFY(
+        m_renderPasses.back().draws.size() > 0,
+        "Expected draw-call to precede disable_backface_culling");
+      m_renderPasses.back().draws.back().bDisableBackfaceCull = true;
       break;
     }
     case I_LOAD_ATTACHMENTS: {
@@ -879,53 +916,65 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
            DM_DRAW,
            AltheaEngine::PrimitiveType::TRIANGLES,
            0.0f,
+           false,
            false});
       break;
     }
     case I_DRAW_INDIRECT: {
       // TODO: have re-usable subpasses that can be drawn multiple times?
       PARSER_VERIFY(
-        m_renderPasses.size(),
-        "Expected render-pass or display-pass declaration to precede "
-        "draw-call.");
+          m_renderPasses.size(),
+          "Expected render-pass or display-pass declaration to precede "
+          "draw-call.");
 
       auto vertShader = p.parseName();
       PARSER_VERIFY(
-        vertShader,
-        "Could not parse vertex shader name in draw-call declaration.");
+          vertShader,
+          "Could not parse vertex shader name in draw-call declaration.");
       p.parseWhitespace();
       auto pixelShader = p.parseName();
       PARSER_VERIFY(
-        pixelShader,
-        "Could not parse pixel shader name in draw-call declaration.");
+          pixelShader,
+          "Could not parse pixel shader name in draw-call declaration.");
       p.parseWhitespace();
-      
+
       auto bufName = p.parseName();
-      PARSER_VERIFY(bufName, "Could not parse buffer name in draw_indirect instruction");
+      PARSER_VERIFY(
+          bufName,
+          "Could not parse buffer name in draw_indirect instruction");
       auto bufIdx = findIndexByName(m_buffers, *bufName);
-      PARSER_VERIFY(bufIdx, "Could not find specified buffer in draw_indirect instruction.");
+      PARSER_VERIFY(
+          bufIdx,
+          "Could not find specified buffer in draw_indirect instruction.");
       const auto& s = m_structDefs[m_buffers[*bufIdx].structIdx];
-      PARSER_VERIFY(s.name == "IndirectArgs", "Unexpected struct type for structured buffer passed to draw_indirect instruction - expecting IndirectArgs or IndexedIndirectArgs");
+      PARSER_VERIFY(
+          s.name == "IndirectArgs",
+          "Unexpected struct type for structured buffer passed to "
+          "draw_indirect instruction - expecting IndirectArgs or "
+          "IndexedIndirectArgs");
 
       uint32_t subBufferIdx = 0;
       p.parseWhitespace();
       if (auto subBufferIdx_ = p.parseUint())
         subBufferIdx = *subBufferIdx_;
 
-      PARSER_VERIFY(subBufferIdx < m_buffers[*bufIdx].bufferCount, "Out-of-range subBufferIdx provided to draw_indirect instruction.");
-      
+      PARSER_VERIFY(
+          subBufferIdx < m_buffers[*bufIdx].bufferCount,
+          "Out-of-range subBufferIdx provided to draw_indirect instruction.");
+
       uint32_t renderPassIdx = m_renderPasses.size() - 1;
       m_renderPasses.back().draws.push_back(
-        { std::string(*vertShader),
-         std::string(*pixelShader),
-         *bufIdx,
-         m_buffers[*bufIdx].elemCount,
-         subBufferIdx,
-         -1,
-         DM_DRAW_INDIRECT, 
-         AltheaEngine::PrimitiveType::TRIANGLES,
-         0.0f,
-         false });
+          {std::string(*vertShader),
+           std::string(*pixelShader),
+           *bufIdx,
+           m_buffers[*bufIdx].elemCount,
+           subBufferIdx,
+           -1,
+           DM_DRAW_INDIRECT,
+           AltheaEngine::PrimitiveType::TRIANGLES,
+           0.0f,
+           false,
+           false});
       break;
     }
     case I_DRAW_OBJ: {
@@ -969,6 +1018,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
            DM_DRAW_OBJ,
            AltheaEngine::PrimitiveType::TRIANGLES,
            0.0f,
+           false,
            false});
       break;
     }
@@ -977,22 +1027,28 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       PARSER_VERIFY(primType, "Could not parse primitive type for draw call");
       p.parseWhitespace();
 
-      PARSER_VERIFY(m_renderPasses.size(), "primitive_type must be preceded by a render-pass.");
-      PARSER_VERIFY(m_renderPasses.back().draws.size(), "primitive_type must be preceded by a draw call.");
-      
+      PARSER_VERIFY(
+          m_renderPasses.size(),
+          "primitive_type must be preceded by a render-pass.");
+      PARSER_VERIFY(
+          m_renderPasses.back().draws.size(),
+          "primitive_type must be preceded by a draw call.");
+
       if (!primType->compare("triangles")) {
-        m_renderPasses.back().draws.back().primType = AltheaEngine::PrimitiveType::TRIANGLES;
-      }
-      else if (!primType->compare("lines")) {
-        m_renderPasses.back().draws.back().primType = AltheaEngine::PrimitiveType::LINES;
+        m_renderPasses.back().draws.back().primType =
+            AltheaEngine::PrimitiveType::TRIANGLES;
+      } else if (!primType->compare("lines")) {
+        m_renderPasses.back().draws.back().primType =
+            AltheaEngine::PrimitiveType::LINES;
 
         // optional extra arg for line width
         if (auto lineWidth = parseFloatOrVar()) {
           m_renderPasses.back().draws.back().lineWidth = *lineWidth;
         }
-      }
-      else {
-        PARSER_VERIFY(false, "Unexpected primitive type - expecting triangles or lines.");
+      } else {
+        PARSER_VERIFY(
+            false,
+            "Unexpected primitive type - expecting triangles or lines.");
       }
 
       break;
@@ -1112,13 +1168,12 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       if (auto option = p.parseName()) {
         if (!option->compare("srgb")) {
           bSrgb = true;
-        }
-        else if (!option->compare("hdr")) {
+        } else if (!option->compare("hdr")) {
           bHdr = true;
-        }
-        else {
-          PARSER_VERIFY(false,
-            "Unknown option provided with texture_file instruction.");
+        } else {
+          PARSER_VERIFY(
+              false,
+              "Unknown option provided with texture_file instruction.");
         }
       }
 
@@ -1131,8 +1186,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       auto& texFile = m_textureFiles.emplace_back();
       if (bHdr) {
         Utilities::loadHdri(pathStr, texFile.loadedImage);
-      }
-      else {
+      } else {
         Utilities::loadImage(pathStr, texFile.loadedImage);
       }
       PARSER_VERIFY(
@@ -1145,8 +1199,7 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       if (bSrgb) {
         texFile.createOptions.format = VK_FORMAT_R8G8B8A8_SRGB;
         assert(texFile.loadedImage.bytesPerChannel == 1);
-      }
-      else if (bHdr) {
+      } else if (bHdr) {
         texFile.createOptions.format = VK_FORMAT_R32G32B32A32_SFLOAT;
         assert(texFile.loadedImage.bytesPerChannel == 4);
       }
@@ -1199,30 +1252,43 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
     };
     case I_TASK_BLOCK_START: {
       PARSER_VERIFY(name, "Could not parse task-block name.");
-      PARSER_VERIFY(!bTaskBlockActive, "Attempting to start a new task-block without ending previous task-block.");
+      PARSER_VERIFY(
+          !bTaskBlockActive,
+          "Attempting to start a new task-block without ending previous "
+          "task-block.");
       bTaskBlockActive = true;
-      m_taskBlocks.push_back({ std::string(*name), {} });
+      m_taskBlocks.push_back({std::string(*name), {}});
 
       break;
     };
     case I_TASK_BLOCK_END: {
-      PARSER_VERIFY(bTaskBlockActive, "Encountered task_block_end without corresponding task_block_start.");
+      PARSER_VERIFY(
+          bTaskBlockActive,
+          "Encountered task_block_end without corresponding task_block_start.");
       bTaskBlockActive = false;
       break;
     };
     case I_RUN_TASK: {
       auto taskName = p.parseName();
-      PARSER_VERIFY(taskName, "Could not parse task name specified in run_task instruction.");
+      PARSER_VERIFY(
+          taskName,
+          "Could not parse task name specified in run_task instruction.");
       auto taskIdx = findIndexByName(m_taskBlocks, *taskName);
       PARSER_VERIFY(taskIdx, "Could not find task block with specified name.");
-      if (bTaskBlockActive) 
-        PARSER_VERIFY(taskIdx < (m_taskBlocks.size() - 1), "A task block cannot be invoked within itself, invalid usage of run_task");
+      if (bTaskBlockActive)
+        PARSER_VERIFY(
+            taskIdx < (m_taskBlocks.size() - 1),
+            "A task block cannot be invoked within itself, invalid usage of "
+            "run_task");
       pushTask(*taskIdx, TT_TASK);
       break;
     };
     case I_INITIALIZATION_TASK: {
       auto taskName = p.parseName();
-      PARSER_VERIFY(taskName, "Could not parse task name specified in initialization_task instruction.");
+      PARSER_VERIFY(
+          taskName,
+          "Could not parse task name specified in initialization_task "
+          "instruction.");
       auto taskIdx = findIndexByName(m_taskBlocks, *taskName);
       PARSER_VERIFY(taskIdx, "Could not find task block with specified name.");
       m_initializationTaskIdx = *taskIdx;
@@ -1237,13 +1303,14 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
         // try local relative path
         std::filesystem::path fpath(flrFileStack.back().m_filename);
         fpath.replace_filename(*pathLiteral);
-        path = fpath.u8string(); 
+        path = fpath.u8string();
       }
 
       if (!Utilities::checkFileExists(path)) {
         // try in flr shaders folder
-        std::filesystem::path fpath = std::filesystem::path(GProjectDirectory + "/Shaders/")
-          .replace_filename(*pathLiteral);
+        std::filesystem::path fpath =
+            std::filesystem::path(GProjectDirectory + "/Shaders/")
+                .replace_filename(*pathLiteral);
         path = fpath.u8string();
       }
 
@@ -1260,7 +1327,8 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
       continue;
     }
 
-    // the instruction needs to consume the arrayCount and set it to nullopt, if it is valid
+    // the instruction needs to consume the arrayCount and set it to nullopt, if
+    // it is valid
     PARSER_VERIFY(!arrayCount, "Array syntax not valid for this instruction.");
   }
 

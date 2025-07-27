@@ -602,6 +602,9 @@ Project::Project(
       else
         builder.setDepthTesting(false);
 
+      if (draw.bDisableBackfaceCull)
+        subpass.pipelineBuilder.setCullMode(VK_CULL_MODE_NONE);
+
       if (draw.drawMode == ParsedFlr::DM_DRAW_OBJ) {
         assert(draw.param0 >= 0);
         builder.addVertexInputBinding<SimpleObjLoader::ObjVert>();

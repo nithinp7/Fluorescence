@@ -235,6 +235,7 @@ struct ParsedFlr {
     AltheaEngine::PrimitiveType primType;
     float lineWidth; 
     bool bDisableDepth;
+    bool bDisableBackfaceCull;
   };
 
   struct AttachmentRef {
@@ -319,6 +320,7 @@ struct ParsedFlr {
     I_DISPLAY_IMAGE,
     I_RENDER_PASS,
     I_DISABLE_DEPTH,
+    I_DISABLE_BACKFACE_CULLING,
     I_LOAD_ATTACHMENTS,
     I_STORE_ATTACHMENTS,
     I_LOADSTORE_ATTACHMENTS,
@@ -370,6 +372,7 @@ struct ParsedFlr {
       "display_image",
       "render_pass",
       "disable_depth",
+      "disable_backface_culling",
       "load_attachments",
       "store_attachments",
       "loadstore_attachments",
