@@ -4,6 +4,20 @@
 
 #define FLT_MAX 3.402823466e+38
 
+uint support(vec3 dir) {
+  uint vertexCount = spheresIndirect(0)[0].instanceCount;
+  float maxDot = dot(vertexBuffer[0].position.xyz, dir);
+  uint candidateIdx = 0;
+  for (uint i = 1; i < vertexCount; i++) {
+    float d = dot(vertexBuffer[i].position.xyz, dir);
+    if (d > maxDot) {
+      candidateIdx = i;
+      maxDot = d;
+    }
+  }
+  return candidateIdx;
+}
+
 struct TetChecker {
   vec3 projPos;
   float closestDist2;
@@ -19,7 +33,6 @@ TetChecker createTetChecker() {
 // - Updates the tetChecker, if this is closer than previously checked faces
 // - Checks whether the origin is behind the face normal, updates inside / outside determination
 void checkFace(inout TetChecker tetCheck, vec3 a, vec3 b, vec3 c, vec3 d) {
-  vec3 dbgColor;
   vec3 projPos;
 
   vec3 ab = b-a;
@@ -42,23 +55,18 @@ void checkFace(inout TetChecker tetCheck, vec3 a, vec3 b, vec3 c, vec3 d) {
   vec3 planeProj = dot(n, a) / dot(n, n) * n;
   if (all(lt0)) {
     // inside triangle
-    dbgColor = vec3(0.0, 1.0, 0.0);
     projPos = planeProj;
   } else if (!any(lt0.xy)) {
     // corner a
-    dbgColor = vec3(1.0, 0.0, 0.0);
     projPos = a;
   } else if (!any(lt0.xz)) {
     // corner b
-    dbgColor = vec3(1.0, 0.0, 0.0);
     projPos = b;
   } else if (!any(lt0.yz)) {
     // corner c
-    dbgColor = vec3(1.0, 0.0, 0.0);
     projPos = c;
   } else if (!lt0.x) {
     // line ab
-    dbgColor = vec3(1.0, 0.0, 1.0);
     if (dot(ab, -a) < 0.0)
       projPos = a;
     else if (dot(ab, b) < 0.0)
@@ -67,7 +75,6 @@ void checkFace(inout TetChecker tetCheck, vec3 a, vec3 b, vec3 c, vec3 d) {
       projPos = planeProj - t.x / dot(perpAB, perpAB) * perpAB;
   } else if (!lt0.y) {
     // line ac
-    dbgColor = vec3(0.0, 1.0, 1.0);
     if (dot(ac, -a) < 0.0)
       projPos = a;
     else if (dot(ac, c) < 0.0)
@@ -76,7 +83,6 @@ void checkFace(inout TetChecker tetCheck, vec3 a, vec3 b, vec3 c, vec3 d) {
       projPos = planeProj - t.y / dot(perpAC, perpAC) * perpAC;
   } else if (!lt0.z) {
     // line bc
-    dbgColor = vec3(0.0, 0.0, 1.0);
     if (dot(bc, -b) < 0.0)
       projPos = b;
     else if (dot(bc, c) < 0.0)
@@ -89,7 +95,7 @@ void checkFace(inout TetChecker tetCheck, vec3 a, vec3 b, vec3 c, vec3 d) {
   if (dist2 < tetCheck.closestDist2) {
     tetCheck.projPos = projPos;
     tetCheck.closestDist2 = dist2;
-    tetCheck.dbgColor = dbgColor;
+    tetCheck.dbgColor = vec3(0.0, 1.0, 0.0);
   }
 }
 
@@ -107,6 +113,7 @@ void checkTet() {
   checkFace(checker, a, d, b, c);
 
   // not needed in gjk
+  // TODO still need to do a half plane check here... to determine whether inside / outside
   checkFace(checker, c, d, b, a);
 
   setLineColor(checker.dbgColor);
@@ -115,8 +122,16 @@ void checkTet() {
   if (checker.bInside) {
     globalState[0].dbgColor = vec4(0.0, 1.0, 0.0, 1.0);
   } else {
+    sortTet(-checker.projPos);
+    uint supportIdx = support(-checker.projPos);
+    vec3 supportPos = vertexBuffer[supportIdx].position.xyz;
+    setLineColor(vec3(1.0, 1.0, 0.0));
+    addLine(checker.projPos, supportPos);
+    selectVertex(supportIdx);
     globalState[0].dbgColor = vec4(1.0 , 0.0, 0.0, 1.0);
   }
+
+  selectTet(tet.a, tet.b, tet.c, tet.d);
 
   finishLines();
 }
@@ -128,18 +143,14 @@ void CS_Init() {
   {
     uint vertexOffset = vertexCount;
     vec4 blue = vec4(0.0, 0.0, 1.0, 1.0);
-    vertexBuffer[vertexCount++] = Vertex(vec4(0.0, 0.0, 1.0, 1.0), blue);
-    vertexBuffer[vertexCount++] = Vertex(vec4(0.0, 1.0, 0.0, 1.0), blue);
-    vertexBuffer[vertexCount++] = Vertex(vec4(0.0, 1.0, 1.0, 1.0), blue);
-    vertexBuffer[vertexCount++] = Vertex(vec4(1.0, 1.0, 1.0, 1.0), blue);
 
-    uvec2 seed = uvec2(23, 27);
-    for (int i=0; i<10; i++) {
-      float r = 2.0;
+    uvec2 seed = uvec2(INIT_SEED, INIT_SEED+4);
+    for (int i=0; i<15; i++) {
+      float r = 2.5;
       vertexBuffer[vertexCount++] = Vertex(vec4(r * randVec3(seed), 1.0), blue);
     }
 
-    currentTet[0] = Tetrahedron(0, 1, 2, 3);
+    selectTet(0, 1, 2, 3);
   }
 
   // SPHERE VERT BUFFER
@@ -178,7 +189,31 @@ void CS_Init() {
 
 void CS_Update() { 
   updateInputs();
+  resetColors();
   checkTet();
+}
+
+void CS_GjkStep() {
+  Tetrahedron tet = currentTet[0];
+  TetChecker checker = createTetChecker();
+
+  vec3 a = vertexBuffer[tet.a].position.xyz;
+  vec3 b = vertexBuffer[tet.b].position.xyz;
+  vec3 c = vertexBuffer[tet.c].position.xyz;
+  vec3 d = vertexBuffer[tet.d].position.xyz;
+
+  checkFace(checker, a, b, c, d);
+  checkFace(checker, a, c, d, b);
+  checkFace(checker, a, d, b, c);
+
+  // // not needed in gjk
+  checkFace(checker, c, d, b, a);
+
+  if (!checker.bInside) {
+    uint supportIdx = support(-checker.projPos);
+    if (!any(equal(supportIdx.xxxx, uvec4(tet.a, tet.b, tet.c, tet.d))))
+      selectTet(supportIdx, tet.a, tet.b, tet.c);
+  }
 }
 
 #endif // IS_COMP_SHADER

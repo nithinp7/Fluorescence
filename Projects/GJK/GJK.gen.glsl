@@ -1,7 +1,7 @@
 #version 460 core
 
-#define SCREEN_WIDTH 1440
-#define SCREEN_HEIGHT 1280
+#define SCREEN_WIDTH 1954
+#define SCREEN_HEIGHT 1032
 #define MAX_VERTS 100
 #define SPHERE_RES 12
 #define SPHERE_VERT_COUNT 864
@@ -62,9 +62,14 @@ layout(set=1,binding=5) buffer BUFFER_spheresIndirect {  IndirectArgs _INNER_sph
 layout(set=1,binding=6) buffer BUFFER_linesIndirect {  IndirectArgs linesIndirect[]; };
 layout(set=1,binding=7) buffer BUFFER_sphereVertexBuffer {  SimpleVertex sphereVertexBuffer[]; };
 layout(set=1,binding=8) buffer BUFFER_lineVertexBuffer {  Vertex lineVertexBuffer[]; };
+
+layout(set=1, binding=9) uniform _UserUniforms {
+	uint INIT_SEED;
+};
+
 #include <FlrLib/Fluorescence.glsl>
 
-layout(set=1, binding=9) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=10) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 
@@ -85,6 +90,10 @@ layout(location = 0) out vec4 outColor;
 #define _ENTRY_POINT_PS_Triangles_ATTACHMENTS
 layout(location = 0) out vec4 outColor;
 #endif // _ENTRY_POINT_PS_Triangles
+#if defined(_ENTRY_POINT_PS_Triangles) && !defined(_ENTRY_POINT_PS_Triangles_ATTACHMENTS)
+#define _ENTRY_POINT_PS_Triangles_ATTACHMENTS
+layout(location = 0) out vec4 outColor;
+#endif // _ENTRY_POINT_PS_Triangles
 #if defined(_ENTRY_POINT_PS_Lines) && !defined(_ENTRY_POINT_PS_Lines_ATTACHMENTS)
 #define _ENTRY_POINT_PS_Lines_ATTACHMENTS
 layout(location = 0) out vec4 outColor;
@@ -101,6 +110,10 @@ void main() { CS_Init(); }
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() { CS_Update(); }
 #endif // _ENTRY_POINT_CS_Update
+#ifdef _ENTRY_POINT_CS_GjkStep
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+void main() { CS_GjkStep(); }
+#endif // _ENTRY_POINT_CS_GjkStep
 #endif // IS_COMP_SHADER
 
 
@@ -121,6 +134,10 @@ void main() { _VERTEX_OUTPUT = VS_Origin(); }
 layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
 void main() { _VERTEX_OUTPUT = VS_Triangles(); }
 #endif // _ENTRY_POINT_VS_Triangles
+#ifdef _ENTRY_POINT_VS_TriangleLines
+layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
+void main() { _VERTEX_OUTPUT = VS_TriangleLines(); }
+#endif // _ENTRY_POINT_VS_TriangleLines
 #ifdef _ENTRY_POINT_VS_Lines
 layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
 void main() { _VERTEX_OUTPUT = VS_Lines(); }
@@ -144,6 +161,11 @@ void main() { PS_Points(_VERTEX_INPUT); }
 layout(location = 0) in VertexOutput _VERTEX_INPUT;
 void main() { PS_Points(_VERTEX_INPUT); }
 #endif // _ENTRY_POINT_PS_Points
+#if defined(_ENTRY_POINT_PS_Triangles) && !defined(_ENTRY_POINT_PS_Triangles_INTERPOLANTS)
+#define _ENTRY_POINT_PS_Triangles_INTERPOLANTS
+layout(location = 0) in VertexOutput _VERTEX_INPUT;
+void main() { PS_Triangles(_VERTEX_INPUT); }
+#endif // _ENTRY_POINT_PS_Triangles
 #if defined(_ENTRY_POINT_PS_Triangles) && !defined(_ENTRY_POINT_PS_Triangles_INTERPOLANTS)
 #define _ENTRY_POINT_PS_Triangles_INTERPOLANTS
 layout(location = 0) in VertexOutput _VERTEX_INPUT;

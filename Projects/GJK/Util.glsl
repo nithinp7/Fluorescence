@@ -35,7 +35,7 @@ vec3 sampleEnv(vec3 dir) {
   vec3 n = 0.5 * normalize(dir) + 0.5.xxx;
   uint BACKGROUND = 0;
   if (BACKGROUND == 0) {
-    return round(n * c) / c;
+    return 0.1 * round(n * c) / c;
   } else if (BACKGROUND == 1) {
     return round(fract(n * c));
   } else if (BACKGROUND == 2) {
@@ -112,6 +112,13 @@ void updateInputs() {
   }
 }
 
+void resetColors() {
+  uint vertexCount = spheresIndirect(0)[0].instanceCount;
+  for (uint i=0; i<vertexCount; i++) {
+    vertexBuffer[i].color = vec4(0.0, 0.0, 1.0, 1.0);
+  }
+}
+
 uint indices[12] = {
   0, 2, 1,
   0, 1, 3,
@@ -129,4 +136,45 @@ Vertex getTetVertex(uint i) {
   else 
     i = currentTet[0].d;
   return vertexBuffer[i];
+}
+
+void selectVertex(uint a) {
+  vertexBuffer[a].color = vec4(1.0, 1.0, 0.0, 1.0);
+}
+
+void selectTet(uint a, uint b, uint c, uint d) {
+  currentTet[0] = Tetrahedron(a, b, c, d);
+  selectVertex(a);
+  selectVertex(b);
+  selectVertex(c);
+  selectVertex(d);
+}
+
+void sortTet_swap(inout uint a, inout uint b, inout float da, inout float db) {
+  uint tmp = a;
+  a = b;
+  b = tmp;
+
+  float tmpf = da;
+  da = db;
+  db = tmpf;
+}
+
+void sortTet(vec3 dir) {
+  Tetrahedron t = currentTet[0];
+  uvec4 indices = uvec4(t.a, t.b, t.c, t.d);
+  vec4 d = vec4(
+          dot(vertexBuffer[t.a].position.xyz, dir),
+          dot(vertexBuffer[t.b].position.xyz, dir),
+          dot(vertexBuffer[t.c].position.xyz, dir),
+          dot(vertexBuffer[t.d].position.xyz, dir));
+  for (int i=0; i<4; i++) {
+    int minJ = i;
+    for (int j=i+1; j<4; j++) {
+      if (d[j] < d[minJ])
+        minJ = j;
+    }
+    sortTet_swap(indices[i], indices[minJ], d[i], d[minJ]);
+  }
+  currentTet[0] = Tetrahedron(indices[0], indices[1], indices[2], indices[3]);
 }

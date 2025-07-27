@@ -59,6 +59,7 @@ display_image DisplayImage
 # ---- SHADERS ----
 compute_shader CS_Init: 1 1 1
 compute_shader CS_Update: 1 1 1
+compute_shader CS_GjkStep 1 1 1
 
 # ---- TASK LIST ----
 task_block_start INIT_BLOCK:
@@ -68,12 +69,23 @@ task_block_start INIT_BLOCK:
 task_block_end
 
 initialization_task: INIT_BLOCK
+
+slider_uint INIT_SEED: 23 1 1000
 task_button: INIT_BLOCK
+
 
 barrier: linesIndirect lineVertexBuffer
 compute_dispatch: CS_Update 1 1 1
 barrier: vertexBuffer lineVertexBuffer currentTet globalState
 barrier indirectArgs: linesIndirect
+
+task_block_start GJK_STEP:
+  compute_dispatch: CS_GjkStep 1 1 1
+  barrier: vertexBuffer lineVertexBuffer currentTet globalState
+  barrier indirectArgs: linesIndirect
+task_block_end
+  
+task_button: GJK_STEP
 
 render_pass DISPLAY_PASS:
   store_attachments: outColor=DisplayImage
@@ -86,6 +98,10 @@ render_pass DISPLAY_PASS:
     vertex_output: VertexOutput
   draw_indirect: VS_Triangles PS_Triangles trianglesIndirect
     vertex_output: VertexOutput
+    disable_backface_culling
+  draw_indirect: VS_TriangleLines PS_Triangles trianglesIndirect
+    vertex_output: VertexOutput
+    primitive_type: lines
   draw_indirect: VS_Lines PS_Lines linesIndirect
     vertex_output: VertexOutput
     primitive_type: lines

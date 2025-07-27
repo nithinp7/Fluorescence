@@ -8,9 +8,6 @@ ScreenVertexOutput VS_Background() {
 
 VertexOutput VS_Points() { 
   Vertex v = vertexBuffer[gl_InstanceIndex];
-  Tetrahedron T = currentTet[0];
-  if (any(equal(gl_InstanceIndex.xxxx, uvec4(T.a, T.b, T.c, T.d))))
-    v.color = vec4(1.0, 1.0, 0.0, 1.0);
   vec3 pos = v.position.xyz + POINT_RADIUS * sphereVertexBuffer[gl_VertexIndex].position.xyz;
   gl_Position = camera.projection * camera.view * vec4(pos, 1.0);
 
@@ -42,7 +39,17 @@ VertexOutput VS_Triangles() {
     v.position = 0.0.xxxx;
   VertexOutput OUT;
   OUT.position = camera.projection * camera.view * v.position;
-  OUT.color = v.color;
+  OUT.color = vec4(0.0, 0.0, 1.0, 1.0);
+  OUT.normal = calcNormal();
+  gl_Position = OUT.position;
+  return OUT;
+}
+
+VertexOutput VS_TriangleLines() {
+  Vertex v = getTetVertex(gl_VertexIndex);
+  VertexOutput OUT;
+  OUT.position = camera.projection * camera.view * v.position;
+  OUT.color = vec4(0.0, 0.0, 1.0, 1.0);
   OUT.normal = calcNormal();
   gl_Position = OUT.position;
   return OUT;
@@ -73,9 +80,9 @@ void PS_Triangles(VertexOutput IN) {
   
 	vec4 target = camera.inverseProjection * IN.position / IN.position.w;//vec4(d, 1.0.xx);
 	vec3 wo = -(camera.inverseView * vec4(normalize(target.xyz), 0)).xyz;
-  
+
   vec3 wi = normalize(vec3(1.0.xxx));
-  float nDotWi = max(dot(n, wo), 0.0);
+  float nDotWi = abs(dot(n, wo));
   vec3 Li = 1.0.xxx;
   vec3 color = IN.color.rgb * nDotWi * Li / PI;
 
