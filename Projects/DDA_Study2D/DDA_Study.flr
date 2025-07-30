@@ -1,0 +1,75 @@
+# -----------------
+# ---- STRUCTS ----
+# -----------------
+
+struct GlobalState {
+  float scale;
+}
+struct_size: 4
+
+struct Vertex {
+  vec4 color;
+  vec2 pos;
+  vec2 padding;
+}
+struct_size: 32
+
+struct VertexOutput {
+  vec4 color;
+  vec2 uv;
+}
+
+# -----------------
+# ---- CONSTS -----
+# -----------------
+
+uint MAX_VERTS: 1000
+
+# -----------------
+# ------ UI -------
+# -----------------
+
+slider_float POS_X: 3.41 0.0 20.0
+slider_float POS_Y: 3.32 0.0 20.0
+slider_float RAY_ANGLE: 0.5 0.0 7.0
+slider_float GRID_SCALE: 0.0625 0.0625 0.5
+
+# -----------------
+# ---- BUFFERS ----
+# -----------------
+
+structured_buffer globalState: GlobalState 1
+structured_buffer lineVertexBuffer: Vertex MAX_VERTS
+structured_buffer triangleVertexBuffer: Vertex MAX_VERTS
+structured_buffer linesIndirect: IndirectArgs 1
+structured_buffer trianglesIndirect: IndirectArgs 1
+
+# -----------------
+# -- CS SHADERS ---
+# -----------------
+
+compute_shader CS_Update: 1 1 1
+
+barrier: linesIndirect trianglesIndirect
+compute_dispatch: CS_Update 1 1 1
+barrier indirectArgs: linesIndirect trianglesIndirect
+barrier: globalState lineVertexBuffer triangleVertexBuffer
+
+# -----------------
+# --- RENDERING ---
+# -----------------
+
+display_image DisplayImage
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+  draw: VS_Background PS_Background 3 1
+    vertex_output: VertexOutput
+    disable_depth
+  draw_indirect: VS_Triangles PS_Triangles trianglesIndirect
+    vertex_output: VertexOutput
+    disable_depth
+  draw_indirect: VS_Lines PS_Lines linesIndirect
+    vertex_output: VertexOutput
+    primitive_type: lines 4.0
+    disable_depth
+
