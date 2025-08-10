@@ -1,0 +1,95 @@
+# -----------------
+# ---- STRUCTS ----
+# -----------------
+
+struct GlobalState {
+  vec2 pan;
+  float zoom;
+  float padding;
+}
+struct_size: 16
+
+struct Vertex {
+  vec4 color;
+  vec2 pos;
+  vec2 padding;
+}
+struct_size: 32
+
+# 4x2x4=32bytes -- 256bits=16*16
+# a different block-size may be more convenient in 3D
+struct Block {
+  uvec4 bits[2];
+}
+struct_size: 32
+
+struct VertexOutput {
+  vec4 color;
+  vec2 uv;
+}
+
+# -----------------
+# ---- CONSTS -----
+# -----------------
+
+uint MAX_VERTS: 1000
+
+uint BITS_PER_BLOCK: 256
+
+uint NUM_LEVELS: 3
+
+uint BLOCKS_DIM_L2: 16
+uint BLOCKS_DIM_L1: BLOCKS_DIM_L2*16
+uint BLOCKS_DIM_L0: BLOCKS_DIM_L1*16
+
+uint GRID_WIDTH_L2: BLOCKS_DIM_L2*16
+uint GRID_WIDTH_L1: BLOCKS_DIM_L1*16
+uint GRID_WIDTH_L0: BLOCKS_DIM_L0*16
+
+uint NUM_BLOCKS_L2: BLOCKS_DIM_L2*BLOCKS_DIM_L2
+uint NUM_BLOCKS_L1: BLOCKS_DIM_L1*BLOCKS_DIM_L1
+uint NUM_BLOCKS_L0: BLOCKS_DIM_L0*BLOCKS_DIM_L0
+
+# -----------------
+# ------ UI -------
+# -----------------
+
+ui_separator
+
+# -----------------
+# ---- BUFFERS ----
+# -----------------
+
+structured_buffer globalState: GlobalState 1
+structured_buffer bitfield0: Block NUM_BLOCKS_L0
+structured_buffer bitfield1: Block NUM_BLOCKS_L1
+structured_buffer bitfield2: Block NUM_BLOCKS_L2
+
+# -----------------
+# -- CS SHADERS ---
+# -----------------
+
+compute_shader CS_Update: 1 1 1
+compute_shader CS_ClearBlocks: 32 1 1
+
+compute_dispatch: CS_Update 1 1 1
+barrier: globalState
+barrier: bitfield0 bitfield1 bitfield2
+
+task_block_start CLEAR_BLOCKS:
+  compute_dispatch: CS_ClearBlocks NUM_BLOCKS_L0 1 1
+task_block_end
+
+task_button: CLEAR_BLOCKS
+
+# -----------------
+# --- RENDERING ---
+# -----------------
+
+display_image DisplayImage
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+  draw: VS_Background PS_Background 3 1
+    vertex_output: VertexOutput
+    disable_depth
+
