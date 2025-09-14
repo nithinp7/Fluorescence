@@ -34,8 +34,9 @@ extern GlobalHeap* GGlobalHeap;
 Project::Project(
     SingleTimeCommandBuffer& commandBuffer,
     const TransientUniforms<FlrUniforms>& flrUniforms,
-    const char* projPath)
-    : m_parsed(*GApplication, projPath),
+    const char* projPath,
+    const FlrParams& params)
+    : m_parsed(*GApplication, projPath, params),
       m_buffers(),
       m_images(),
       m_computePipelines(),
@@ -52,7 +53,8 @@ Project::Project(
       m_bHasDynamicData(false),
       m_bFirstDraw(true),
       m_failedShaderCompile(false),
-      m_shaderCompileErrMsg() {
+      m_shaderCompileErrMsg(),
+      m_pushData() {
   // TODO: split out resource creation vs code generation
   if (m_parsed.m_failed)
     return;
@@ -75,6 +77,8 @@ Project::Project(
       usageFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     if (desc.bIndirectArgs)
       usageFlags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    if (desc.bIndexBuffer)
+      usageFlags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
     if (desc.bCpuVisible) {
       allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
       allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
@@ -279,7 +283,8 @@ Project::Project(
 
   // struct declarations
   for (const auto& s : m_parsed.m_structDefs) {
-    CODE_APPEND("%s;\n\n", s.body.c_str());
+    if (s.body.size() > 0) // skip dummy structs 
+      CODE_APPEND("%s;\n\n", s.body.c_str());
   }
 
   struct HeapBinder {
@@ -980,6 +985,14 @@ void Project::executeTaskList(
           case ParsedFlr::DM_DRAW:
           {
             pass.getDrawContext().draw(draw.param0, draw.param1);
+            break;
+          }
+          case ParsedFlr::DM_DRAW_INDEXED:
+          {
+            const auto& b = m_buffers[draw.param1][draw.param2];
+            uint32_t indexCount = m_parsed.m_buffers[draw.param1].elemCount;
+            vkCmdBindIndexBuffer(commandBuffer, b.getBuffer(), 0, VK_INDEX_TYPE_UINT32);
+            vkCmdDrawIndexed(commandBuffer, indexCount, draw.param0, 0, 0, 0);
             break;
           }
           case ParsedFlr::DM_DRAW_INDIRECT:

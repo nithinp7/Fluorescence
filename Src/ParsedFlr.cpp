@@ -56,8 +56,12 @@ findIndexByName(char* const (&names)[N], std::string_view n) {
 }
 } // namespace
 
-ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
-    : m_featureFlags(FF_NONE),
+ParsedFlr::ParsedFlr(
+    Application& app,
+    const char* flrFileName,
+    const FlrParams& params)
+    : m_constUints(params.m_uintParams),
+      m_featureFlags(FF_NONE),
       m_displayImageIdx(-1),
       m_initializationTaskIdx(-1),
       m_failed(true),
@@ -65,6 +69,13 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
 
   m_constUints.push_back({"SCREEN_WIDTH", app.getSwapChainExtent().width});
   m_constUints.push_back({"SCREEN_HEIGHT", app.getSwapChainExtent().height});
+
+  uint32_t uintDummyStructIdx = m_structDefs.size();
+  m_structDefs.push_back({ "uint", "", 4 });
+  uint32_t intDummyStructIdx = m_structDefs.size();
+  m_structDefs.push_back({ "int", "", 4 });
+  uint32_t floatDummyStructIdx = m_structDefs.size();
+  m_structDefs.push_back({ "float", "", 4 });
 
   struct File {
     File(const char* filename)
@@ -534,6 +545,27 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
 
       break;
     }
+    case I_INDEX_BUFFER: {
+      PARSER_VERIFY(name, "Could not parse index_buffer name.");
+
+      auto elemCount = parseUintOrVar();
+      PARSER_VERIFY(
+          elemCount,
+          "Could not parse element count in index_buffer declaration.");
+
+      m_buffers.push_back(
+          {std::string(*name),
+           uintDummyStructIdx,
+           *elemCount,
+           arrayCount ? *arrayCount : 1,
+           false,
+           false,
+           false,
+           true});
+      arrayCount = std::nullopt;
+
+      break;
+    }
     case I_ENABLE_CPU_ACCESS: {
       PARSER_VERIFY(
           m_buffers.size(),
@@ -704,12 +736,12 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
     }
     case I_DISABLE_BACKFACE_CULLING: {
       PARSER_VERIFY(
-        m_renderPasses.size() > 0,
-        "Expected render-pass or display-pass declaration to precede "
-        "disable_backface_culling.");
+          m_renderPasses.size() > 0,
+          "Expected render-pass or display-pass declaration to precede "
+          "disable_backface_culling.");
       PARSER_VERIFY(
-        m_renderPasses.back().draws.size() > 0,
-        "Expected draw-call to precede disable_backface_culling");
+          m_renderPasses.back().draws.size() > 0,
+          "Expected draw-call to precede disable_backface_culling");
       m_renderPasses.back().draws.back().bDisableBackfaceCull = true;
       break;
     }
@@ -914,6 +946,64 @@ ParsedFlr::ParsedFlr(Application& app, const char* flrFileName)
            0,
            -1,
            DM_DRAW,
+           AltheaEngine::PrimitiveType::TRIANGLES,
+           0.0f,
+           false,
+           false});
+      break;
+    }
+    case I_DRAW_INDEXED: {
+      // TODO: have re-usable subpasses that can be drawn multiple times?
+      PARSER_VERIFY(
+          m_renderPasses.size(),
+          "Expected render-pass or display-pass declaration to precede "
+          "draw_indexed instruction.");
+
+      auto vertShader = p.parseName();
+      PARSER_VERIFY(
+          vertShader,
+          "Could not parse vertex shader name in draw_indexed instruction.");
+      p.parseWhitespace();
+      auto pixelShader = p.parseName();
+      PARSER_VERIFY(
+          pixelShader,
+          "Could not parse pixel shader name in draw_indexed instruction.");
+      p.parseWhitespace();
+      auto instanceCount = parseUintOrVar();
+      PARSER_VERIFY(
+        instanceCount,
+        "Could not parse instanceCount in draw_indexed instruction.");
+      p.parseWhitespace();
+      auto bufName = p.parseName();
+      PARSER_VERIFY(
+        bufName,
+        "Could not parse index buffer name in draw_indexed instruction");
+      auto bufIdx = findIndexByName(m_buffers, *bufName);
+      PARSER_VERIFY(
+        bufIdx,
+        "Could not find specified index buffer in draw_indexed instruction.");
+      PARSER_VERIFY(
+        m_buffers[*bufIdx].bIndexBuffer,
+        "Specified buffer is not an index buffer in draw_indexed "
+        "instruction.");
+      p.parseWhitespace();
+      uint32_t subBufferIdx = 0;
+      if (auto subBufferIdx_ = p.parseUint())
+        subBufferIdx = *subBufferIdx_;
+      PARSER_VERIFY(
+        subBufferIdx < m_buffers[*bufIdx].bufferCount,
+        "Out-of-range subBufferIdx provided to draw_indexed instruction.");
+      p.parseWhitespace();
+
+      uint32_t renderPassIdx = m_renderPasses.size() - 1;
+      m_renderPasses.back().draws.push_back(
+          {std::string(*vertShader),
+           std::string(*pixelShader),
+           *instanceCount,
+           *bufIdx,
+           subBufferIdx,
+           -1,
+           DM_DRAW_INDEXED,
            AltheaEngine::PrimitiveType::TRIANGLES,
            0.0f,
            false,

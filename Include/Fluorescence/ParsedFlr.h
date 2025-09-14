@@ -10,9 +10,10 @@
 using namespace AltheaEngine;
 
 namespace flr {
+struct FlrParams;
 
 struct ParsedFlr {
-  ParsedFlr(Application& app, const char* projectPath);
+  ParsedFlr(Application& app, const char* projectPath, const FlrParams& params);
 
   struct ConstUint {
     std::string name;
@@ -135,6 +136,7 @@ struct ParsedFlr {
     bool bCpuVisible;
     bool bTransferSrc;
     bool bIndirectArgs;
+    bool bIndexBuffer;
   };
   std::vector<BufferDesc> m_buffers;
 
@@ -180,7 +182,8 @@ struct ParsedFlr {
   };
   static constexpr BufferResourceStateMapping BUFFER_RESOURCE_STATE_TABLE[] = {
     {"rw", VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT},
-    {"indirectArgs", VK_ACCESS_INDIRECT_COMMAND_READ_BIT}
+    {"indirectArgs", VK_ACCESS_INDIRECT_COMMAND_READ_BIT},
+    {"indexBuffer", VK_ACCESS_INDEX_READ_BIT}
   };
 
   struct Barrier {
@@ -213,7 +216,7 @@ struct ParsedFlr {
 
   enum DrawMode : uint8_t {
     DM_DRAW = 0,
-    // DM_DRAW_INDEXED, 
+    DM_DRAW_INDEXED, 
     DM_DRAW_OBJ,
     DM_DRAW_INDIRECT,
     //DM_DRAW_INDEXED_INDIRECT
@@ -225,6 +228,7 @@ struct ParsedFlr {
     std::string pixelShader;
     // param0/1/2 are used as follows
     // if drawMode==DM_DRAW: vertexCount, instanceCount, UNUSED
+    // if drawMode==DM_DRAW_INDEXED: instanceCount, indexBufferIdx, subBufferIdx(optional)
     // if drawMode==DM_DRAW_INDIRECT, indirectBufferIdx, drawCount, subBufferIdx(optional)
     // if drawMode==DM_DRAW_OBJ, objIdx, UNUSED, UNUSED
     uint32_t param0;
@@ -312,6 +316,7 @@ struct ParsedFlr {
     I_STRUCT,
     I_STRUCT_SIZE,
     I_STRUCTURED_BUFFER,
+    I_INDEX_BUFFER,
     I_ENABLE_CPU_ACCESS,
     I_COMPUTE_SHADER,
     I_COMPUTE_DISPATCH,
@@ -328,6 +333,7 @@ struct ParsedFlr {
     I_STORE_DEPTH,
     I_LOADSTORE_DEPTH,
     I_DRAW,
+    I_DRAW_INDEXED,
     I_DRAW_INDIRECT,
     I_DRAW_OBJ,
     I_PRIM_TYPE,
@@ -364,6 +370,7 @@ struct ParsedFlr {
       "struct",
       "struct_size",
       "structured_buffer",
+      "index_buffer",
       "enable_cpu_access",
       "compute_shader",
       "compute_dispatch",
@@ -380,6 +387,7 @@ struct ParsedFlr {
       "store_depth",
       "loadstore_depth",
       "draw",
+      "draw_indexed",
       "draw_indirect",
       "draw_obj",
       "primitive_type",
@@ -424,4 +432,7 @@ struct ParsedFlr {
   };
 };
 
+struct FlrParams {
+  std::vector<ParsedFlr::ConstUint> m_uintParams;
+};
 } // namespace flr

@@ -174,43 +174,50 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
     }
 
     if (m_bReloadProject) {
-      m_bReloadProject = false;
-
-      if (m_pProject)
+      if (m_pProject) {
         app.addDeletiontask(DeletionTask{
             [pProject = m_pProject]() { delete pProject; },
-            app.getCurrentFrameRingBufferIndex()});
+            app.getCurrentFrameRingBufferIndex() });
+        m_pProject = nullptr;
+        m_reloadCountDown = MAX_FRAMES_IN_FLIGHT;
+      } else if (m_reloadCountDown) {
+        m_reloadCountDown--;
+      } else {
+        m_bReloadProject = false;
+        if (Utilities::checkFileExists(std::string(s_filename))) {
+          for (auto& program : m_programs)
+            program->destroyRenderState();
 
-      m_pProject = nullptr;
-      if (Utilities::checkFileExists(std::string(s_filename))) {
-        for (auto& program : m_programs)
-          program->destroyRenderState();
+          FlrParams params;
+          for (auto& program : m_programs)
+            program->setupParams(params);
 
-        SingleTimeCommandBuffer commandBuffer(app);
-        m_pProject =
-            new Project(commandBuffer, m_uniforms, (const char*)s_filename);
+          SingleTimeCommandBuffer commandBuffer(app);
+          m_pProject =
+            new Project(commandBuffer, m_uniforms, (const char*)s_filename, params);
 
-        for (auto& program : m_programs)
-          program->createRenderState(m_pProject, commandBuffer);
+          for (auto& program : m_programs)
+            program->createRenderState(m_pProject, commandBuffer);
 
-        PerFrameResources* prevDescTables = new PerFrameResources(std::move(m_descriptorSets));
-        app.addDeletiontask(DeletionTask{ [prevDescTables]() {
-            delete prevDescTables;
-          }, app.getCurrentFrameRingBufferIndex() });
-        
-        DescriptorSetLayoutBuilder builder{};
-        builder.addUniformBufferBinding();
+          PerFrameResources* prevDescTables = new PerFrameResources(std::move(m_descriptorSets));
+          app.addDeletiontask(DeletionTask{ [prevDescTables]() {
+              delete prevDescTables;
+            }, app.getCurrentFrameRingBufferIndex() });
 
-        for (auto& program : m_programs)
-          program->setupDescriptorTable(builder);
+          DescriptorSetLayoutBuilder builder{};
+          builder.addUniformBufferBinding();
 
-        m_descriptorSets = PerFrameResources(app, builder);
+          for (auto& program : m_programs)
+            program->setupDescriptorTable(builder);
 
-        ResourcesAssignment assignment = m_descriptorSets.assign();
-        assignment.bindTransientUniforms(m_uniforms);
+          m_descriptorSets = PerFrameResources(app, builder);
 
-        for (auto& program : m_programs)
-          program->createDescriptors(assignment);
+          ResourcesAssignment assignment = m_descriptorSets.assign();
+          assignment.bindTransientUniforms(m_uniforms);
+
+          for (auto& program : m_programs)
+            program->createDescriptors(assignment);
+        }
       }
     }
 

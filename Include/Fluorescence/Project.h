@@ -64,7 +64,8 @@ public:
   Project(
       SingleTimeCommandBuffer& commandBuffer,
       const TransientUniforms<FlrUniforms>& flrUniforms,
-      const char* projectPath);
+      const char* projectPath,
+      const FlrParams& params);
   ~Project();
 
   void tick(const FrameContext& frame);

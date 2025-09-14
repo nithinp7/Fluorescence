@@ -48,6 +48,7 @@ class IFlrProgram {
 public:
   virtual void setupDescriptorTable(DescriptorSetLayoutBuilder& builder) {}
   virtual void createDescriptors(ResourcesAssignment& assignment) {}
+  virtual void setupParams(FlrParams& params) {}
   virtual void createRenderState(Project* project, SingleTimeCommandBuffer& commandBuffer) {}
   virtual void destroyRenderState() {}
 
@@ -100,6 +101,7 @@ private:
   Project* m_pProject = nullptr;
   bool m_bOpenFileDialogue = false;
   bool m_bReloadProject = false;
+  uint8_t m_reloadCountDown = 0;
   bool m_bPaused = false;
   bool m_bFreezeTime = false;
   float m_time = 0.0f;
