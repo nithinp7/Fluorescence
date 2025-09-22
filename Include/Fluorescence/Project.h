@@ -53,10 +53,43 @@ public:
 
   T& operator->() { return *m_ptr; }
   T& operator*() { return *m_ptr; }
+  const T& operator->() const { return *m_ptr; }
+  const T& operator*() const { return *m_ptr; }
   operator bool() const { return m_ptr != nullptr; }
 private:
   FlrUiView(T* ptr) : m_ptr(ptr) {}
   T* m_ptr;
+};
+
+
+template <typename T>
+struct CachedFlrUiView {
+public:
+  CachedFlrUiView() : m_view(), m_prevValue() {}
+  CachedFlrUiView(const CachedFlrUiView<T>& other) : m_view(other.m_view), m_prevValue(other.m_prevValue) {}
+  CachedFlrUiView(const FlrUiView<T>& view) : m_view(view), m_prevValue() {
+    if (view)
+      m_prevValue = *view;
+  }
+
+  bool IsDirty() const {
+    return m_prevValue != *m_view;
+  }
+
+  T Fetch() {
+    m_prevValue = *m_view;
+    return m_prevValue;
+  }
+
+  void Store(const T& val) {
+    *m_view = val;
+    m_prevValue = val;
+  }
+
+  operator bool() const { return m_view; }
+private:
+  FlrUiView<T> m_view;
+  T m_prevValue;
 };
 
 class Project {

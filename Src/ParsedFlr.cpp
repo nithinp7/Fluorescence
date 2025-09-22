@@ -76,6 +76,15 @@ ParsedFlr::ParsedFlr(
   m_structDefs.push_back({ "int", "", 4 });
   uint32_t floatDummyStructIdx = m_structDefs.size();
   m_structDefs.push_back({ "float", "", 4 });
+  uint32_t vec2DummyStructIdx = m_structDefs.size();
+  m_structDefs.push_back({ "vec2", "", 8 });
+  // vec3 buffers would work fine on the gpu size with stride 16
+  // but they seem like a foot-gun on the CPU side since sizeof(glm::vec3) == 12
+  // ...
+  //uint32_t vec3DummyStructIdx = m_structDefs.size();
+  //m_structDefs.push_back({ "vec3", "", 16 });
+  uint32_t vec4DummyStructIdx = m_structDefs.size();
+  m_structDefs.push_back({ "vec4", "", 16 });
 
   struct File {
     File(const char* filename)

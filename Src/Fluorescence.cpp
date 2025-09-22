@@ -195,28 +195,30 @@ void Fluorescence::tick(Application& app, const FrameContext& frame) {
           SingleTimeCommandBuffer commandBuffer(app);
           m_pProject =
             new Project(commandBuffer, m_uniforms, (const char*)s_filename, params);
+          if (m_pProject->isReady())
+          {
+            for (auto& program : m_programs)
+              program->createRenderState(m_pProject, commandBuffer);
 
-          for (auto& program : m_programs)
-            program->createRenderState(m_pProject, commandBuffer);
+            PerFrameResources* prevDescTables = new PerFrameResources(std::move(m_descriptorSets));
+            app.addDeletiontask(DeletionTask{ [prevDescTables]() {
+                delete prevDescTables;
+              }, app.getCurrentFrameRingBufferIndex() });
 
-          PerFrameResources* prevDescTables = new PerFrameResources(std::move(m_descriptorSets));
-          app.addDeletiontask(DeletionTask{ [prevDescTables]() {
-              delete prevDescTables;
-            }, app.getCurrentFrameRingBufferIndex() });
+            DescriptorSetLayoutBuilder builder{};
+            builder.addUniformBufferBinding();
 
-          DescriptorSetLayoutBuilder builder{};
-          builder.addUniformBufferBinding();
+            for (auto& program : m_programs)
+              program->setupDescriptorTable(builder);
 
-          for (auto& program : m_programs)
-            program->setupDescriptorTable(builder);
+            m_descriptorSets = PerFrameResources(app, builder);
 
-          m_descriptorSets = PerFrameResources(app, builder);
+            ResourcesAssignment assignment = m_descriptorSets.assign();
+            assignment.bindTransientUniforms(m_uniforms);
 
-          ResourcesAssignment assignment = m_descriptorSets.assign();
-          assignment.bindTransientUniforms(m_uniforms);
-
-          for (auto& program : m_programs)
-            program->createDescriptors(assignment);
+            for (auto& program : m_programs)
+              program->createDescriptors(assignment);
+          }
         }
       }
     }
