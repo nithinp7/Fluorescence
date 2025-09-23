@@ -1,0 +1,130 @@
+# -----------------
+# ---- STRUCTS ----
+# -----------------
+
+struct GlobalState {
+  vec2 pan;
+  vec2 rayOrigin;
+  float zoom;
+  float rayAngle;
+}
+struct_size: 24
+
+struct Vertex {
+  vec4 color;
+  vec2 pos;
+  vec2 padding;
+}
+struct_size: 32
+
+# 4x2x4=32bytes -- 256bits=16*16
+# a different block-size may be more convenient in 3D
+struct Block {
+  uvec4 bits[2];
+}
+struct_size: 32
+
+struct VertexOutput {
+  vec4 color;
+  vec2 uv;
+}
+
+# -----------------
+# ---- CONSTS -----
+# -----------------
+
+uint MAX_VERTS: 10000
+
+uint BITS_PER_BLOCK: 256
+
+uint NUM_LEVELS: 7
+
+uint BR_FACTOR_LOG2: 1
+uint BR_FACTOR: 2
+
+uint BLOCKS_DIM_L6: 1
+uint BLOCKS_DIM_L5: BLOCKS_DIM_L6*BR_FACTOR
+uint BLOCKS_DIM_L4: BLOCKS_DIM_L5*BR_FACTOR
+uint BLOCKS_DIM_L3: BLOCKS_DIM_L4*BR_FACTOR
+uint BLOCKS_DIM_L2: BLOCKS_DIM_L3*BR_FACTOR
+uint BLOCKS_DIM_L1: BLOCKS_DIM_L2*BR_FACTOR
+uint BLOCKS_DIM_L0: BLOCKS_DIM_L1*BR_FACTOR
+
+uint GRID_WIDTH_L6: BLOCKS_DIM_L6*16
+uint GRID_WIDTH_L5: BLOCKS_DIM_L5*16
+uint GRID_WIDTH_L4: BLOCKS_DIM_L4*16
+uint GRID_WIDTH_L3: BLOCKS_DIM_L3*16
+uint GRID_WIDTH_L2: BLOCKS_DIM_L2*16
+uint GRID_WIDTH_L1: BLOCKS_DIM_L1*16
+uint GRID_WIDTH_L0: BLOCKS_DIM_L0*16
+
+uint NUM_BLOCKS_L6: BLOCKS_DIM_L6*BLOCKS_DIM_L6
+uint NUM_BLOCKS_L5: BLOCKS_DIM_L5*BLOCKS_DIM_L5
+uint NUM_BLOCKS_L4: BLOCKS_DIM_L4*BLOCKS_DIM_L4
+uint NUM_BLOCKS_L3: BLOCKS_DIM_L3*BLOCKS_DIM_L3
+uint NUM_BLOCKS_L2: BLOCKS_DIM_L2*BLOCKS_DIM_L2
+uint NUM_BLOCKS_L1: BLOCKS_DIM_L1*BLOCKS_DIM_L1
+uint NUM_BLOCKS_L0: BLOCKS_DIM_L0*BLOCKS_DIM_L0
+
+uint NUM_BLOCKS_TOTAL: NUM_BLOCKS_L0+NUM_BLOCKS_L1+NUM_BLOCKS_L2+NUM_BLOCKS_L3+NUM_BLOCKS_L4+NUM_BLOCKS_L5+NUM_BLOCKS_L6
+
+# -----------------
+# ------ UI -------
+# -----------------
+
+ui_dropdown_start HDDA:
+  slider_uint RAY_DBG: 0 0 1
+ui_dropdown_end
+
+ui_separator
+
+# -----------------
+# ---- BUFFERS ----
+# -----------------
+
+structured_buffer globalState: GlobalState 1
+
+structured_buffer lineVertexBuffer: Vertex MAX_VERTS
+structured_buffer triangleVertexBuffer: Vertex MAX_VERTS
+structured_buffer linesIndirect: IndirectArgs 1
+structured_buffer trianglesIndirect: IndirectArgs 1
+
+structured_buffer bitfield: Block NUM_BLOCKS_TOTAL
+
+# -----------------
+# -- CS SHADERS ---
+# -----------------
+
+compute_shader CS_Update: 1 1 1
+compute_shader CS_ClearBlocks: 32 1 1
+
+barrier: linesIndirect trianglesIndirect
+compute_dispatch: CS_Update 1 1 1
+barrier indirectArgs: linesIndirect trianglesIndirect
+barrier: globalState lineVertexBuffer triangleVertexBuffer
+barrier: bitfield
+
+task_block_start CLEAR_BLOCKS:
+  compute_dispatch: CS_ClearBlocks NUM_BLOCKS_TOTAL 1 1
+task_block_end
+
+task_button: CLEAR_BLOCKS
+
+# -----------------
+# --- RENDERING ---
+# -----------------
+
+display_image DisplayImage
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+  draw: VS_Background PS_Background 3 1
+    vertex_output: VertexOutput
+    disable_depth
+  draw_indirect: VS_Triangles PS_Triangles trianglesIndirect
+    vertex_output: VertexOutput
+    disable_depth
+  draw_indirect: VS_Lines PS_Lines linesIndirect
+    vertex_output: VertexOutput
+    primitive_type: lines 4.0
+    disable_depth
+
