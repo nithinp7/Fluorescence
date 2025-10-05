@@ -146,6 +146,7 @@ public:
   void setPushConstants(uint32_t push0, uint32_t push1 = 0, uint32_t push2 = 0, uint32 push3 = 0);
 
 private:
+  void codeGenGlsl(const std::filesystem::path& autoGenFileName);
   void serializeOptions();
   void loadOptions();
 
