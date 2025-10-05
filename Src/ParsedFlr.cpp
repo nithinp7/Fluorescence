@@ -60,7 +60,8 @@ ParsedFlr::ParsedFlr(
     Application& app,
     const char* flrFileName,
     const FlrParams& params)
-    : m_constUints(params.m_uintParams),
+    : m_language(SHADER_LANGUAGE_GLSL),
+      m_constUints(params.m_uintParams),
       m_featureFlags(FF_NONE),
       m_displayImageIdx(-1),
       m_initializationTaskIdx(-1),
@@ -78,6 +79,8 @@ ParsedFlr::ParsedFlr(
   m_structDefs.push_back({ "float", "", 4 });
   uint32_t vec2DummyStructIdx = m_structDefs.size();
   m_structDefs.push_back({ "vec2", "", 8 });
+  uint32_t uvec2DummyStructIdx = m_structDefs.size();
+  m_structDefs.push_back({ "uvec2", "", 8 });
   // vec3 buffers would work fine on the gpu size with stride 16
   // but they seem like a foot-gun on the CPU side since sizeof(glm::vec3) == 12
   // ...
@@ -85,6 +88,8 @@ ParsedFlr::ParsedFlr(
   //m_structDefs.push_back({ "vec3", "", 16 });
   uint32_t vec4DummyStructIdx = m_structDefs.size();
   m_structDefs.push_back({ "vec4", "", 16 });
+  uint32_t uvec4DummyStructIdx = m_structDefs.size();
+  m_structDefs.push_back({ "uvec4", "", 16 });
 
   struct File {
     File(const char* filename)
@@ -300,15 +305,15 @@ ParsedFlr::ParsedFlr(
     case I_SLIDER_UINT: {
       PARSER_VERIFY(name, "Could not parse name for uint slider.");
 
-      auto value = p.parseUint();
+      auto value = parseUintOrVar();
       PARSER_VERIFY(value, "Could not parse default value for uint slider.");
       p.parseWhitespace();
 
-      auto min = p.parseUint();
+      auto min = parseUintOrVar();
       PARSER_VERIFY(value, "Could not parse min value for uint slider.");
       p.parseWhitespace();
 
-      auto max = p.parseUint();
+      auto max = parseUintOrVar();
       PARSER_VERIFY(value, "Could not parse max value for uint slider.");
 
       m_uiElements.push_back({UET_SLIDER_UINT, (uint32_t)m_sliderUints.size()});
@@ -319,15 +324,15 @@ ParsedFlr::ParsedFlr(
     case I_SLIDER_INT: {
       PARSER_VERIFY(name, "Could not parse name for int slider.");
 
-      auto value = p.parseInt();
+      auto value = parseIntOrVar();
       PARSER_VERIFY(value, "Could not parse default value for int slider.");
       p.parseWhitespace();
 
-      auto min = p.parseInt();
+      auto min = parseIntOrVar();
       PARSER_VERIFY(value, "Could not parse min value for int slider.");
       p.parseWhitespace();
 
-      auto max = p.parseInt();
+      auto max = parseIntOrVar();
       PARSER_VERIFY(value, "Could not parse max value for int slider.");
 
       m_uiElements.push_back({UET_SLIDER_INT, (uint32_t)m_sliderInts.size()});
@@ -338,15 +343,15 @@ ParsedFlr::ParsedFlr(
     case I_SLIDER_FLOAT: {
       PARSER_VERIFY(name, "Could not parse name for float slider.");
 
-      auto value = p.parseFloat();
+      auto value = parseFloatOrVar();
       PARSER_VERIFY(value, "Could not parse default value for float slider.");
       p.parseWhitespace();
 
-      auto min = p.parseFloat();
+      auto min = parseFloatOrVar();
       PARSER_VERIFY(min, "Could not parse min value for float slider.");
       p.parseWhitespace();
 
-      auto max = p.parseFloat();
+      auto max = parseFloatOrVar();
       PARSER_VERIFY(max, "Could not parse max value for float slider.");
 
       m_uiElements.push_back(
@@ -1419,6 +1424,14 @@ ParsedFlr::ParsedFlr(
         PARSER_VERIFY(false, "Could not open included flr header file");
       }
 
+      break;
+    };
+    case I_LANGUAGE: {
+      // keep in sync with enum AltheaEngine::ShaderLanguage
+      const char* LANGUAGES[] = {"glsl", "hlsl"};
+      auto lang = p.parseToken<AltheaEngine::ShaderLanguage>(LANGUAGES, 2);
+      PARSER_VERIFY(lang, "Unknown language name specified when setting shader compiler language.");
+      m_language = *lang;
       break;
     };
     default:

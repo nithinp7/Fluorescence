@@ -146,6 +146,8 @@ public:
   void setPushConstants(uint32_t push0, uint32_t push1 = 0, uint32_t push2 = 0, uint32 push3 = 0);
 
 private:
+  void serializeOptions();
+  void loadOptions();
 
   template <typename TValue, typename TUi>
   static FlrUiView<TValue> getUiElemByName(const char* name, const std::vector<TUi>& elems) {
@@ -156,6 +158,7 @@ private:
 
   void executeTaskList(const std::vector<ParsedFlr::Task>& tasks, VkCommandBuffer commandBuffer, const FrameContext& frame);
 
+  std::filesystem::path m_projPath;
   ParsedFlr m_parsed;
 
   std::vector<std::vector<BufferAllocation>> m_buffers;

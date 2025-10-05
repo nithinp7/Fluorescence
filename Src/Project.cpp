@@ -36,7 +36,8 @@ Project::Project(
     const TransientUniforms<FlrUniforms>& flrUniforms,
     const char* projPath,
     const FlrParams& params)
-    : m_parsed(*GApplication, projPath, params),
+    : m_projPath(projPath),
+      m_parsed(*GApplication, projPath, params),
       m_buffers(),
       m_images(),
       m_computePipelines(),
@@ -59,12 +60,14 @@ Project::Project(
   if (m_parsed.m_failed)
     return;
 
-  std::filesystem::path projPath_(projPath);
-  std::filesystem::path projName = projPath_.stem();
-  std::filesystem::path folder = projPath_.parent_path();
+  std::filesystem::path projName = m_projPath.stem();
+  std::filesystem::path folder = m_projPath.parent_path();
 
-  std::filesystem::path shaderFileName = projPath_;
-  shaderFileName.replace_extension(".glsl");
+  std::filesystem::path shaderFileName = m_projPath;
+  if (m_parsed.m_language == SHADER_LANGUAGE_HLSL)
+    shaderFileName.replace_extension(".hlsl");
+  else
+    shaderFileName.replace_extension(".glsl");
 
   m_buffers.reserve(m_parsed.m_buffers.size());
   for (const ParsedFlr::BufferDesc& desc : m_parsed.m_buffers) {
@@ -270,7 +273,8 @@ Project::Project(
   autoGenCodeSize += sprintf(autoGenCode + autoGenCodeSize, __VA_ARGS__)
 
   // glsl version / common includes
-  CODE_APPEND("#version 460 core\n\n");
+  if (m_parsed.m_language == SHADER_LANGUAGE_GLSL)
+    CODE_APPEND("#version 460 core\n\n");
 
   // constant declarations
   for (const auto& c : m_parsed.m_constInts)
@@ -522,7 +526,7 @@ Project::Project(
   }
 #undef CODE_APPEND
 
-  std::filesystem::path autoGenFileName = projPath_;
+  std::filesystem::path autoGenFileName = m_projPath;
   autoGenFileName.replace_extension(".gen.glsl");
 
   std::ofstream autoGenFile(autoGenFileName);
@@ -673,9 +677,17 @@ Project::Project(
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
     m_pAudio = std::make_unique<Audio>(true);
   }
+
+  loadOptions();
+
+  GInputManager->setMouseCursorHidden(true);
 }
 
-Project::~Project() {}
+Project::~Project() {
+  if (isReady()) {
+    serializeOptions();
+  }
+}
 
 void Project::tick(const FrameContext& frame) {
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
@@ -1192,6 +1204,192 @@ void Project::tryRecompile() {
   if (error.size() > 0) {
     strncpy(m_shaderCompileErrMsg, error.c_str(), error.size());
     m_failedShaderCompile = true;
+  }
+}
+
+namespace OptionsParserImpl {
+  enum OptionType : uint32_t {
+    OT_CAMERA = 0,
+    OT_SLIDER_UINT,
+    OT_SLIDER_INT,
+    OT_SLIDER_FLOAT,
+    OT_COLOR_PICKER,
+    OT_CHECKBOX,
+    OT_COUNT
+  };
+  static constexpr const char* OPTION_PARSER_TOKEN_STRS[OT_COUNT] = {
+    "camera",
+    "slider_uint",
+    "slider_int",
+    "slider_float",
+    "color_picker",
+    "checkbox"
+  };
+} // namespace ConfigParserImpl
+
+void Project::loadOptions() {
+  // TODO make this parser error tolerant...
+
+  using namespace OptionsParserImpl;
+
+  std::filesystem::path optionsPath = m_projPath.parent_path();
+  optionsPath.replace_filename("Options");
+  optionsPath.replace_extension(".ini");
+
+  std::ifstream stream(optionsPath);
+  char nameBuf[256];
+  char linebuf[1024];
+  while (stream.getline(linebuf, 1024)) {
+    Parser p{ linebuf };
+    
+    auto parseToken = [&]() {
+      return p.parseToken<OptionType>(OPTION_PARSER_TOKEN_STRS, OT_COUNT);
+    };
+    auto parseName = [&]() {
+      auto name = p.parseName();
+      snprintf(nameBuf, 256, "%.*s", static_cast<uint32_t>(name->size()), name->data());
+    };
+    
+    p.parseWhitespace();
+    if (auto uiType = parseToken()) {
+      p.parseWhitespace();
+      switch (*uiType) {
+      case OT_CAMERA: 
+      {
+        glm::vec3 pos;
+        pos.x = *p.parseFloat();
+        p.parseWhitespace();
+        pos.y = *p.parseFloat();
+        p.parseWhitespace();
+        pos.z = *p.parseFloat();
+        p.parseWhitespace();
+        float yaw = *p.parseFloat();
+        p.parseWhitespace();
+        float pitch = *p.parseFloat();
+        p.parseWhitespace();
+        m_cameraController.setPosition(pos);
+        m_cameraController.resetRotation(yaw, pitch);
+        break;
+      }
+      case OT_SLIDER_UINT:
+      {
+        parseName();
+        p.parseWhitespace();
+        *getSliderUint(nameBuf) = *p.parseUint();
+        p.parseWhitespace();
+        break;
+      }
+      case OT_SLIDER_INT:
+      {
+        parseName();
+        p.parseWhitespace();
+        *getSliderInt(nameBuf) = *p.parseInt();
+        p.parseWhitespace();
+        break;
+      }
+      case OT_SLIDER_FLOAT:
+      {
+        parseName();
+        p.parseWhitespace();
+        *getSliderFloat(nameBuf) = *p.parseFloat();
+        p.parseWhitespace();
+        break;
+      }
+      case OT_COLOR_PICKER:
+      {
+        parseName();
+        p.parseWhitespace();
+        glm::vec4 val;
+        for (int i = 0; i < 4; i++) {
+          val[i] = *p.parseFloat();
+          p.parseWhitespace();
+        }
+        *getColorPicker(nameBuf) = val;
+        break;
+      }
+      case OT_CHECKBOX:
+      {
+        parseName();
+        p.parseWhitespace();
+        *getCheckBox(nameBuf) = *p.parseUint() != 0u;
+        p.parseWhitespace();
+        break;
+      }
+      }
+    }
+    
+    // unexpected token
+    assert(p.c == 0);
+  }
+
+  stream.close();
+}
+
+void Project::serializeOptions() {
+  using namespace OptionsParserImpl;
+
+  std::filesystem::path optionsPath = m_projPath.parent_path();
+  optionsPath.remove_filename();
+  if (!std::filesystem::exists(optionsPath))
+    std::filesystem::create_directory(optionsPath);
+  optionsPath.replace_filename("Options");
+  optionsPath.replace_extension(".ini");
+
+  std::ofstream optionsFile(optionsPath);
+  auto writeStr = [&](const char* str) {
+    optionsFile.write(str, strlen(str));
+  };
+
+  if (optionsFile.is_open()) {
+    char buf[1024];
+
+    if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
+      const Camera& cam = m_cameraController.getCamera();
+      glm::vec3 pos(cam.getTransform()[3]);
+      float yaw = cam.computeYawDegrees();
+      float pitch = cam.computePitchDegrees();
+      snprintf(buf, 1024, "camera %f %f %f %f %f\n", pos.x, pos.y, pos.z, yaw, pitch);
+      writeStr(buf);
+    }
+
+    for (const auto& ui : m_parsed.m_uiElements) {
+      switch (ui.type) {
+      case ParsedFlr::UET_SLIDER_UINT: {
+        const auto& uslider = m_parsed.m_sliderUints[ui.idx];
+        snprintf(buf, 1024, "slider_uint %s %u\n", uslider.name.c_str(), *uslider.pValue);
+        writeStr(buf);
+        break;
+      }
+      case ParsedFlr::UET_SLIDER_INT: {
+        const auto& islider = m_parsed.m_sliderInts[ui.idx];
+        snprintf(buf, 1024, "slider_int %s %d\n", islider.name.c_str(), *islider.pValue);
+        writeStr(buf);
+        break;
+      }
+      case ParsedFlr::UET_SLIDER_FLOAT: {
+        const auto& fslider = m_parsed.m_sliderFloats[ui.idx];
+        snprintf(buf, 1024, "slider_float %s %f\n", fslider.name.c_str(), *fslider.pValue);
+        writeStr(buf);
+        break;
+      }
+      case ParsedFlr::UET_COLOR_PICKER: {
+        const auto& cpicker = m_parsed.m_colorPickers[ui.idx];
+        snprintf(buf, 1024, "color_picker %s %f %f %f %f\n", cpicker.name.c_str(), cpicker.pValue[0], cpicker.pValue[1], cpicker.pValue[2], cpicker.pValue[3]);
+        writeStr(buf);
+        break;
+      }
+      case ParsedFlr::UET_CHECKBOX: {
+        const auto& checkbox = m_parsed.m_checkboxes[ui.idx];
+        snprintf(buf, 1024, "checkbox %s %d\n", checkbox.name.c_str(), (int)*checkbox.pValue);
+        writeStr(buf);
+        break;
+      }
+      default:
+        break;
+      };
+    }
+
+    optionsFile.close();
   }
 }
 

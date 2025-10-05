@@ -2,6 +2,7 @@
 #include <Althea/Application.h>
 #include <Althea/Utilities.h>
 #include <Althea/GraphicsPipeline.h>
+#include <Althea/Shader.h>
 
 #include <cstdint>
 #include <string>
@@ -14,6 +15,8 @@ struct FlrParams;
 
 struct ParsedFlr {
   ParsedFlr(Application& app, const char* projectPath, const FlrParams& params);
+
+  AltheaEngine::ShaderLanguage m_language;
 
   struct ConstUint {
     std::string name;
@@ -349,6 +352,7 @@ struct ParsedFlr {
     I_RUN_TASK,
     I_INITIALIZATION_TASK,
     I_INCLUDE,
+    I_LANGUAGE,
     I_COUNT
   };
 
@@ -402,7 +406,8 @@ struct ParsedFlr {
       "task_block_end",
       "run_task",
       "initialization_task",
-      "include"};
+      "include",
+      "language"};
 
   struct ImageFormatTableEntry {
     const char* glslFormatName;
