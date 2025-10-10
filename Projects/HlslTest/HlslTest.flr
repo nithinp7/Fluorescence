@@ -1,0 +1,16 @@
+language: hlsl
+
+color_picker TEST_COLOR: 1.0 0.0 0.0 1.0
+
+struct VertexOutput {
+  float4 position : SV_Position;
+  float2 uv : TEXCOORD0;
+};
+struct_size: 24
+
+display_image DisplayImage
+
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+  draw: VS_Test PS_Test 3 1
+    vertex_output: VertexOutput
