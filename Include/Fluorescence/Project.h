@@ -147,6 +147,7 @@ public:
 
 private:
   void codeGenGlsl(const std::filesystem::path& autoGenFileName);
+  void codeGenHlsl(const std::filesystem::path& autoGenFileName);
   void serializeOptions();
   void loadOptions();
 

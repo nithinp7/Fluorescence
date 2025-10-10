@@ -1,20 +1,25 @@
 #define IS_SHADER
+#define IS_HLSL_SHADER
 #include <../Include/Fluorescence/Shared/CommonStructures.h>
-#include <Misc/Input.glsl>
-#include <Bindless/GlobalHeap.glsl>
+// TODO - these two includes are not actually glsl-specific, change file name?
+#include <Misc/Input.glsl> 
 #include <Misc/Constants.glsl>
+// #include <Bindless/GlobalHeap.glsl>
 
-layout(set = 1, binding = 0) uniform _FlrUniforms{
+
+[[vk::binding(0, 1)]] cbuffer _FlrUniforms {
   FlrUniforms uniforms;
 };
 
-layout(push_constant) uniform _PushConstants{
+[[vk::push_constant]] cbuffer _PushConstants {
   uint push0;
   uint push1;
   uint push2;
   uint push3;
 };
 
+#if 0
+// TODO...
 #ifdef IS_VERTEX_SHADER
 
 vec2 VS_FullScreen() {
@@ -56,6 +61,7 @@ vec2 VS_Circle(uint vertexIdx, vec2 pos, float radius, uint circleVerts) {
 }
 
 #endif // IS_VERTEX_SHADER
+#endif // ...
 
 float wave(float a, float b) {
   return 0.5 * sin(a * uniforms.time + b) + 0.5;

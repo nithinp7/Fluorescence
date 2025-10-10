@@ -334,7 +334,8 @@ Project::Project(
     codeGenGlsl(autoGenFileName);
   }
   else {
-    assert(false);
+    autoGenFileName.replace_extension(".gen.hlsl");
+    codeGenHlsl(autoGenFileName);
   }
 
   m_computePipelines.reserve(m_parsed.m_computeShaders.size());
@@ -432,6 +433,8 @@ Project::Project(
         ShaderDefines defs{};
         defs.emplace("IS_VERTEX_SHADER", "");
         defs.emplace(std::string("_ENTRY_POINT_") + draw.vertexShader, "");
+        if (m_parsed.m_language == SHADER_LANGUAGE_HLSL)
+          defs.emplace(draw.vertexShader, "main");
         defs.emplace(pass.name, "");
         builder.addVertexShader(autoGenFileName.string(), defs, m_parsed.m_language);
       }
@@ -1342,6 +1345,246 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
         else {
           CODE_APPEND("void main() { %s(); }\n", draw.pixelShader.c_str());
         }
+        CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
+      }
+    }
+    CODE_APPEND("#endif // IS_PIXEL_SHADER\n");
+  }
+#undef CODE_APPEND
+
+  std::ofstream autoGenFile(autoGenFileName);
+  if (autoGenFile.is_open()) {
+    autoGenFile.write(codeBuf, codeOffs);
+    autoGenFile.close();
+  }
+
+  delete[] codeBuf;
+}
+
+void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
+  assert(m_parsed.m_language == SHADER_LANGUAGE_HLSL);
+
+  const uint32_t BUF_SIZE = 10000;
+  char* codeBuf = new char[BUF_SIZE];
+  size_t codeOffs = 0;
+  memset(codeBuf, 0, BUF_SIZE);
+
+#define CODE_APPEND(...)                                                       \
+  codeOffs += snprintf(codeBuf + codeOffs, BUF_SIZE - codeOffs, __VA_ARGS__)
+
+  // constant declarations
+  for (const auto& c : m_parsed.m_constInts)
+    CODE_APPEND("#define %s %d\n", c.name.c_str(), c.value);
+  for (const auto& c : m_parsed.m_constUints)
+    CODE_APPEND("#define %s %u\n", c.name.c_str(), c.value);
+  for (const auto& c : m_parsed.m_constFloats)
+    CODE_APPEND("#define %s %f\n", c.name.c_str(), c.value);
+  CODE_APPEND("\n");
+
+  // struct declarations
+  for (const auto& s : m_parsed.m_structDefs) {
+    if (s.body.size() > 0) // skip dummy structs 
+      CODE_APPEND("%s;\n\n", s.body.c_str());
+  }
+
+  // resource declarations
+  uint32_t slot = 0;
+  {
+    slot++;
+
+    for (int i = 0; i < m_buffers.size(); ++i) {
+      const auto& parsedBuf = m_parsed.m_buffers[i];
+      const auto& structdef = m_parsed.m_structDefs[parsedBuf.structIdx];
+
+      if (parsedBuf.bufferCount == 1) {
+        CODE_APPEND(
+          "[[vk::binding(%u, 1)]] RWStructuredBuffer<%s> %s;\n",
+          slot++,
+          structdef.name.c_str(),
+          parsedBuf.name.c_str());
+      }
+      else {
+        assert(false); // TODO impl support for buffer heaps...
+      /*  CODE_APPEND(
+          "layout(set=1,binding=%u) buffer BUFFER_%s {  %s _INNER_%s[]; } _HEAP_%s [%u];\n",
+          slot++,
+          parsedBuf.name.c_str(),
+          structdef.name.c_str(),
+          parsedBuf.name.c_str(),
+          parsedBuf.name.c_str(),
+          parsedBuf.bufferCount);
+        CODE_APPEND(
+          "#define %s(IDX) _HEAP_%s[IDX]._INNER_%s\n",
+          parsedBuf.name.c_str(),
+          parsedBuf.name.c_str(),
+          parsedBuf.name.c_str());*/
+      }
+    }
+
+    for (int i = 0; i < m_images.size(); ++i) {
+      const auto& desc = m_parsed.m_images[i];
+      if ((desc.createOptions.usage & VK_IMAGE_USAGE_STORAGE_BIT) == 0)
+        continue;
+
+      CODE_APPEND(
+        "[[vk::binding(%u, 1)]] RWTexture2D<%s> %s;\n",
+        slot++,
+        desc.format.c_str(),
+        desc.name.c_str());
+    }
+
+    for (int i = 0; i < m_parsed.m_textures.size(); ++i) {
+      const auto& txDesc = m_parsed.m_textures[i];
+      assert(txDesc.imageIdx >= 0 || txDesc.texFileIdx >= 0);
+      CODE_APPEND(
+        "[[vk::binding(%u, 1)]] Texture2D %s;\n",
+        slot++,
+        txDesc.name.c_str());
+    }
+
+    if (m_bHasDynamicData) {
+      CODE_APPEND(
+        "\n[[vk::binding(%u, 1)]] cbuffer _UserUniforms {\n", 
+        slot++);
+
+      for (const auto& cpicker : m_parsed.m_colorPickers) {
+        CODE_APPEND("\tfloat4 %s;\n", cpicker.name.c_str());
+      }
+      for (const auto& uslider : m_parsed.m_sliderUints) {
+        CODE_APPEND("\tuint %s;\n", uslider.name.c_str());
+      }
+      for (const auto& islider : m_parsed.m_sliderInts) {
+        CODE_APPEND("\tint %s;\n", islider.name.c_str());
+      }
+      for (const auto& fslider : m_parsed.m_sliderFloats) {
+        CODE_APPEND("\tfloat %s;\n", fslider.name.c_str());
+      }
+      for (const auto& checkbox : m_parsed.m_checkboxes) {
+        CODE_APPEND("\tbool %s;\n", checkbox.name.c_str());
+      }
+
+      CODE_APPEND("};\n\n");
+    }
+  }
+
+  // TODO have a special subdir for hlsl versions of FlrLib ?
+  // includes
+  CODE_APPEND("#include <FlrLib/Fluorescence.hlsl>\n\n");
+
+  // camera uniforms (references included structs)
+  if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
+    CODE_APPEND(
+      "[[vk::binding(%u, 1)]] cbuffer _CameraUniforms { PerspectiveCamera camera; };\n\n",
+      slot++);
+  }
+
+  // audio uniforms
+  if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
+    CODE_APPEND(
+      "[[vk::binding(%u, 1)]] cbuffer _AudioUniforms { AudioInput audio; };\n\n",
+      slot++);
+  }
+
+  // auto-gen pixel shader block, pre-include of user-file
+  {
+    CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
+    for (const auto& pass : m_parsed.m_renderPasses) {
+      for (const auto& attachmentRef : pass.attachments) {
+        const auto& img = m_images[attachmentRef.imageIdx];
+        if ((img.image.getOptions().usage &
+          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
+          CODE_APPEND(
+            "#ifndef _ATTACHMENT_VAR_%s\n", attachmentRef.aliasName.c_str());
+          CODE_APPEND(
+            "#define _ATTACHMENT_VAR_%s\n", attachmentRef.aliasName.c_str());
+          CODE_APPEND("static float4 %s;\n", attachmentRef.aliasName.c_str());
+          CODE_APPEND(
+            "#endif // _ATTACHMENT_VAR_ %s\n", attachmentRef.aliasName.c_str());
+        }
+      }
+    }
+    CODE_APPEND("#endif // IS_PIXEL_SHADER\n");
+  }
+
+  std::filesystem::path shaderFileName = m_projPath;
+  shaderFileName.replace_extension(".hlsl");
+
+  std::string userShaderName = shaderFileName.filename().string();
+  CODE_APPEND("#include \"%s\"\n\n", userShaderName.c_str());
+
+  // auto-gen compute shader block, post-include of user-file
+#if 0
+  // TODO implement compute shaders
+  {
+    CODE_APPEND("#ifdef IS_COMP_SHADER\n");
+    for (const auto& c : m_parsed.m_computeShaders) {
+      CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", c.name.c_str());
+      CODE_APPEND(
+        "layout(local_size_x = %u, local_size_y = %u, local_size_z = %u) "
+        "in;\n",
+        c.groupSizeX,
+        c.groupSizeY,
+        c.groupSizeZ);
+      CODE_APPEND("void main() { %s(); }\n", c.name.c_str());
+      CODE_APPEND("#endif // _ENTRY_POINT_%s\n", c.name.c_str());
+    }
+    CODE_APPEND("#endif // IS_COMP_SHADER\n");
+  }
+#endif
+  // auto-gen vertex shader block, post-include of user-file
+  // In the hlsl case, we define the VS entry point as main...
+  // no code gen needed.. (verify)
+  /*{
+    CODE_APPEND("\n\n#ifdef IS_VERTEX_SHADER\n");
+    for (const auto& pass : m_parsed.m_renderPasses) {
+      for (const auto& draw : pass.draws) {
+        const auto& structdef = m_parsed.m_structDefs[draw.vertexOutputStructIdx];
+        CODE_APPEND("#if defined(_ENTRY_POINT_%s)\n", draw.vertexShader.c_str());
+        CODE_APPEND("%s main() {", structdef.name.c_str());
+        CODE_APPEND("\treturn %s();\n", draw.vertexShader.c_str());
+        CODE_APPEND("};\n");
+        CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.vertexShader.c_str());
+      }
+    }
+    CODE_APPEND("#endif // IS_VERTEX_SHADER\n");
+  }*/
+
+
+  // auto-gen pixel shader block, post-include of user-file
+  {
+    CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
+    for (const auto& pass : m_parsed.m_renderPasses) {
+      for (const auto& draw : pass.draws) {
+        CODE_APPEND("#if defined(_ENTRY_POINT_%s)\n", draw.pixelShader.c_str());
+        CODE_APPEND("struct _PixelOutput {\n");
+        uint32_t colorAttachmentIdx = 0;
+        for (const auto& attachmentRef : pass.attachments) {
+          const auto& img = m_images[attachmentRef.imageIdx];
+          if ((img.image.getOptions().usage &
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
+            CODE_APPEND(
+              "\tfloat4 _%s : SV_Target%u;\n",
+              attachmentRef.aliasName.c_str(),
+              colorAttachmentIdx++);
+          }
+        }
+        const auto& structdef = m_parsed.m_structDefs[draw.vertexOutputStructIdx];
+        CODE_APPEND("}; // struct _PixelOutput\n");
+        CODE_APPEND("_PixelOutput main(%s IN) {\n", structdef.name.c_str());
+        CODE_APPEND("\t_PixelOutput OUT;\n");
+        CODE_APPEND("\t%s(IN);\n", draw.pixelShader.c_str());
+        for (const auto& attachmentRef : pass.attachments) {
+          const auto& img = m_images[attachmentRef.imageIdx];
+          if ((img.image.getOptions().usage &
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
+            CODE_APPEND(
+              "\tOUT._%s = %s;\n",
+              attachmentRef.aliasName.c_str(),
+              attachmentRef.aliasName.c_str());
+          }
+        }
+        CODE_APPEND("\treturn OUT;\n");
+        CODE_APPEND("}\n");
         CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
       }
     }

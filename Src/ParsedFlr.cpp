@@ -73,23 +73,21 @@ ParsedFlr::ParsedFlr(
 
   uint32_t uintDummyStructIdx = m_structDefs.size();
   m_structDefs.push_back({ "uint", "", 4 });
-  uint32_t intDummyStructIdx = m_structDefs.size();
   m_structDefs.push_back({ "int", "", 4 });
-  uint32_t floatDummyStructIdx = m_structDefs.size();
   m_structDefs.push_back({ "float", "", 4 });
-  uint32_t vec2DummyStructIdx = m_structDefs.size();
   m_structDefs.push_back({ "vec2", "", 8 });
-  uint32_t uvec2DummyStructIdx = m_structDefs.size();
+  m_structDefs.push_back({ "float2", "", 8 });
   m_structDefs.push_back({ "uvec2", "", 8 });
+  m_structDefs.push_back({ "uint2", "", 8 });
   // vec3 buffers would work fine on the gpu size with stride 16
   // but they seem like a foot-gun on the CPU side since sizeof(glm::vec3) == 12
   // ...
   //uint32_t vec3DummyStructIdx = m_structDefs.size();
   //m_structDefs.push_back({ "vec3", "", 16 });
-  uint32_t vec4DummyStructIdx = m_structDefs.size();
   m_structDefs.push_back({ "vec4", "", 16 });
-  uint32_t uvec4DummyStructIdx = m_structDefs.size();
+  m_structDefs.push_back({ "float4", "", 16 });
   m_structDefs.push_back({ "uvec4", "", 16 });
+  m_structDefs.push_back({ "uint4", "", 16 });
 
   struct File {
     File(const char* filename)
@@ -1446,6 +1444,15 @@ ParsedFlr::ParsedFlr(
 
   // post-process
   PARSER_VERIFY(m_displayImageIdx >= 0, "Must specify a display_image");
+
+  // enforce valid vertex output existence for hlsl
+  if (m_language == AltheaEngine::SHADER_LANGUAGE_HLSL) {
+    for (auto& pass : m_renderPasses) {
+      for (auto& draw : pass.draws) {
+        PARSER_VERIFY(draw.vertexOutputStructIdx >= 0, "Found draw call without declared vertex_output - this is not supported in hlsl mode.");
+      }
+    }
+  }
 
   // fill in missing depth resources for any passes that are missing depth and
   // require it
