@@ -72,22 +72,22 @@ ParsedFlr::ParsedFlr(
   m_constUints.push_back({"SCREEN_HEIGHT", app.getSwapChainExtent().height});
 
   uint32_t uintDummyStructIdx = m_structDefs.size();
-  m_structDefs.push_back({ "uint", "", 4 });
-  m_structDefs.push_back({ "int", "", 4 });
-  m_structDefs.push_back({ "float", "", 4 });
-  m_structDefs.push_back({ "vec2", "", 8 });
-  m_structDefs.push_back({ "float2", "", 8 });
-  m_structDefs.push_back({ "uvec2", "", 8 });
-  m_structDefs.push_back({ "uint2", "", 8 });
+  m_structDefs.push_back({"uint", "", 4});
+  m_structDefs.push_back({"int", "", 4});
+  m_structDefs.push_back({"float", "", 4});
+  m_structDefs.push_back({"vec2", "", 8});
+  m_structDefs.push_back({"float2", "", 8});
+  m_structDefs.push_back({"uvec2", "", 8});
+  m_structDefs.push_back({"uint2", "", 8});
   // vec3 buffers would work fine on the gpu size with stride 16
   // but they seem like a foot-gun on the CPU side since sizeof(glm::vec3) == 12
   // ...
-  //uint32_t vec3DummyStructIdx = m_structDefs.size();
+  // uint32_t vec3DummyStructIdx = m_structDefs.size();
   //m_structDefs.push_back({ "vec3", "", 16 });
-  m_structDefs.push_back({ "vec4", "", 16 });
-  m_structDefs.push_back({ "float4", "", 16 });
-  m_structDefs.push_back({ "uvec4", "", 16 });
-  m_structDefs.push_back({ "uint4", "", 16 });
+  m_structDefs.push_back({"vec4", "", 16});
+  m_structDefs.push_back({"float4", "", 16});
+  m_structDefs.push_back({"uvec4", "", 16});
+  m_structDefs.push_back({"uint4", "", 16});
 
   struct File {
     File(const char* filename)
@@ -106,6 +106,7 @@ ParsedFlr::ParsedFlr(
   char lineBuf[1024];
 
   uint32_t uiIdx = 0;
+  uint32_t instrIdx = 0;
 
   bool bTaskBlockActive = false;
 
@@ -123,9 +124,26 @@ ParsedFlr::ParsedFlr(
     }
   };
 
+  auto emitParserWarning = [&](const char* msg) {
+    char warn[1024];
+    sprintf(
+        warn,
+        "WARNING: %s ON LINE: %u IN FILE: %s\n",
+        msg,
+        flrFileStack.back().m_lineNumber,
+        flrFileStack.back().m_filename.c_str());
+    std::cerr << warn << std::endl;
+  };
+
 #define PARSER_VERIFY(X, MSG)                                                  \
   if (!(X)) {                                                                  \
     emitParserError(MSG);                                                      \
+    return;                                                                    \
+  }
+
+#define PARSER_VERIFY_WARN(X, MSG)                                             \
+  if (!(X)) {                                                                  \
+    emitParserWarning(MSG);                                                    \
     return;                                                                    \
   }
 
@@ -589,29 +607,92 @@ ParsedFlr::ParsedFlr(
     case I_COMPUTE_SHADER: {
       PARSER_VERIFY(name, "Could not parse compute-shader name.");
 
-      auto groupSizeX = parseUintOrVar();
-      PARSER_VERIFY(
-          groupSizeX,
-          "Could not parse groupSizeX in compute-shader declaration.");
+      uint32_t gsx, gsy, gsz;
+      if (auto groupSizeX = parseUintOrVar()) {
+        PARSER_VERIFY(
+            groupSizeX && *groupSizeX > 0,
+            "Could not parse groupSizeX in compute-shader declaration.");
 
-      p.parseWhitespace();
-      auto groupSizeY = parseUintOrVar();
-      PARSER_VERIFY(
-          groupSizeY,
-          "Could not parse groupSizeY in compute-shader declaration.");
+        p.parseWhitespace();
+        auto groupSizeY = parseUintOrVar();
+        PARSER_VERIFY(
+            groupSizeY && *groupSizeY > 0,
+            "Could not parse groupSizeY in compute-shader declaration.");
 
-      p.parseWhitespace();
-      auto groupSizeZ = parseUintOrVar();
-      PARSER_VERIFY(
-          groupSizeZ,
-          "Could not parse groupSizeZ in compute-shader declaration.");
+        p.parseWhitespace();
+        auto groupSizeZ = parseUintOrVar();
+        PARSER_VERIFY(
+            groupSizeZ && *groupSizeZ > 0,
+            "Could not parse groupSizeZ in compute-shader declaration.");
 
-      m_computeShaders.push_back(
-          {std::string(*name), *groupSizeX, *groupSizeY, *groupSizeZ});
+        gsx = *groupSizeX;
+        gsy = *groupSizeY;
+        gsz = *groupSizeZ;
+      } else {
+        gsx = gsy = gsz = 0u;
+      }
+
+      m_computeShaders.push_back({std::string(*name), gsx, gsy, gsz});
 
       break;
     }
-    case I_COMPUTE_DISPATCH: {
+    case I_COMPUTE_DISPATCH: // deprecated...
+      PARSER_VERIFY_WARN(
+          false,
+          "compute_dispatch is deprecated, use dispatch_threads or dispatch "
+          "instead.");
+      [[fallthrough]];
+    case I_DISPATCH_THREADS: {
+      auto compShader = p.parseName();
+      PARSER_VERIFY(
+          compShader,
+          "Could not parse compute-shader name in compute-dispatch "
+          "declaration.");
+
+      p.parseWhitespace();
+      auto dispatchSizeX = parseUintOrVar();
+      PARSER_VERIFY(
+          dispatchSizeX,
+          "Could not parse dispatchSizeX in compute-dispatch declaration.");
+      p.parseWhitespace();
+      auto dispatchSizeY = parseUintOrVar();
+      PARSER_VERIFY(
+          dispatchSizeY,
+          "Could not parse dispatchSizeY in compute-dispatch declaration.");
+      p.parseWhitespace();
+      auto dispatchSizeZ = parseUintOrVar();
+      PARSER_VERIFY(
+          dispatchSizeZ,
+          "Could not parse dispatchSizeZ in compute-dispatch declaration.");
+
+      uint32_t computeShaderIdx = 0;
+      for (const auto& c : m_computeShaders) {
+        if (c.name.size() == compShader->size() &&
+            !strncmp(c.name.data(), compShader->data(), c.name.size()))
+          break;
+        ++computeShaderIdx;
+      }
+      PARSER_VERIFY(
+          computeShaderIdx < m_computeShaders.size(),
+          "Could not find referenced compute-shader referenced in "
+          "compute-dispatch declaration.");
+      auto& cs = m_computeShaders[computeShaderIdx];
+      PARSER_VERIFY(
+          cs.groupSizeX > 0 && cs.groupSizeY > 0 && cs.groupSizeZ > 0,
+          "dispatch_threads can only be used if the group-sizes are annotated "
+          "in the compute_shader declaration. Consider using dispatch "
+          "instead.");
+      pushTask((uint32_t)m_computeDispatches.size(), TT_COMPUTE);
+      m_computeDispatches.push_back(
+          {computeShaderIdx,
+           *dispatchSizeX,
+           *dispatchSizeY,
+           *dispatchSizeZ,
+           DM_THREADS});
+
+      break;
+    }
+    case I_DISPATCH: {
       auto compShader = p.parseName();
       PARSER_VERIFY(
           compShader,
@@ -648,8 +729,11 @@ ParsedFlr::ParsedFlr(
 
       pushTask((uint32_t)m_computeDispatches.size(), TT_COMPUTE);
       m_computeDispatches.push_back(
-          {computeShaderIdx, *dispatchSizeX, *dispatchSizeY, *dispatchSizeZ});
-
+          {computeShaderIdx,
+           *dispatchSizeX,
+           *dispatchSizeY,
+           *dispatchSizeZ,
+           DM_GROUPS});
       break;
     }
     case I_BARRIER: {
@@ -983,28 +1067,28 @@ ParsedFlr::ParsedFlr(
       p.parseWhitespace();
       auto instanceCount = parseUintOrVar();
       PARSER_VERIFY(
-        instanceCount,
-        "Could not parse instanceCount in draw_indexed instruction.");
+          instanceCount,
+          "Could not parse instanceCount in draw_indexed instruction.");
       p.parseWhitespace();
       auto bufName = p.parseName();
       PARSER_VERIFY(
-        bufName,
-        "Could not parse index buffer name in draw_indexed instruction");
+          bufName,
+          "Could not parse index buffer name in draw_indexed instruction");
       auto bufIdx = findIndexByName(m_buffers, *bufName);
       PARSER_VERIFY(
-        bufIdx,
-        "Could not find specified index buffer in draw_indexed instruction.");
+          bufIdx,
+          "Could not find specified index buffer in draw_indexed instruction.");
       PARSER_VERIFY(
-        m_buffers[*bufIdx].bIndexBuffer,
-        "Specified buffer is not an index buffer in draw_indexed "
-        "instruction.");
+          m_buffers[*bufIdx].bIndexBuffer,
+          "Specified buffer is not an index buffer in draw_indexed "
+          "instruction.");
       p.parseWhitespace();
       uint32_t subBufferIdx = 0;
       if (auto subBufferIdx_ = p.parseUint())
         subBufferIdx = *subBufferIdx_;
       PARSER_VERIFY(
-        subBufferIdx < m_buffers[*bufIdx].bufferCount,
-        "Out-of-range subBufferIdx provided to draw_indexed instruction.");
+          subBufferIdx < m_buffers[*bufIdx].bufferCount,
+          "Out-of-range subBufferIdx provided to draw_indexed instruction.");
       p.parseWhitespace();
 
       uint32_t renderPassIdx = m_renderPasses.size() - 1;
@@ -1425,10 +1509,18 @@ ParsedFlr::ParsedFlr(
       break;
     };
     case I_LANGUAGE: {
+      // TODO need to assert if language decl is not first instruction...
+      // however need to properly handle force includes that are pushed onto the
+      // file stack which contain instructions not provided by user...
+      
+      //PARSER_VERIFY(instrIdx == 0, "language declaration needs to be first instruction in flr file, if it is present.");
       // keep in sync with enum AltheaEngine::ShaderLanguage
       const char* LANGUAGES[] = {"glsl", "hlsl"};
       auto lang = p.parseToken<AltheaEngine::ShaderLanguage>(LANGUAGES, 2);
-      PARSER_VERIFY(lang, "Unknown language name specified when setting shader compiler language.");
+      PARSER_VERIFY(
+          lang,
+          "Unknown language name specified when setting shader compiler "
+          "language.");
       m_language = *lang;
       break;
     };
@@ -1440,6 +1532,7 @@ ParsedFlr::ParsedFlr(
     // the instruction needs to consume the arrayCount and set it to nullopt, if
     // it is valid
     PARSER_VERIFY(!arrayCount, "Array syntax not valid for this instruction.");
+    instrIdx++;
   }
 
   // post-process
@@ -1449,7 +1542,10 @@ ParsedFlr::ParsedFlr(
   if (m_language == AltheaEngine::SHADER_LANGUAGE_HLSL) {
     for (auto& pass : m_renderPasses) {
       for (auto& draw : pass.draws) {
-        PARSER_VERIFY(draw.vertexOutputStructIdx >= 0, "Found draw call without declared vertex_output - this is not supported in hlsl mode.");
+        PARSER_VERIFY(
+            draw.vertexOutputStructIdx >= 0,
+            "Found draw call without declared vertex_output - this is not "
+            "supported in hlsl mode.");
       }
     }
   }
@@ -1498,6 +1594,7 @@ ParsedFlr::ParsedFlr(
   }
 
 #undef PARSER_VERIFY
+#undef PARSER_VERIFY_WARNING
 
   m_failed = false;
 }

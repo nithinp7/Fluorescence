@@ -69,7 +69,8 @@ Project::Project(
         m_parsed.m_structDefs[desc.structIdx];
 
     VmaAllocationCreateInfo allocInfo{};
-    VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    VkBufferUsageFlags usageFlags =
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     if (desc.bTransferSrc)
       usageFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     if (desc.bIndirectArgs)
@@ -80,31 +81,30 @@ Project::Project(
       allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
       allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
       usageFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    }
-    else {
+    } else {
       allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     }
 
     auto& bufCollection = m_buffers.emplace_back();
-    m_bufferResourceStates.emplace_back() = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    m_bufferResourceStates.emplace_back() =
+        VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
     for (int bi = 0; bi < desc.bufferCount; bi++) {
       bufCollection.push_back(BufferUtilities::createBuffer(
-        *GApplication,
-        structdef.size * desc.elemCount,
-        usageFlags,
-        allocInfo));
+          *GApplication,
+          structdef.size * desc.elemCount,
+          usageFlags,
+          allocInfo));
       if (desc.bCpuVisible) {
         void* pMapped = bufCollection.back().mapMemory();
         memset(pMapped, 0, structdef.size * desc.elemCount);
         bufCollection.back().unmapMemory();
-      }
-      else {
+      } else {
         vkCmdFillBuffer(
-          commandBuffer,
-          bufCollection.back().getBuffer(),
-          0,
-          structdef.size * desc.elemCount,
-          0);
+            commandBuffer,
+            bufCollection.back().getBuffer(),
+            0,
+            structdef.size * desc.elemCount,
+            0);
       }
     }
   }
@@ -260,7 +260,9 @@ Project::Project(
 
   struct HeapBinder {
     std::vector<VkDescriptorBufferInfo> bufferInfos;
-    const std::vector<VkDescriptorBufferInfo>& getBufferInfos() const { return bufferInfos; }
+    const std::vector<VkDescriptorBufferInfo>& getBufferInfos() const {
+      return bufferInfos;
+    }
   };
   std::vector<HeapBinder> heapBinders;
 
@@ -276,11 +278,10 @@ Project::Project(
 
       if (parsedBuf.bufferCount == 1) {
         assign.bindStorageBuffer(
-          bufCollection[0],
-          structdef.size * parsedBuf.elemCount,
-          false);
-      }
-      else {
+            bufCollection[0],
+            structdef.size * parsedBuf.elemCount,
+            false);
+      } else {
         auto& binder = heapBinders.emplace_back();
         binder.bufferInfos.reserve(parsedBuf.bufferCount);
         for (auto& buf : bufCollection) {
@@ -332,8 +333,7 @@ Project::Project(
   if (m_parsed.m_language == SHADER_LANGUAGE_GLSL) {
     autoGenFileName.replace_extension(".gen.glsl");
     codeGenGlsl(autoGenFileName);
-  }
-  else {
+  } else {
     autoGenFileName.replace_extension(".gen.hlsl");
     codeGenHlsl(autoGenFileName);
   }
@@ -342,14 +342,23 @@ Project::Project(
   for (const auto& c : m_parsed.m_computeShaders) {
     ShaderDefines defs{};
     defs.emplace("IS_COMP_SHADER", "");
+    if (m_parsed.m_language == SHADER_LANGUAGE_HLSL) {
+      /* char buf[128];
+       sprintf(buf, "__hack(){}\n[numthreads(%u,%u,%u)]\nvoid main", c.groupSizeX, c.groupSizeY, c.groupSizeZ);
+       defs.emplace(c.name, std::string(buf));*/
+      defs.emplace(c.name, "main");
+    }
     defs.emplace(std::string("_ENTRY_POINT_") + c.name, "");
 
     ComputePipelineBuilder builder{};
-    builder.setComputeShader(autoGenFileName.string(), defs, m_parsed.m_language);
+    builder.setComputeShader(
+        autoGenFileName.string(),
+        defs,
+        m_parsed.m_language);
     builder.layoutBuilder
-      .addDescriptorSet(GGlobalHeap->getDescriptorSetLayout())
-      .addDescriptorSet(m_descriptorSets.getLayout())
-      .addPushConstants<GenericPush>(VK_SHADER_STAGE_COMPUTE_BIT);
+        .addDescriptorSet(GGlobalHeap->getDescriptorSetLayout())
+        .addDescriptorSet(m_descriptorSets.getLayout())
+        .addPushConstants<GenericPush>(VK_SHADER_STAGE_COMPUTE_BIT);
 
     {
       std::string errors = builder.compileShadersGetErrors();
@@ -436,14 +445,20 @@ Project::Project(
         if (m_parsed.m_language == SHADER_LANGUAGE_HLSL)
           defs.emplace(draw.vertexShader, "main");
         defs.emplace(pass.name, "");
-        builder.addVertexShader(autoGenFileName.string(), defs, m_parsed.m_language);
+        builder.addVertexShader(
+            autoGenFileName.string(),
+            defs,
+            m_parsed.m_language);
       }
       {
         ShaderDefines defs{};
         defs.emplace("IS_PIXEL_SHADER", "");
         defs.emplace(std::string("_ENTRY_POINT_") + draw.pixelShader, "");
         defs.emplace(pass.name, "");
-        builder.addFragmentShader(autoGenFileName.string(), defs, m_parsed.m_language);
+        builder.addFragmentShader(
+            autoGenFileName.string(),
+            defs,
+            m_parsed.m_language);
       }
 
       {
@@ -606,14 +621,14 @@ void Project::tick(const FrameContext& frame) {
           const auto& saveBufferButton = m_parsed.m_saveBufferButtons[ui.idx];
           char buf[256];
           sprintf(
-            buf,
-            "Save Buffer: %s",
-            m_parsed.m_buffers[saveBufferButton.bufferIdx].name.c_str());
+              buf,
+              "Save Buffer: %s",
+              m_parsed.m_buffers[saveBufferButton.bufferIdx].name.c_str());
           if (ImGui::Button(buf)) {
             OPENFILENAME ofn{};
             memset(&ofn, 0, sizeof(OPENFILENAME));
 
-            char filename[512] = { 0 };
+            char filename[512] = {0};
 
             ofn.lStructSize = sizeof(ofn);
             ofn.hwndOwner = glfwGetWin32Window(GApplication->getWindow());
@@ -630,7 +645,7 @@ void Project::tick(const FrameContext& frame) {
             if (GetSaveFileName(&ofn)) {
               m_pendingSaveBuffer = {
                   std::string(filename),
-                  saveBufferButton.bufferIdx };
+                  saveBufferButton.bufferIdx};
             }
           }
 
@@ -641,9 +656,9 @@ void Project::tick(const FrameContext& frame) {
 
           char buf[256];
           sprintf(
-            buf,
-            "Run Task: %s",
-            m_parsed.m_taskBlocks[taskButton.taskBlockIdx].name.c_str());
+              buf,
+              "Run Task: %s",
+              m_parsed.m_taskBlocks[taskButton.taskBlockIdx].name.c_str());
           if (ImGui::Button(buf))
             m_pendingTaskBlockExecs.push_back(taskButton.taskBlockIdx);
 
@@ -681,12 +696,18 @@ void Project::tick(const FrameContext& frame) {
   }
 }
 
-void Project::dispatch(ComputeShaderId compShader, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ, VkCommandBuffer commandBuffer, const FrameContext& frame) const {
+void Project::dispatch(
+    ComputeShaderId compShader,
+    uint32_t groupCountX,
+    uint32_t groupCountY,
+    uint32_t groupCountZ,
+    VkCommandBuffer commandBuffer,
+    const FrameContext& frame) const {
   assert(compShader.isValid());
 
   VkDescriptorSet sets[] = {
       GGlobalHeap->getDescriptorSet(),
-      m_descriptorSets.getCurrentDescriptorSet(frame) };
+      m_descriptorSets.getCurrentDescriptorSet(frame)};
 
   const ComputePipeline& c = m_computePipelines[compShader.idx];
   c.bindPipeline(commandBuffer);
@@ -696,12 +717,18 @@ void Project::dispatch(ComputeShaderId compShader, uint32_t groupCountX, uint32_
   vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
 }
 
-void Project::dispatchThreads(ComputeShaderId compShader, uint32_t threadCountX, uint32_t threadCountY, uint32_t threadCountZ, VkCommandBuffer commandBuffer, const FrameContext& frame) const {
+void Project::dispatchThreads(
+    ComputeShaderId compShader,
+    uint32_t threadCountX,
+    uint32_t threadCountY,
+    uint32_t threadCountZ,
+    VkCommandBuffer commandBuffer,
+    const FrameContext& frame) const {
   assert(compShader.isValid());
 
   VkDescriptorSet sets[] = {
       GGlobalHeap->getDescriptorSet(),
-      m_descriptorSets.getCurrentDescriptorSet(frame) };
+      m_descriptorSets.getCurrentDescriptorSet(frame)};
 
   const auto& csInfo = m_parsed.m_computeShaders[compShader.idx];
   const ComputePipeline& c = m_computePipelines[compShader.idx];
@@ -709,13 +736,19 @@ void Project::dispatchThreads(ComputeShaderId compShader, uint32_t threadCountX,
   c.bindDescriptorSets(commandBuffer, sets, 2);
   c.setPushConstants(commandBuffer, m_pushData);
 
-  uint32_t groupCountX = (threadCountX + csInfo.groupSizeX - 1) / csInfo.groupSizeX;
-  uint32_t groupCountY = (threadCountY + csInfo.groupSizeY - 1) / csInfo.groupSizeY;
-  uint32_t groupCountZ = (threadCountZ + csInfo.groupSizeZ - 1) / csInfo.groupSizeZ;
+  uint32_t groupCountX =
+      (threadCountX + csInfo.groupSizeX - 1) / csInfo.groupSizeX;
+  uint32_t groupCountY =
+      (threadCountY + csInfo.groupSizeY - 1) / csInfo.groupSizeY;
+  uint32_t groupCountZ =
+      (threadCountZ + csInfo.groupSizeZ - 1) / csInfo.groupSizeZ;
   vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
 }
 
-void Project::executeTaskBlock(TaskBlockId id, VkCommandBuffer commandBuffer, const FrameContext& frame) {
+void Project::executeTaskBlock(
+    TaskBlockId id,
+    VkCommandBuffer commandBuffer,
+    const FrameContext& frame) {
   executeTaskList(m_parsed.m_taskBlocks[id.idx].tasks, commandBuffer, frame);
 }
 
@@ -738,12 +771,20 @@ void Project::executeTaskList(
       c.bindDescriptorSets(commandBuffer, sets, 2);
       c.setPushConstants(commandBuffer, m_pushData);
 
-      uint32_t groupCountX = (dispatch.dispatchSizeX + compute.groupSizeX - 1) /
-                             compute.groupSizeX;
-      uint32_t groupCountY = (dispatch.dispatchSizeY + compute.groupSizeY - 1) /
-                             compute.groupSizeY;
-      uint32_t groupCountZ = (dispatch.dispatchSizeZ + compute.groupSizeZ - 1) /
-                             compute.groupSizeZ;
+      uint32_t groupCountX, groupCountY, groupCountZ;
+      if (dispatch.mode == ParsedFlr::DM_THREADS) {
+        groupCountX = (dispatch.dispatchSizeX + compute.groupSizeX - 1) /
+                      compute.groupSizeX;
+        groupCountY = (dispatch.dispatchSizeY + compute.groupSizeY - 1) /
+                      compute.groupSizeY;
+        groupCountZ = (dispatch.dispatchSizeZ + compute.groupSizeZ - 1) /
+                      compute.groupSizeZ;
+      } else {
+        groupCountX = dispatch.dispatchSizeX;
+        groupCountY = dispatch.dispatchSizeY;
+        groupCountZ = dispatch.dispatchSizeZ;
+      }
+
       vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
       break;
     }
@@ -755,8 +796,7 @@ void Project::executeTaskList(
         const auto& parsedBuf = m_parsed.m_buffers[bufferIdx];
         const auto& parsedStruct = m_parsed.m_structDefs[parsedBuf.structIdx];
         VkAccessFlags srcAccess = m_bufferResourceStates[bufferIdx];
-        for (const auto& buf : m_buffers[bufferIdx])
-        {
+        for (const auto& buf : m_buffers[bufferIdx]) {
           VkBufferMemoryBarrier barrier{};
           barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
           barrier.buffer = buf.getBuffer();
@@ -766,16 +806,16 @@ void Project::executeTaskList(
           barrier.dstAccessMask = dstAccess;
 
           vkCmdPipelineBarrier(
-            commandBuffer,
-            VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
-            VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
-            0,
-            0,
-            nullptr,
-            1,
-            &barrier,
-            0,
-            nullptr);
+              commandBuffer,
+              VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+              VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+              0,
+              0,
+              nullptr,
+              1,
+              &barrier,
+              0,
+              nullptr);
         }
         m_bufferResourceStates[bufferIdx] = dstAccess;
       }
@@ -797,35 +837,40 @@ void Project::executeTaskList(
         pass.getDrawContext().updatePushConstants(m_pushData, 0);
         for (const auto& draw : m_parsed.m_renderPasses[task.idx].draws) {
           switch (draw.drawMode) {
-          case ParsedFlr::DM_DRAW:
-          {
+          case ParsedFlr::DM_DRAW: {
             pass.getDrawContext().draw(draw.param0, draw.param1);
             break;
           }
-          case ParsedFlr::DM_DRAW_INDEXED:
-          {
+          case ParsedFlr::DM_DRAW_INDEXED: {
             const auto& b = m_buffers[draw.param1][draw.param2];
             uint32_t indexCount = m_parsed.m_buffers[draw.param1].elemCount;
-            vkCmdBindIndexBuffer(commandBuffer, b.getBuffer(), 0, VK_INDEX_TYPE_UINT32);
+            vkCmdBindIndexBuffer(
+                commandBuffer,
+                b.getBuffer(),
+                0,
+                VK_INDEX_TYPE_UINT32);
             vkCmdDrawIndexed(commandBuffer, indexCount, draw.param0, 0, 0, 0);
             break;
           }
-          case ParsedFlr::DM_DRAW_INDIRECT:
-          {
+          case ParsedFlr::DM_DRAW_INDIRECT: {
             const auto& b = m_buffers[draw.param0];
             assert(b.size() == 1);
-            vkCmdDrawIndirect(commandBuffer, b[draw.param2].getBuffer(), 0, draw.param1, 16);
+            vkCmdDrawIndirect(
+                commandBuffer,
+                b[draw.param2].getBuffer(),
+                0,
+                draw.param1,
+                16);
             break;
           }
-          case ParsedFlr::DM_DRAW_OBJ:
-          {
+          case ParsedFlr::DM_DRAW_OBJ: {
             SimpleObjLoader::LoadedObj& obj = m_objModels[draw.param0];
             for (SimpleObjLoader::ObjMesh& mesh : obj.m_meshes) {
               pass.getDrawContext().bindIndexBuffer(mesh.m_indices);
               pass.getDrawContext().bindVertexBuffer(obj.m_vertices);
               pass.getDrawContext().drawIndexed(
-                mesh.m_indices.getIndexCount(),
-                1);
+                  mesh.m_indices.getIndexCount(),
+                  1);
             }
             break;
           }
@@ -876,7 +921,8 @@ void Project::executeTaskList(
     }
 
     case ParsedFlr::TT_TASK: {
-      // TODO: would be nice to handle this without recursion, but this should be safe since it is validated during parsing
+      // TODO: would be nice to handle this without recursion, but this should
+      // be safe since it is validated during parsing
       executeTaskBlock(TaskBlockId(task.idx), commandBuffer, frame);
       break;
     }
@@ -927,13 +973,13 @@ void Project::draw(VkCommandBuffer commandBuffer, const FrameContext& frame) {
     auto& buf = m_buffers[m_pendingSaveBuffer->bufferIdx];
     // TODO support saving buffer heap...
     assert(buf.size() == 0);
-    // TODO: 
+    // TODO:
     // TODO: assumes r8g8b8a8_unorm, generalize
     const auto& desc = m_parsed.m_buffers[m_pendingSaveBuffer->bufferIdx];
     const auto& s = m_parsed.m_structDefs[desc.structIdx];
     size_t byteSize = s.size * desc.elemCount;
     BufferAllocation* pStaging = new BufferAllocation(
-      BufferUtilities::createStagingBufferForDownload(byteSize));
+        BufferUtilities::createStagingBufferForDownload(byteSize));
 
     VkBufferCopy2 region{};
     region.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2;
@@ -956,22 +1002,25 @@ void Project::draw(VkCommandBuffer commandBuffer, const FrameContext& frame) {
     // TODO: barrier dst ...
 
     GApplication->addDeletiontask(
-      { [pStaging,
-        byteSize,
-        fileName = m_pendingSaveImage->m_saveFileName]() {
-         void* pMapped = pStaging->mapMemory();
-         Utilities::writeFile(fileName, gsl::span((const char*)pMapped, byteSize));
-         pStaging->unmapMemory();
-         delete pStaging;
-       },
-       GApplication->getCurrentFrameRingBufferIndex() });
+        {[pStaging, byteSize, fileName = m_pendingSaveImage->m_saveFileName]() {
+           void* pMapped = pStaging->mapMemory();
+           Utilities::writeFile(
+               fileName,
+               gsl::span((const char*)pMapped, byteSize));
+           pStaging->unmapMemory();
+           delete pStaging;
+         },
+         GApplication->getCurrentFrameRingBufferIndex()});
 
     m_pendingSaveBuffer = std::nullopt;
   }
 
   if (m_bFirstDraw) {
     if (m_parsed.m_initializationTaskIdx >= 0)
-      executeTaskBlock(TaskBlockId(m_parsed.m_initializationTaskIdx), commandBuffer, frame);
+      executeTaskBlock(
+          TaskBlockId(m_parsed.m_initializationTaskIdx),
+          commandBuffer,
+          frame);
     m_bFirstDraw = false;
   }
 
@@ -1011,31 +1060,31 @@ void Project::tryRecompile() {
 }
 
 namespace OptionsParserImpl {
-  enum OptionType : uint32_t {
-    OT_CAMERA = 0,
-    OT_SLIDER_UINT,
-    OT_SLIDER_INT,
-    OT_SLIDER_FLOAT,
-    OT_COLOR_PICKER,
-    OT_CHECKBOX,
-    OT_COUNT
-  };
-  static constexpr const char* OPTION_PARSER_TOKEN_STRS[OT_COUNT] = {
+enum OptionType : uint32_t {
+  OT_CAMERA = 0,
+  OT_SLIDER_UINT,
+  OT_SLIDER_INT,
+  OT_SLIDER_FLOAT,
+  OT_COLOR_PICKER,
+  OT_CHECKBOX,
+  OT_COUNT
+};
+static constexpr const char* OPTION_PARSER_TOKEN_STRS[OT_COUNT] = {
     "camera",
     "slider_uint",
     "slider_int",
     "slider_float",
     "color_picker",
-    "checkbox"
-  };
-} // namespace ConfigParserImpl
+    "checkbox"};
+} // namespace OptionsParserImpl
 
 void Project::loadOptions() {
   // TODO make this parser error tolerant...
 
   using namespace OptionsParserImpl;
 
-  std::filesystem::path optionsPath = m_projPath.parent_path();
+  // TODO fix
+  std::filesystem::path optionsPath = m_projPath;
   optionsPath.replace_filename("Options");
   optionsPath.replace_extension(".ini");
 
@@ -1043,22 +1092,26 @@ void Project::loadOptions() {
   char nameBuf[256];
   char linebuf[1024];
   while (stream.getline(linebuf, 1024)) {
-    Parser p{ linebuf };
-    
+    Parser p{linebuf};
+
     auto parseToken = [&]() {
       return p.parseToken<OptionType>(OPTION_PARSER_TOKEN_STRS, OT_COUNT);
     };
     auto parseName = [&]() {
       auto name = p.parseName();
-      snprintf(nameBuf, 256, "%.*s", static_cast<uint32_t>(name->size()), name->data());
+      snprintf(
+          nameBuf,
+          256,
+          "%.*s",
+          static_cast<uint32_t>(name->size()),
+          name->data());
     };
-    
+
     p.parseWhitespace();
     if (auto uiType = parseToken()) {
       p.parseWhitespace();
       switch (*uiType) {
-      case OT_CAMERA: 
-      {
+      case OT_CAMERA: {
         glm::vec3 pos;
         pos.x = *p.parseFloat();
         p.parseWhitespace();
@@ -1074,32 +1127,34 @@ void Project::loadOptions() {
         m_cameraController.resetRotation(yaw, pitch);
         break;
       }
-      case OT_SLIDER_UINT:
-      {
+      case OT_SLIDER_UINT: {
         parseName();
         p.parseWhitespace();
-        *getSliderUint(nameBuf) = *p.parseUint();
+        auto val = *p.parseUint();
+        if (auto view = getSliderUint(nameBuf))
+          *view = val;
         p.parseWhitespace();
         break;
       }
-      case OT_SLIDER_INT:
-      {
+      case OT_SLIDER_INT: {
         parseName();
         p.parseWhitespace();
-        *getSliderInt(nameBuf) = *p.parseInt();
+        auto val = *p.parseInt();
+        if (auto view = getSliderInt(nameBuf))
+          *view = val;
         p.parseWhitespace();
         break;
       }
-      case OT_SLIDER_FLOAT:
-      {
+      case OT_SLIDER_FLOAT: {
         parseName();
         p.parseWhitespace();
-        *getSliderFloat(nameBuf) = *p.parseFloat();
+        auto val = *p.parseFloat();
+        if (auto view = getSliderFloat(nameBuf))
+          *view = val;
         p.parseWhitespace();
         break;
       }
-      case OT_COLOR_PICKER:
-      {
+      case OT_COLOR_PICKER: {
         parseName();
         p.parseWhitespace();
         glm::vec4 val;
@@ -1107,22 +1162,24 @@ void Project::loadOptions() {
           val[i] = *p.parseFloat();
           p.parseWhitespace();
         }
-        *getColorPicker(nameBuf) = val;
+        if (auto view = getColorPicker(nameBuf))
+          *view = val;
         break;
       }
-      case OT_CHECKBOX:
-      {
+      case OT_CHECKBOX: {
         parseName();
         p.parseWhitespace();
-        *getCheckBox(nameBuf) = *p.parseUint() != 0u;
+        auto val = *p.parseUint() != 0u;
+        if (auto view = getCheckBox(nameBuf))
+          *view = val;
         p.parseWhitespace();
         break;
       }
       }
     }
-    
+
     // unexpected token
-    assert(p.c == 0);
+    assert(p.parseChar(0));
   }
 
   stream.close();
@@ -1153,7 +1210,7 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
 
   // struct declarations
   for (const auto& s : m_parsed.m_structDefs) {
-    if (s.body.size() > 0) // skip dummy structs 
+    if (s.body.size() > 0) // skip dummy structs
       CODE_APPEND("%s;\n\n", s.body.c_str());
   }
 
@@ -1168,26 +1225,26 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
 
       if (parsedBuf.bufferCount == 1) {
         CODE_APPEND(
-          "layout(set=1,binding=%u) buffer BUFFER_%s {  %s %s[]; };\n",
-          slot++,
-          parsedBuf.name.c_str(),
-          structdef.name.c_str(),
-          parsedBuf.name.c_str());
-      }
-      else {
+            "layout(set=1,binding=%u) buffer BUFFER_%s {  %s %s[]; };\n",
+            slot++,
+            parsedBuf.name.c_str(),
+            structdef.name.c_str(),
+            parsedBuf.name.c_str());
+      } else {
         CODE_APPEND(
-          "layout(set=1,binding=%u) buffer BUFFER_%s {  %s _INNER_%s[]; } _HEAP_%s [%u];\n",
-          slot++,
-          parsedBuf.name.c_str(),
-          structdef.name.c_str(),
-          parsedBuf.name.c_str(),
-          parsedBuf.name.c_str(),
-          parsedBuf.bufferCount);
+            "layout(set=1,binding=%u) buffer BUFFER_%s {  %s _INNER_%s[]; } "
+            "_HEAP_%s [%u];\n",
+            slot++,
+            parsedBuf.name.c_str(),
+            structdef.name.c_str(),
+            parsedBuf.name.c_str(),
+            parsedBuf.name.c_str(),
+            parsedBuf.bufferCount);
         CODE_APPEND(
-          "#define %s(IDX) _HEAP_%s[IDX]._INNER_%s\n",
-          parsedBuf.name.c_str(),
-          parsedBuf.name.c_str(),
-          parsedBuf.name.c_str());
+            "#define %s(IDX) _HEAP_%s[IDX]._INNER_%s\n",
+            parsedBuf.name.c_str(),
+            parsedBuf.name.c_str(),
+            parsedBuf.name.c_str());
       }
     }
 
@@ -1197,25 +1254,25 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
         continue;
 
       CODE_APPEND(
-        "layout(set=1,binding=%u, %s) uniform image2D %s;\n",
-        slot++,
-        desc.format.c_str(),
-        desc.name.c_str());
+          "layout(set=1,binding=%u, %s) uniform image2D %s;\n",
+          slot++,
+          desc.format.c_str(),
+          desc.name.c_str());
     }
 
     for (int i = 0; i < m_parsed.m_textures.size(); ++i) {
       const auto& txDesc = m_parsed.m_textures[i];
       assert(txDesc.imageIdx >= 0 || txDesc.texFileIdx >= 0);
       CODE_APPEND(
-        "layout(set=1,binding=%u) uniform sampler2D %s;\n",
-        slot++,
-        txDesc.name.c_str());
+          "layout(set=1,binding=%u) uniform sampler2D %s;\n",
+          slot++,
+          txDesc.name.c_str());
     }
 
     if (m_bHasDynamicData) {
       CODE_APPEND(
-        "\nlayout(set=1, binding=%u) uniform _UserUniforms {\n",
-        slot++);
+          "\nlayout(set=1, binding=%u) uniform _UserUniforms {\n",
+          slot++);
 
       for (const auto& cpicker : m_parsed.m_colorPickers) {
         CODE_APPEND("\tvec4 %s;\n", cpicker.name.c_str());
@@ -1243,17 +1300,17 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
   // camera uniforms (references included structs)
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
     CODE_APPEND(
-      "layout(set=1, binding=%u) uniform _CameraUniforms { PerspectiveCamera "
-      "camera; };\n\n",
-      slot++);
+        "layout(set=1, binding=%u) uniform _CameraUniforms { PerspectiveCamera "
+        "camera; };\n\n",
+        slot++);
   }
 
   // audio uniforms
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
     CODE_APPEND(
-      "layout(set=1, binding=%u) uniform _AudioUniforms { AudioInput "
-      "audio; };\n\n",
-      slot++);
+        "layout(set=1, binding=%u) uniform _AudioUniforms { AudioInput "
+        "audio; };\n\n",
+        slot++);
   }
 
   // auto-gen pixel shader block, pre-include of user-file
@@ -1261,17 +1318,23 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
-        CODE_APPEND("#if defined(_ENTRY_POINT_%s) && !defined(_ENTRY_POINT_%s_ATTACHMENTS)\n", draw.pixelShader.c_str(), draw.pixelShader.c_str());
-        CODE_APPEND("#define _ENTRY_POINT_%s_ATTACHMENTS\n", draw.pixelShader.c_str());
+        CODE_APPEND(
+            "#if defined(_ENTRY_POINT_%s) && "
+            "!defined(_ENTRY_POINT_%s_ATTACHMENTS)\n",
+            draw.pixelShader.c_str(),
+            draw.pixelShader.c_str());
+        CODE_APPEND(
+            "#define _ENTRY_POINT_%s_ATTACHMENTS\n",
+            draw.pixelShader.c_str());
         uint32_t colorAttachmentIdx = 0;
         for (const auto& attachmentRef : pass.attachments) {
           const auto& img = m_images[attachmentRef.imageIdx];
           if ((img.image.getOptions().usage &
-            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
+               VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
             CODE_APPEND(
-              "layout(location = %d) out vec4 %s;\n",
-              colorAttachmentIdx++,
-              attachmentRef.aliasName.c_str());
+                "layout(location = %d) out vec4 %s;\n",
+                colorAttachmentIdx++,
+                attachmentRef.aliasName.c_str());
           }
         }
         CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
@@ -1291,13 +1354,17 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
     CODE_APPEND("#ifdef IS_COMP_SHADER\n");
     for (const auto& c : m_parsed.m_computeShaders) {
       CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", c.name.c_str());
-      CODE_APPEND(
-        "layout(local_size_x = %u, local_size_y = %u, local_size_z = %u) "
-        "in;\n",
-        c.groupSizeX,
-        c.groupSizeY,
-        c.groupSizeZ);
-      CODE_APPEND("void main() { %s(); }\n", c.name.c_str());
+      if (c.groupSizeX > 0 && c.groupSizeY > 0 && c.groupSizeZ > 0) {
+        CODE_APPEND(
+            "layout(local_size_x = %u, local_size_y = %u, local_size_z = %u) "
+            "in;\n",
+            c.groupSizeX,
+            c.groupSizeY,
+            c.groupSizeZ);
+        CODE_APPEND("void main() { %s(); }\n", c.name.c_str());
+      } else {
+        CODE_APPEND("#define %s main\n", c.name.c_str());
+      }
       CODE_APPEND("#endif // _ENTRY_POINT_%s\n", c.name.c_str());
     }
     CODE_APPEND("#endif // IS_COMP_SHADER\n");
@@ -1311,13 +1378,12 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
         CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", draw.vertexShader.c_str());
         if (draw.vertexOutputStructIdx >= 0) {
           CODE_APPEND(
-            "layout(location = 0) out %s _VERTEX_OUTPUT;\n",
-            m_parsed.m_structDefs[draw.vertexOutputStructIdx].name.c_str());
+              "layout(location = 0) out %s _VERTEX_OUTPUT;\n",
+              m_parsed.m_structDefs[draw.vertexOutputStructIdx].name.c_str());
           CODE_APPEND(
-            "void main() { _VERTEX_OUTPUT = %s(); }\n",
-            draw.vertexShader.c_str());
-        }
-        else {
+              "void main() { _VERTEX_OUTPUT = %s(); }\n",
+              draw.vertexShader.c_str());
+        } else {
           CODE_APPEND("void main() { %s(); }\n", draw.vertexShader.c_str());
         }
         CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.vertexShader.c_str());
@@ -1331,18 +1397,23 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
-        CODE_APPEND("#if defined(_ENTRY_POINT_%s) && !defined(_ENTRY_POINT_%s_INTERPOLANTS)\n", draw.pixelShader.c_str(), draw.pixelShader.c_str());
-        CODE_APPEND("#define _ENTRY_POINT_%s_INTERPOLANTS\n", draw.pixelShader.c_str());
+        CODE_APPEND(
+            "#if defined(_ENTRY_POINT_%s) && "
+            "!defined(_ENTRY_POINT_%s_INTERPOLANTS)\n",
+            draw.pixelShader.c_str(),
+            draw.pixelShader.c_str());
+        CODE_APPEND(
+            "#define _ENTRY_POINT_%s_INTERPOLANTS\n",
+            draw.pixelShader.c_str());
 
         if (draw.vertexOutputStructIdx >= 0) {
           CODE_APPEND(
-            "layout(location = 0) in %s _VERTEX_INPUT;\n",
-            m_parsed.m_structDefs[draw.vertexOutputStructIdx].name.c_str());
+              "layout(location = 0) in %s _VERTEX_INPUT;\n",
+              m_parsed.m_structDefs[draw.vertexOutputStructIdx].name.c_str());
           CODE_APPEND(
-            "void main() { %s(_VERTEX_INPUT); }\n",
-            draw.pixelShader.c_str());
-        }
-        else {
+              "void main() { %s(_VERTEX_INPUT); }\n",
+              draw.pixelShader.c_str());
+        } else {
           CODE_APPEND("void main() { %s(); }\n", draw.pixelShader.c_str());
         }
         CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
@@ -1383,7 +1454,7 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
 
   // struct declarations
   for (const auto& s : m_parsed.m_structDefs) {
-    if (s.body.size() > 0) // skip dummy structs 
+    if (s.body.size() > 0) // skip dummy structs
       CODE_APPEND("%s;\n\n", s.body.c_str());
   }
 
@@ -1398,26 +1469,25 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
 
       if (parsedBuf.bufferCount == 1) {
         CODE_APPEND(
-          "[[vk::binding(%u, 1)]] RWStructuredBuffer<%s> %s;\n",
-          slot++,
-          structdef.name.c_str(),
-          parsedBuf.name.c_str());
-      }
-      else {
+            "[[vk::binding(%u, 1)]] RWStructuredBuffer<%s> %s;\n",
+            slot++,
+            structdef.name.c_str(),
+            parsedBuf.name.c_str());
+      } else {
         assert(false); // TODO impl support for buffer heaps...
-      /*  CODE_APPEND(
-          "layout(set=1,binding=%u) buffer BUFFER_%s {  %s _INNER_%s[]; } _HEAP_%s [%u];\n",
-          slot++,
-          parsedBuf.name.c_str(),
-          structdef.name.c_str(),
-          parsedBuf.name.c_str(),
-          parsedBuf.name.c_str(),
-          parsedBuf.bufferCount);
-        CODE_APPEND(
-          "#define %s(IDX) _HEAP_%s[IDX]._INNER_%s\n",
-          parsedBuf.name.c_str(),
-          parsedBuf.name.c_str(),
-          parsedBuf.name.c_str());*/
+        /*  CODE_APPEND(
+            "layout(set=1,binding=%u) buffer BUFFER_%s {  %s _INNER_%s[]; } _HEAP_%s [%u];\n",
+            slot++,
+            parsedBuf.name.c_str(),
+            structdef.name.c_str(),
+            parsedBuf.name.c_str(),
+            parsedBuf.name.c_str(),
+            parsedBuf.bufferCount);
+          CODE_APPEND(
+            "#define %s(IDX) _HEAP_%s[IDX]._INNER_%s\n",
+            parsedBuf.name.c_str(),
+            parsedBuf.name.c_str(),
+            parsedBuf.name.c_str());*/
       }
     }
 
@@ -1427,25 +1497,23 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
         continue;
 
       CODE_APPEND(
-        "[[vk::binding(%u, 1)]] RWTexture2D<%s> %s;\n",
-        slot++,
-        desc.format.c_str(),
-        desc.name.c_str());
+          "[[vk::binding(%u, 1)]] RWTexture2D<%s> %s;\n",
+          slot++,
+          desc.format.c_str(),
+          desc.name.c_str());
     }
 
     for (int i = 0; i < m_parsed.m_textures.size(); ++i) {
       const auto& txDesc = m_parsed.m_textures[i];
       assert(txDesc.imageIdx >= 0 || txDesc.texFileIdx >= 0);
       CODE_APPEND(
-        "[[vk::binding(%u, 1)]] Texture2D %s;\n",
-        slot++,
-        txDesc.name.c_str());
+          "[[vk::binding(%u, 1)]] Texture2D %s;\n",
+          slot++,
+          txDesc.name.c_str());
     }
 
     if (m_bHasDynamicData) {
-      CODE_APPEND(
-        "\n[[vk::binding(%u, 1)]] cbuffer _UserUniforms {\n", 
-        slot++);
+      CODE_APPEND("\n[[vk::binding(%u, 1)]] cbuffer _UserUniforms {\n", slot++);
 
       for (const auto& cpicker : m_parsed.m_colorPickers) {
         CODE_APPEND("\tfloat4 %s;\n", cpicker.name.c_str());
@@ -1467,6 +1535,33 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
     }
   }
 
+  // TODO - both compute shader and vertex shader entry points are compiled
+  // by swapping in "main" via macros
+  // Would be better to use the compiler feature that does this automatically
+  for (const auto& c : m_parsed.m_computeShaders) {
+    CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", c.name.c_str());
+    CODE_APPEND("#define %s main\n", c.name.c_str());
+    CODE_APPEND("#endif // _ENTRY_POINT_%s\n\n", c.name.c_str());
+  }
+
+  {
+    CODE_APPEND("\n\n#ifdef IS_VERTEX_SHADER\n");
+    for (const auto& pass : m_parsed.m_renderPasses) {
+      for (const auto& draw : pass.draws) {
+        CODE_APPEND(
+            "#if defined(_ENTRY_POINT_%s) && !defined(%s)\n",
+            draw.vertexShader.c_str(),
+            draw.vertexShader.c_str());
+        CODE_APPEND("#define %s main\n", draw.vertexShader.c_str());
+        CODE_APPEND(
+            "#endif // defined(_ENTRY_POINT_%s) && !defined(%s)\n\n",
+            draw.vertexShader.c_str(),
+            draw.vertexShader.c_str());
+      }
+    }
+    CODE_APPEND("#endif // IS_VERTEX_SHADER\n\n");
+  }
+
   // TODO have a special subdir for hlsl versions of FlrLib ?
   // includes
   CODE_APPEND("#include <FlrLib/Fluorescence.hlsl>\n\n");
@@ -1474,15 +1569,17 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
   // camera uniforms (references included structs)
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
     CODE_APPEND(
-      "[[vk::binding(%u, 1)]] cbuffer _CameraUniforms { PerspectiveCamera camera; };\n\n",
-      slot++);
+        "[[vk::binding(%u, 1)]] cbuffer _CameraUniforms { PerspectiveCamera "
+        "camera; };\n\n",
+        slot++);
   }
 
   // audio uniforms
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
     CODE_APPEND(
-      "[[vk::binding(%u, 1)]] cbuffer _AudioUniforms { AudioInput audio; };\n\n",
-      slot++);
+        "[[vk::binding(%u, 1)]] cbuffer _AudioUniforms { AudioInput audio; "
+        "};\n\n",
+        slot++);
   }
 
   // auto-gen pixel shader block, pre-include of user-file
@@ -1492,14 +1589,17 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
       for (const auto& attachmentRef : pass.attachments) {
         const auto& img = m_images[attachmentRef.imageIdx];
         if ((img.image.getOptions().usage &
-          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
+             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
           CODE_APPEND(
-            "#ifndef _ATTACHMENT_VAR_%s\n", attachmentRef.aliasName.c_str());
+              "#ifndef _ATTACHMENT_VAR_%s\n",
+              attachmentRef.aliasName.c_str());
           CODE_APPEND(
-            "#define _ATTACHMENT_VAR_%s\n", attachmentRef.aliasName.c_str());
+              "#define _ATTACHMENT_VAR_%s\n",
+              attachmentRef.aliasName.c_str());
           CODE_APPEND("static float4 %s;\n", attachmentRef.aliasName.c_str());
           CODE_APPEND(
-            "#endif // _ATTACHMENT_VAR_ %s\n", attachmentRef.aliasName.c_str());
+              "#endif // _ATTACHMENT_VAR_ %s\n",
+              attachmentRef.aliasName.c_str());
         }
       }
     }
@@ -1512,63 +1612,28 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
   std::string userShaderName = shaderFileName.filename().string();
   CODE_APPEND("#include \"%s\"\n\n", userShaderName.c_str());
 
-  // auto-gen compute shader block, post-include of user-file
-#if 0
-  // TODO implement compute shaders
-  {
-    CODE_APPEND("#ifdef IS_COMP_SHADER\n");
-    for (const auto& c : m_parsed.m_computeShaders) {
-      CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", c.name.c_str());
-      CODE_APPEND(
-        "layout(local_size_x = %u, local_size_y = %u, local_size_z = %u) "
-        "in;\n",
-        c.groupSizeX,
-        c.groupSizeY,
-        c.groupSizeZ);
-      CODE_APPEND("void main() { %s(); }\n", c.name.c_str());
-      CODE_APPEND("#endif // _ENTRY_POINT_%s\n", c.name.c_str());
-    }
-    CODE_APPEND("#endif // IS_COMP_SHADER\n");
-  }
-#endif
-  // auto-gen vertex shader block, post-include of user-file
-  // In the hlsl case, we define the VS entry point as main...
-  // no code gen needed.. (verify)
-  /*{
-    CODE_APPEND("\n\n#ifdef IS_VERTEX_SHADER\n");
-    for (const auto& pass : m_parsed.m_renderPasses) {
-      for (const auto& draw : pass.draws) {
-        const auto& structdef = m_parsed.m_structDefs[draw.vertexOutputStructIdx];
-        CODE_APPEND("#if defined(_ENTRY_POINT_%s)\n", draw.vertexShader.c_str());
-        CODE_APPEND("%s main() {", structdef.name.c_str());
-        CODE_APPEND("\treturn %s();\n", draw.vertexShader.c_str());
-        CODE_APPEND("};\n");
-        CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.vertexShader.c_str());
-      }
-    }
-    CODE_APPEND("#endif // IS_VERTEX_SHADER\n");
-  }*/
-
-
-  // auto-gen pixel shader block, post-include of user-file
   {
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
-        CODE_APPEND("#if defined(_ENTRY_POINT_%s)\n", draw.pixelShader.c_str());
+        CODE_APPEND(
+            "#if defined(_ENTRY_POINT_%s) && !defined(_PS_WRAPPER)\n",
+            draw.pixelShader.c_str());
+        CODE_APPEND("#define _PS_WRAPPER\n");
         CODE_APPEND("struct _PixelOutput {\n");
         uint32_t colorAttachmentIdx = 0;
         for (const auto& attachmentRef : pass.attachments) {
           const auto& img = m_images[attachmentRef.imageIdx];
           if ((img.image.getOptions().usage &
-            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
+               VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
             CODE_APPEND(
-              "\tfloat4 _%s : SV_Target%u;\n",
-              attachmentRef.aliasName.c_str(),
-              colorAttachmentIdx++);
+                "\tfloat4 _%s : SV_Target%u;\n",
+                attachmentRef.aliasName.c_str(),
+                colorAttachmentIdx++);
           }
         }
-        const auto& structdef = m_parsed.m_structDefs[draw.vertexOutputStructIdx];
+        const auto& structdef =
+            m_parsed.m_structDefs[draw.vertexOutputStructIdx];
         CODE_APPEND("}; // struct _PixelOutput\n");
         CODE_APPEND("_PixelOutput main(%s IN) {\n", structdef.name.c_str());
         CODE_APPEND("\t_PixelOutput OUT;\n");
@@ -1576,16 +1641,18 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
         for (const auto& attachmentRef : pass.attachments) {
           const auto& img = m_images[attachmentRef.imageIdx];
           if ((img.image.getOptions().usage &
-            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
+               VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
             CODE_APPEND(
-              "\tOUT._%s = %s;\n",
-              attachmentRef.aliasName.c_str(),
-              attachmentRef.aliasName.c_str());
+                "\tOUT._%s = %s;\n",
+                attachmentRef.aliasName.c_str(),
+                attachmentRef.aliasName.c_str());
           }
         }
         CODE_APPEND("\treturn OUT;\n");
         CODE_APPEND("}\n");
-        CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
+        CODE_APPEND(
+            "#endif // defined(_ENTRY_POINT_%s) && !defined(_PS_WRAPPER)\n",
+            draw.pixelShader.c_str());
       }
     }
     CODE_APPEND("#endif // IS_PIXEL_SHADER\n");
@@ -1604,17 +1671,15 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
 void Project::serializeOptions() {
   using namespace OptionsParserImpl;
 
-  std::filesystem::path optionsPath = m_projPath.parent_path();
-  optionsPath.remove_filename();
-  if (!std::filesystem::exists(optionsPath))
-    std::filesystem::create_directory(optionsPath);
+  std::filesystem::path optionsPath = m_projPath;
+  // optionsPath.remove_filename();
+  // if (!std::filesystem::exists(optionsPath))
+  // std::filesystem::create_directory(optionsPath);
   optionsPath.replace_filename("Options");
   optionsPath.replace_extension(".ini");
 
   std::ofstream optionsFile(optionsPath);
-  auto writeStr = [&](const char* str) {
-    optionsFile.write(str, strlen(str));
-  };
+  auto writeStr = [&](const char* str) { optionsFile.write(str, strlen(str)); };
 
   if (optionsFile.is_open()) {
     char buf[1024];
@@ -1624,7 +1689,15 @@ void Project::serializeOptions() {
       glm::vec3 pos(cam.getTransform()[3]);
       float yaw = cam.computeYawDegrees();
       float pitch = cam.computePitchDegrees();
-      snprintf(buf, 1024, "camera %f %f %f %f %f\n", pos.x, pos.y, pos.z, yaw, pitch);
+      snprintf(
+          buf,
+          1024,
+          "camera %f %f %f %f %f\n",
+          pos.x,
+          pos.y,
+          pos.z,
+          yaw,
+          pitch);
       writeStr(buf);
     }
 
@@ -1632,31 +1705,59 @@ void Project::serializeOptions() {
       switch (ui.type) {
       case ParsedFlr::UET_SLIDER_UINT: {
         const auto& uslider = m_parsed.m_sliderUints[ui.idx];
-        snprintf(buf, 1024, "slider_uint %s %u\n", uslider.name.c_str(), *uslider.pValue);
+        snprintf(
+            buf,
+            1024,
+            "slider_uint %s %u\n",
+            uslider.name.c_str(),
+            *uslider.pValue);
         writeStr(buf);
         break;
       }
       case ParsedFlr::UET_SLIDER_INT: {
         const auto& islider = m_parsed.m_sliderInts[ui.idx];
-        snprintf(buf, 1024, "slider_int %s %d\n", islider.name.c_str(), *islider.pValue);
+        snprintf(
+            buf,
+            1024,
+            "slider_int %s %d\n",
+            islider.name.c_str(),
+            *islider.pValue);
         writeStr(buf);
         break;
       }
       case ParsedFlr::UET_SLIDER_FLOAT: {
         const auto& fslider = m_parsed.m_sliderFloats[ui.idx];
-        snprintf(buf, 1024, "slider_float %s %f\n", fslider.name.c_str(), *fslider.pValue);
+        snprintf(
+            buf,
+            1024,
+            "slider_float %s %f\n",
+            fslider.name.c_str(),
+            *fslider.pValue);
         writeStr(buf);
         break;
       }
       case ParsedFlr::UET_COLOR_PICKER: {
         const auto& cpicker = m_parsed.m_colorPickers[ui.idx];
-        snprintf(buf, 1024, "color_picker %s %f %f %f %f\n", cpicker.name.c_str(), cpicker.pValue[0], cpicker.pValue[1], cpicker.pValue[2], cpicker.pValue[3]);
+        snprintf(
+            buf,
+            1024,
+            "color_picker %s %f %f %f %f\n",
+            cpicker.name.c_str(),
+            cpicker.pValue[0],
+            cpicker.pValue[1],
+            cpicker.pValue[2],
+            cpicker.pValue[3]);
         writeStr(buf);
         break;
       }
       case ParsedFlr::UET_CHECKBOX: {
         const auto& checkbox = m_parsed.m_checkboxes[ui.idx];
-        snprintf(buf, 1024, "checkbox %s %d\n", checkbox.name.c_str(), (int)*checkbox.pValue);
+        snprintf(
+            buf,
+            1024,
+            "checkbox %s %d\n",
+            checkbox.name.c_str(),
+            (int)*checkbox.pValue);
         writeStr(buf);
         break;
       }
@@ -1759,13 +1860,17 @@ void Project::barrierRW(BufferId buf, VkCommandBuffer commandBuffer) const {
   const auto& structInfo = m_parsed.m_structDefs[bufInfo.structIdx];
   for (const auto& buf : m_buffers[buf.idx])
     BufferUtilities::rwBarrier(
-      commandBuffer,
-      buf.getBuffer(),
-      0,
-      bufInfo.elemCount * structInfo.size);
+        commandBuffer,
+        buf.getBuffer(),
+        0,
+        bufInfo.elemCount * structInfo.size);
 }
 
-void Project::setPushConstants(uint32_t push0, uint32_t push1, uint32_t push2, uint32 push3) {
+void Project::setPushConstants(
+    uint32_t push0,
+    uint32_t push1,
+    uint32_t push2,
+    uint32 push3) {
   m_pushData.push0 = push0;
   m_pushData.push1 = push1;
   m_pushData.push2 = push2;

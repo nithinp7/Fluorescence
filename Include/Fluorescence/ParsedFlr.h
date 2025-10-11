@@ -171,11 +171,16 @@ struct ParsedFlr {
   };
   std::vector<ComputeShader> m_computeShaders;
 
+  enum DispatchMode : uint8_t {
+    DM_THREADS = 0,
+    DM_GROUPS
+  };
   struct ComputeDispatch {
     uint32_t computeShaderIndex;
     uint32_t dispatchSizeX;
     uint32_t dispatchSizeY;
     uint32_t dispatchSizeZ;
+    DispatchMode mode;
   };
   std::vector<ComputeDispatch> m_computeDispatches;
 
@@ -322,7 +327,9 @@ struct ParsedFlr {
     I_INDEX_BUFFER,
     I_ENABLE_CPU_ACCESS,
     I_COMPUTE_SHADER,
-    I_COMPUTE_DISPATCH,
+    I_COMPUTE_DISPATCH, // deprecated...
+    I_DISPATCH_THREADS,
+    I_DISPATCH,
     I_BARRIER,
     I_OBJ_MODEL,
     I_DISPLAY_IMAGE,
@@ -378,6 +385,8 @@ struct ParsedFlr {
       "enable_cpu_access",
       "compute_shader",
       "compute_dispatch",
+      "dispatch_threads",
+      "dispatch",
       "barrier",
       "obj_model",
       "display_image",

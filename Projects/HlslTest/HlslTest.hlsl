@@ -1,4 +1,11 @@
 
+#ifdef IS_COMP_SHADER
+[numthreads(32, 1, 1)]
+void CS_Test(uint tid : SV_DispatchThreadId) {
+  TestBuffer[tid].color = float4(TEST_COLOR.rgb * tid / 32.0, 1.0);
+}
+#endif // IS_COMP_SHADER
+
 #ifdef IS_VERTEX_SHADER
 VertexOutput VS_Test(uint vidx : SV_VERTEXID) {
   VertexOutput OUT;
@@ -10,6 +17,7 @@ VertexOutput VS_Test(uint vidx : SV_VERTEXID) {
 
 #ifdef IS_PIXEL_SHADER
 void PS_Test(VertexOutput IN) {
-  outColor = float4(TEST_COLOR.rg * IN.uv, 0.0, 1.0);//IN.uv;
+  uint idx = uint(IN.uv.x * 31.9);
+  outColor = TestBuffer[idx].color;
 }
 #endif // IS_PIXEL_SHADER

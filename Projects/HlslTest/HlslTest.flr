@@ -2,6 +2,11 @@ language: hlsl
 
 color_picker TEST_COLOR: 1.0 0.0 0.0 1.0
 
+struct TestStruct {
+  float4 color;
+};
+struct_size: 16
+
 struct VertexOutput {
   float4 position : SV_Position;
   float2 uv : TEXCOORD0;
@@ -9,6 +14,14 @@ struct VertexOutput {
 struct_size: 24
 
 display_image DisplayImage
+
+structured_buffer TestBuffer: TestStruct 32
+
+compute_shader CS_Test
+
+dispatch: CS_Test 32 1 1
+
+barrier: TestBuffer
 
 render_pass DISPLAY_PASS:
   store_attachments: outColor=DisplayImage
