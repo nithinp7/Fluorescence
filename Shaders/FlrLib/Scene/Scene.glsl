@@ -36,6 +36,7 @@ void startSceneBuild() {
   defaultMat.emissive = 0.0.xxx;
   defaultMat.specular = 0.0.xxx;
   defaultMat.metallic = 0.0;
+  defaultMat.transmission = 0.0;
   pushMaterial(defaultMat);
 }
 
@@ -283,6 +284,7 @@ void CS_InitCornellBox() {
     mat.emissive = 0.0.xxx;
     mat.metallic = 0.0;
     mat.specular = 0.04.xxx;
+    mat.transmission = 0.0;
     pushMaterial(mat);
 
     {
@@ -354,6 +356,7 @@ void CS_InitCornellBox() {
     mat.specular = 0.2.xxx;
     mat.emissive = 0.0.xxx;
     mat.metallic = 0.0;
+    mat.transmission = 0.0;
     pushMaterial(mat);
 
     pushSphere(vec3(-0.45, 0.35, -0.25) * cornellBoxScale, 0.35 * cornellBoxScale);
@@ -366,6 +369,7 @@ void CS_InitCornellBox() {
     mat.specular = 0.02.xxx;
     mat.emissive = 0.0.xxx;
     mat.metallic = 0.0;
+    mat.transmission = 1.0;
     pushMaterial(mat);
 
     pushSphere(vec3(0.45, 0.2 + 0.25, 0.15) * cornellBoxScale, 0.25 * cornellBoxScale);

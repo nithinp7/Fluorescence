@@ -6,6 +6,7 @@ struct PackedGBuffer {
   vec4 gbuffer1;
   vec4 gbuffer2;
   vec4 gbuffer3;
+  vec4 gbuffer4;
 };
 
 // #define GBUF_USE_PACKED_NORMALS
@@ -15,10 +16,11 @@ PackedGBuffer packGBuffer(Material mat, vec3 normal) {
   float emissivePower = emissiveIntensity / (1 + emissiveIntensity);
 
   PackedGBuffer p;
-  p.gbuffer0 = vec4((emissiveIntensity > 0.0) ? mat.emissive / emissiveIntensity : mat.diffuse,1.0);
+  p.gbuffer0 = vec4((emissiveIntensity > 0.0) ? mat.emissive / emissiveIntensity : mat.diffuse, 1.0);
   p.gbuffer1 = vec4(0.5 * normal + 0.5.xxx, 1.0);
   p.gbuffer2 = vec4(mat.roughness, mat.metallic, emissivePower, 1.0);
   p.gbuffer3 = vec4(mat.specular, 1.0);
+  p.gbuffer4 = vec4(mat.transmission, 0.0, 0.0, 1.0);
 
 #ifdef GBUF_USE_PACKED_NORMALS
   normal = mat3(camera.view) * normal;
@@ -43,6 +45,7 @@ void unpackGBuffer(PackedGBuffer p, out Material mat, out vec3 normal) {
   mat.emissive = emissiveIntensity * mat.diffuse;
   mat.metallic = p.gbuffer2.y;
   mat.specular = p.gbuffer3.rgb;
+  mat.transmission = p.gbuffer4.r;
 
   normal = normalize(p.gbuffer1.rgb * 2.0 - 1.0.xxx);
 #ifdef GBUF_USE_PACKED_NORMALS

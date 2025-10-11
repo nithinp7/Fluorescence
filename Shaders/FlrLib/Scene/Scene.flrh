@@ -40,7 +40,7 @@ struct Material {
   vec3 emissive;
   float metallic;
   vec3 specular;
-  float padding;
+  float transmission;
 };
 struct_size: 64
 
