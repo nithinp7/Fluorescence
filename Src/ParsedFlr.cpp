@@ -144,7 +144,6 @@ ParsedFlr::ParsedFlr(
 #define PARSER_VERIFY_WARN(X, MSG)                                             \
   if (!(X)) {                                                                  \
     emitParserWarning(MSG);                                                    \
-    return;                                                                    \
   }
 
   while (!flrFileStack.empty()) {
@@ -555,7 +554,7 @@ ParsedFlr::ParsedFlr(
 
       const auto& s = m_structDefs[*structIdx];
       bool bIndirectArgs =
-          s.name == "IndirectArgs" || s.name == "IndexedIndirectArgs";
+          s.name == "IndirectArgs" || s.name == "IndexedIndirectArgs" || s.name == "IndirectDispatch";
 
       p.parseWhitespace();
       auto elemCount = parseUintOrVar();
@@ -688,7 +687,8 @@ ParsedFlr::ParsedFlr(
            *dispatchSizeX,
            *dispatchSizeY,
            *dispatchSizeZ,
-           DM_THREADS});
+           DM_THREADS,
+           -1});
 
       break;
     }
@@ -733,7 +733,53 @@ ParsedFlr::ParsedFlr(
            *dispatchSizeX,
            *dispatchSizeY,
            *dispatchSizeZ,
-           DM_GROUPS});
+           DM_GROUPS,
+           -1});
+      break;
+    }
+    case I_DISPATCH_INDIRECT: {
+
+      auto compShader = p.parseName();
+      PARSER_VERIFY(
+          compShader,
+          "Could not parse compute-shader name in compute-dispatch "
+          "declaration.");
+
+      uint32_t computeShaderIdx = 0;
+      for (const auto& c : m_computeShaders) {
+        if (c.name.size() == compShader->size() &&
+            !strncmp(c.name.data(), compShader->data(), c.name.size()))
+          break;
+        ++computeShaderIdx;
+      }
+      PARSER_VERIFY(
+          computeShaderIdx < m_computeShaders.size(),
+          "Could not find referenced compute-shader referenced in "
+          "dispatch_indirect declaration.");
+
+      p.parseWhitespace();
+      auto bufName = p.parseName();
+      PARSER_VERIFY(
+          bufName,
+          "Could not parse buffer name in dispatch_indirect instruction");
+      auto bufIdx = findIndexByName(m_buffers, *bufName);
+      PARSER_VERIFY(
+          bufIdx,
+          "Could not find specified buffer in dispatch_indirect instruction.");
+      const auto& s = m_structDefs[m_buffers[*bufIdx].structIdx];
+      PARSER_VERIFY(
+          s.name == "IndirectDispatch",
+          "Unexpected struct type for structured buffer passed to "
+          "dispatch_indirect instruction - expecting IndirectDispatch");
+
+      PARSER_VERIFY(
+          m_buffers[*bufIdx].bufferCount == 1,
+          "Expecting IndirectDispatch buffer to have count of 1 in "
+          "dispatch_indirect instruction.");
+      
+      pushTask((uint32_t)m_computeDispatches.size(), TT_COMPUTE);
+      m_computeDispatches.push_back(
+          {computeShaderIdx, 0, 0, 0, DM_THREADS, static_cast<int>(*bufIdx)});
       break;
     }
     case I_BARRIER: {
@@ -1512,9 +1558,10 @@ ParsedFlr::ParsedFlr(
       // TODO need to assert if language decl is not first instruction...
       // however need to properly handle force includes that are pushed onto the
       // file stack which contain instructions not provided by user...
-      
-      //PARSER_VERIFY(instrIdx == 0, "language declaration needs to be first instruction in flr file, if it is present.");
-      // keep in sync with enum AltheaEngine::ShaderLanguage
+
+      // PARSER_VERIFY(instrIdx == 0, "language declaration needs to be first
+      // instruction in flr file, if it is present.");
+      //  keep in sync with enum AltheaEngine::ShaderLanguage
       const char* LANGUAGES[] = {"glsl", "hlsl"};
       auto lang = p.parseToken<AltheaEngine::ShaderLanguage>(LANGUAGES, 2);
       PARSER_VERIFY(
@@ -1594,7 +1641,7 @@ ParsedFlr::ParsedFlr(
   }
 
 #undef PARSER_VERIFY
-#undef PARSER_VERIFY_WARNING
+#undef PARSER_VERIFY_WARN
 
   m_failed = false;
 }

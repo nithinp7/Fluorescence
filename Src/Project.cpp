@@ -771,21 +771,28 @@ void Project::executeTaskList(
       c.bindDescriptorSets(commandBuffer, sets, 2);
       c.setPushConstants(commandBuffer, m_pushData);
 
-      uint32_t groupCountX, groupCountY, groupCountZ;
-      if (dispatch.mode == ParsedFlr::DM_THREADS) {
-        groupCountX = (dispatch.dispatchSizeX + compute.groupSizeX - 1) /
-                      compute.groupSizeX;
-        groupCountY = (dispatch.dispatchSizeY + compute.groupSizeY - 1) /
-                      compute.groupSizeY;
-        groupCountZ = (dispatch.dispatchSizeZ + compute.groupSizeZ - 1) /
-                      compute.groupSizeZ;
-      } else {
-        groupCountX = dispatch.dispatchSizeX;
-        groupCountY = dispatch.dispatchSizeY;
-        groupCountZ = dispatch.dispatchSizeZ;
+      if (dispatch.indirectBufferIdx >= 0) {
+        vkCmdDispatchIndirect(commandBuffer, m_buffers[dispatch.indirectBufferIdx][0].getBuffer(), 0);
       }
+      else
+      {
+        uint32_t groupCountX, groupCountY, groupCountZ;
+        if (dispatch.mode == ParsedFlr::DM_THREADS) {
+          groupCountX = (dispatch.dispatchSizeX + compute.groupSizeX - 1) /
+            compute.groupSizeX;
+          groupCountY = (dispatch.dispatchSizeY + compute.groupSizeY - 1) /
+            compute.groupSizeY;
+          groupCountZ = (dispatch.dispatchSizeZ + compute.groupSizeZ - 1) /
+            compute.groupSizeZ;
+        }
+        else {
+          groupCountX = dispatch.dispatchSizeX;
+          groupCountY = dispatch.dispatchSizeY;
+          groupCountZ = dispatch.dispatchSizeZ;
+        }
 
-      vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
+        vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
+      }
       break;
     }
 

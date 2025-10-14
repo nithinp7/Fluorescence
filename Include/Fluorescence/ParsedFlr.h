@@ -181,6 +181,7 @@ struct ParsedFlr {
     uint32_t dispatchSizeY;
     uint32_t dispatchSizeZ;
     DispatchMode mode;
+    int indirectBufferIdx;
   };
   std::vector<ComputeDispatch> m_computeDispatches;
 
@@ -330,6 +331,7 @@ struct ParsedFlr {
     I_COMPUTE_DISPATCH, // deprecated...
     I_DISPATCH_THREADS,
     I_DISPATCH,
+    I_DISPATCH_INDIRECT,
     I_BARRIER,
     I_OBJ_MODEL,
     I_DISPLAY_IMAGE,
@@ -387,6 +389,7 @@ struct ParsedFlr {
       "compute_dispatch",
       "dispatch_threads",
       "dispatch",
+      "dispatch_indirect",
       "barrier",
       "obj_model",
       "display_image",

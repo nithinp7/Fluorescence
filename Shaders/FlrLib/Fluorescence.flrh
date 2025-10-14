@@ -15,3 +15,10 @@ struct IndirectArgs {
   uint firstInstance;
 }
 struct_size: 16
+
+struct IndirectDispatch {
+  uint groupCountX;
+  uint groupCountY;
+  uint groupCountZ;
+}
+struct_size: 12
