@@ -1,0 +1,156 @@
+
+# CONSTANTS
+
+uint CIRCLE_VERTS: 24
+uint MAX_PARTICLES: 8096
+uint MAX_SHAPES: 1024
+
+uint CELLS_X: 40
+uint CELLS_Y: 40
+uint CELLS_COUNT: CELLS_X * CELLS_Y
+
+uint CS_ARGS_PARTICLES_UPDATE: 0
+uint CS_ARGS_SHAPES_UPDATE: 1
+uint CS_ARGS_SEGMENTS_UPDATE: 2
+uint CS_ARGS_GRID_UPDATE: 3
+uint CS_ARGS_COUNT: 4
+
+# UI
+
+slider_float VEL_DAMPING: 0.95 0.01 1.0
+slider_float COL_K: 0.99 0.0 1.0
+slider_float FTL_K: 0.99 0.0 1.0
+slider_float FTL_DAMPING: 0.99 0.01 1.0
+slider_float SPACING: 0.99 0.01 1.0
+slider_float PARTICLE_RADIUS: 0.01 0.001 0.05
+ui_dropdown_start RENDERING:
+  slider_float EXPOSURE: 0.3 0.01 0.99
+  ui_separator
+ui_dropdown_end
+
+# STRUCTS / BUFFERS
+
+struct GlobalState {
+  uint particleCount;
+  uint shapeCount;
+  uint segmentCount;
+  uint padding;
+}
+struct_size: 16
+structured_buffer globalState: GlobalState 1
+
+structured_buffer positions(2): vec2 MAX_PARTICLES
+structured_buffer impulses: vec2 MAX_PARTICLES
+
+struct Shape {
+  uint particleStart;
+  uint particleEnd;
+}
+struct_size: 8
+structured_buffer shapes: Shape MAX_SHAPES
+
+struct Material {
+  vec3 color;
+  uint shapeIdx;
+}
+struct_size: 16
+structured_buffer materials: Material MAX_SHAPES
+
+structured_buffer particleAllocs: uint MAX_PARTICLES
+structured_buffer gridAllocs: uint CELLS_COUNT
+structured_buffer gridParticles: uint MAX_PARTICLES
+structured_buffer particleMaterials: uint MAX_PARTICLES
+
+structured_buffer drawArgs: IndirectArgs 1
+structured_buffer dispatchArgs: IndirectDispatch CS_ARGS_COUNT
+
+# SHADERS / DISPATCHES / DRAWS
+
+struct ScreenVertexOutput {
+  vec2 uv;
+};
+struct_size: 8
+
+struct ParticleVertexOutput {
+  vec4 dbgColor;
+  vec2 uv;
+  float radius;
+  float padding;
+};
+struct_size: 32
+
+compute_shader CS_Init: 1 1 1
+compute_shader CS_ClearGrid: 32 1 1
+compute_shader CS_Update: 32 1 1
+compute_shader CS_ReserveGrid: 32 1 1
+compute_shader CS_AllocGrid: 32 1 1
+compute_shader CS_RegParticles: 32 1 1
+
+compute_shader CS_ResolveCollisions0: 32 1 1
+compute_shader CS_ResolveCollisions1: 32 1 1
+compute_shader CS_ResolveCollisions2: 32 1 1
+compute_shader CS_ResolveCollisions3: 32 1 1
+
+compute_shader CS_SolveShapes: 32 1 1
+
+task_block_start INIT_BLOCK:
+  dispatch_threads: CS_Init 1 1 1
+  barrier indirectArgs: drawArgs dispatchArgs
+  barrier: globalState positions impulses
+task_block_end
+
+initialization_task: INIT_BLOCK
+
+task_block_start UPDATE_GRID:
+  dispatch_threads: CS_ClearGrid CELLS_COUNT 1 1
+  barrier: gridAllocs 
+  # TODO particleAllocs needed in above barrier ??
+  dispatch_indirect: CS_ReserveGrid dispatchArgs CS_ARGS_PARTICLES_UPDATE
+  barrier: particleAllocs gridAllocs
+  dispatch_threads: CS_AllocGrid 32 1 1
+  barrier: gridAllocs
+  dispatch_indirect: CS_RegParticles dispatchArgs CS_ARGS_PARTICLES_UPDATE
+  barrier: gridParticles
+  # TODO particleAllocs needed in above barrier ??
+task_block_end
+
+# RESOLVE COLLISIONS
+# TODO use several threads to process a single cell
+# TODO experiment with local compression...
+task_block_start COL_ITER:
+  dispatch_threads: CS_ResolveCollisions0 CELLS_COUNT 1 1
+  barrier: positions
+  dispatch_threads: CS_ResolveCollisions1 CELLS_COUNT 1 1
+  barrier: positions
+  dispatch_threads: CS_ResolveCollisions2 CELLS_COUNT 1 1
+  barrier: positions
+  dispatch_threads: CS_ResolveCollisions3 CELLS_COUNT 1 1
+  barrier: positions
+task_block_end
+
+task_block_start SOLVE_SHAPES:
+  dispatch_indirect: CS_SolveShapes dispatchArgs CS_ARGS_SHAPES_UPDATE
+  barrier: positions impulses
+task_block_end
+
+dispatch_indirect: CS_Update dispatchArgs CS_ARGS_PARTICLES_UPDATE
+barrier: positions impulses
+run_task: SOLVE_SHAPES
+run_task: UPDATE_GRID
+run_task: COL_ITER
+run_task: COL_ITER
+run_task: COL_ITER
+run_task: COL_ITER
+
+display_image DisplayImage
+
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+
+  draw: VS_Background PS_Background 3 1
+    vertex_output: ScreenVertexOutput
+    disable_depth
+
+#  draw_indirect: VS_Particle PS_Particle drawArgs 
+#    vertex_output: ParticleVertexOutput
+#    disable_depth
