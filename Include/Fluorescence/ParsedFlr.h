@@ -173,15 +173,15 @@ struct ParsedFlr {
 
   enum DispatchMode : uint8_t {
     DM_THREADS = 0,
-    DM_GROUPS
+    DM_GROUPS,
+    DM_INDIRECT
   };
   struct ComputeDispatch {
     uint32_t computeShaderIndex;
-    uint32_t dispatchSizeX;
-    uint32_t dispatchSizeY;
-    uint32_t dispatchSizeZ;
+    uint32_t param0;
+    uint32_t param1;
+    uint32_t param2;
     DispatchMode mode;
-    int indirectBufferIdx;
   };
   std::vector<ComputeDispatch> m_computeDispatches;
 

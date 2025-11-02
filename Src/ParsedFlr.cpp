@@ -553,8 +553,13 @@ ParsedFlr::ParsedFlr(
           "Could not find struct referenced in structured-buffer declaration.");
 
       const auto& s = m_structDefs[*structIdx];
-      bool bIndirectArgs =
-          s.name == "IndirectArgs" || s.name == "IndexedIndirectArgs" || s.name == "IndirectDispatch";
+      bool bIndirectDispatch = s.name == "IndirectDispatch";
+      bool bIndirectArgs = s.name == "IndirectArgs" ||
+                           s.name == "IndexedIndirectArgs" || bIndirectDispatch;
+
+      PARSER_VERIFY(
+          !bIndirectDispatch || !arrayCount,
+          "Array-count syntax not compatible with IndirectDispatch buffer");
 
       p.parseWhitespace();
       auto elemCount = parseUintOrVar();
@@ -687,8 +692,7 @@ ParsedFlr::ParsedFlr(
            *dispatchSizeX,
            *dispatchSizeY,
            *dispatchSizeZ,
-           DM_THREADS,
-           -1});
+           DM_THREADS});
 
       break;
     }
@@ -733,12 +737,10 @@ ParsedFlr::ParsedFlr(
            *dispatchSizeX,
            *dispatchSizeY,
            *dispatchSizeZ,
-           DM_GROUPS,
-           -1});
+           DM_GROUPS});
       break;
     }
     case I_DISPATCH_INDIRECT: {
-
       auto compShader = p.parseName();
       PARSER_VERIFY(
           compShader,
@@ -772,14 +774,18 @@ ParsedFlr::ParsedFlr(
           "Unexpected struct type for structured buffer passed to "
           "dispatch_indirect instruction - expecting IndirectDispatch");
 
+      uint32_t elemCount = m_buffers[*bufIdx].elemCount;
+      p.parseWhitespace();
+
+      auto elemIdx = parseUintOrVar();
       PARSER_VERIFY(
-          m_buffers[*bufIdx].bufferCount == 1,
-          "Expecting IndirectDispatch buffer to have count of 1 in "
+          (elemIdx && *elemIdx < elemCount) || elemCount == 1,
+          "Missing or out-of-bounds IndirectDispatch buffer element given to "
           "dispatch_indirect instruction.");
-      
+
       pushTask((uint32_t)m_computeDispatches.size(), TT_COMPUTE);
       m_computeDispatches.push_back(
-          {computeShaderIdx, 0, 0, 0, DM_THREADS, static_cast<int>(*bufIdx)});
+          {computeShaderIdx, *bufIdx, elemIdx ? *elemIdx : 0, 0, DM_INDIRECT});
       break;
     }
     case I_BARRIER: {

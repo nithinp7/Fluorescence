@@ -519,165 +519,171 @@ void Project::tick(const FrameContext& frame) {
     m_audioInput.updateUniforms(audioInput, frame);
   }
 
-  if (m_bHasDynamicData && !GInputManager->getMouseCursorHidden()) {
-    if (ImGui::Begin("Options", false)) {
-      char nameBuf[128];
+  if (m_bHasDynamicData) {
+    if (!GInputManager->getMouseCursorHidden()) {
+      if (ImGui::Begin("Options", false)) {
+        char nameBuf[128];
 
-      int highestLayerOpen = 0;
-      int currentLayer = 0;
+        int highestLayerOpen = 0;
+        int currentLayer = 0;
 
-      for (const auto& ui : m_parsed.m_uiElements) {
-        if (ui.type == ParsedFlr::UET_DROPDOWN_START) {
-          const auto& name = m_parsed.m_genericNamedElements[ui.idx].name;
-          if (highestLayerOpen == currentLayer &&
-              ImGui::CollapsingHeader(name.c_str()))
-            highestLayerOpen++;
-          currentLayer++;
-        } else if (ui.type == ParsedFlr::UET_DROPDOWN_END) {
-          if (highestLayerOpen == currentLayer)
-            highestLayerOpen--;
-          currentLayer--;
-        }
-
-        if (currentLayer > highestLayerOpen)
-          continue;
-
-        switch (ui.type) {
-        case ParsedFlr::UET_SLIDER_UINT: {
-          const auto& uslider = m_parsed.m_sliderUints[ui.idx];
-          ImGui::Text(uslider.name.c_str());
-          sprintf(nameBuf, "##%s_%u", uslider.name.c_str(), ui.idx);
-          int v = static_cast<int>(*uslider.pValue);
-          if (ImGui::SliderInt(nameBuf, &v, uslider.min, uslider.max)) {
-            *uslider.pValue = static_cast<uint32_t>(v);
+        for (const auto& ui : m_parsed.m_uiElements) {
+          if (ui.type == ParsedFlr::UET_DROPDOWN_START) {
+            const auto& name = m_parsed.m_genericNamedElements[ui.idx].name;
+            if (highestLayerOpen == currentLayer &&
+                ImGui::CollapsingHeader(name.c_str()))
+              highestLayerOpen++;
+            currentLayer++;
+          } else if (ui.type == ParsedFlr::UET_DROPDOWN_END) {
+            if (highestLayerOpen == currentLayer)
+              highestLayerOpen--;
+            currentLayer--;
           }
-          break;
-        }
-        case ParsedFlr::UET_SLIDER_INT: {
-          const auto& islider = m_parsed.m_sliderInts[ui.idx];
-          ImGui::Text(islider.name.c_str());
-          sprintf(nameBuf, "##%s_%u", islider.name.c_str(), ui.idx);
-          ImGui::SliderInt(nameBuf, islider.pValue, islider.min, islider.max);
-          break;
-        }
-        case ParsedFlr::UET_SLIDER_FLOAT: {
-          const auto& fslider = m_parsed.m_sliderFloats[ui.idx];
-          ImGui::Text(fslider.name.c_str());
-          sprintf(nameBuf, "##%s_%u", fslider.name.c_str(), ui.idx);
-          ImGui::SliderFloat(nameBuf, fslider.pValue, fslider.min, fslider.max);
-          break;
-        }
-        case ParsedFlr::UET_COLOR_PICKER: {
-          const auto& cpicker = m_parsed.m_colorPickers[ui.idx];
-          ImGui::Text(cpicker.name.c_str());
-          sprintf(nameBuf, "##%s_%u", cpicker.name.c_str(), ui.idx);
-          ImGui::ColorPicker4(nameBuf, cpicker.pValue);
-          break;
-        }
-        case ParsedFlr::UET_CHECKBOX: {
-          const auto& checkbox = m_parsed.m_checkboxes[ui.idx];
-          ImGui::Text(checkbox.name.c_str());
-          sprintf(nameBuf, "##%s_%u", checkbox.name.c_str(), ui.idx);
-          bool bValue = (bool)*checkbox.pValue;
-          if (ImGui::Checkbox(nameBuf, &bValue))
-            *checkbox.pValue = (uint32_t)bValue;
-          break;
-        }
-        case ParsedFlr::UET_SAVE_IMAGE_BUTTON: {
-          const auto& saveImageButton = m_parsed.m_saveImageButtons[ui.idx];
-          char buf[256];
-          sprintf(
-              buf,
-              "Save PNG: %s",
-              m_parsed.m_images[saveImageButton.imageIdx].name.c_str());
-          if (ImGui::Button(buf)) {
-            OPENFILENAME ofn{};
-            memset(&ofn, 0, sizeof(OPENFILENAME));
 
-            char filename[512] = {0};
+          if (currentLayer > highestLayerOpen)
+            continue;
 
-            ofn.lStructSize = sizeof(ofn);
-            ofn.hwndOwner = glfwGetWin32Window(GApplication->getWindow());
-            ofn.lpstrFile = filename;
-            ofn.lpstrFile[0] = '\0';
-            ofn.nMaxFile = sizeof(filename);
-            ofn.lpstrFilter = "PNG\0*.png\0\0";
-            ofn.nFilterIndex = 1;
-            ofn.lpstrFileTitle = NULL;
-            ofn.nMaxFileTitle = 0;
-            ofn.lpstrInitialDir = NULL;
-            ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-
-            if (GetSaveFileName(&ofn)) {
-              m_pendingSaveImage = {
-                  std::string(filename),
-                  saveImageButton.imageIdx};
+          switch (ui.type) {
+          case ParsedFlr::UET_SLIDER_UINT: {
+            const auto& uslider = m_parsed.m_sliderUints[ui.idx];
+            ImGui::Text(uslider.name.c_str());
+            sprintf(nameBuf, "##%s_%u", uslider.name.c_str(), ui.idx);
+            int v = static_cast<int>(*uslider.pValue);
+            if (ImGui::SliderInt(nameBuf, &v, uslider.min, uslider.max)) {
+              *uslider.pValue = static_cast<uint32_t>(v);
             }
+            break;
           }
+          case ParsedFlr::UET_SLIDER_INT: {
+            const auto& islider = m_parsed.m_sliderInts[ui.idx];
+            ImGui::Text(islider.name.c_str());
+            sprintf(nameBuf, "##%s_%u", islider.name.c_str(), ui.idx);
+            ImGui::SliderInt(nameBuf, islider.pValue, islider.min, islider.max);
+            break;
+          }
+          case ParsedFlr::UET_SLIDER_FLOAT: {
+            const auto& fslider = m_parsed.m_sliderFloats[ui.idx];
+            ImGui::Text(fslider.name.c_str());
+            sprintf(nameBuf, "##%s_%u", fslider.name.c_str(), ui.idx);
+            ImGui::SliderFloat(
+                nameBuf,
+                fslider.pValue,
+                fslider.min,
+                fslider.max);
+            break;
+          }
+          case ParsedFlr::UET_COLOR_PICKER: {
+            const auto& cpicker = m_parsed.m_colorPickers[ui.idx];
+            ImGui::Text(cpicker.name.c_str());
+            sprintf(nameBuf, "##%s_%u", cpicker.name.c_str(), ui.idx);
+            ImGui::ColorPicker4(nameBuf, cpicker.pValue);
+            break;
+          }
+          case ParsedFlr::UET_CHECKBOX: {
+            const auto& checkbox = m_parsed.m_checkboxes[ui.idx];
+            ImGui::Text(checkbox.name.c_str());
+            sprintf(nameBuf, "##%s_%u", checkbox.name.c_str(), ui.idx);
+            bool bValue = (bool)*checkbox.pValue;
+            if (ImGui::Checkbox(nameBuf, &bValue))
+              *checkbox.pValue = (uint32_t)bValue;
+            break;
+          }
+          case ParsedFlr::UET_SAVE_IMAGE_BUTTON: {
+            const auto& saveImageButton = m_parsed.m_saveImageButtons[ui.idx];
+            char buf[256];
+            sprintf(
+                buf,
+                "Save PNG: %s",
+                m_parsed.m_images[saveImageButton.imageIdx].name.c_str());
+            if (ImGui::Button(buf)) {
+              OPENFILENAME ofn{};
+              memset(&ofn, 0, sizeof(OPENFILENAME));
 
-          break;
-        }
-        case ParsedFlr::UET_SAVE_BUFFER_BUTTON: {
-          const auto& saveBufferButton = m_parsed.m_saveBufferButtons[ui.idx];
-          char buf[256];
-          sprintf(
-              buf,
-              "Save Buffer: %s",
-              m_parsed.m_buffers[saveBufferButton.bufferIdx].name.c_str());
-          if (ImGui::Button(buf)) {
-            OPENFILENAME ofn{};
-            memset(&ofn, 0, sizeof(OPENFILENAME));
+              char filename[512] = {0};
 
-            char filename[512] = {0};
+              ofn.lStructSize = sizeof(ofn);
+              ofn.hwndOwner = glfwGetWin32Window(GApplication->getWindow());
+              ofn.lpstrFile = filename;
+              ofn.lpstrFile[0] = '\0';
+              ofn.nMaxFile = sizeof(filename);
+              ofn.lpstrFilter = "PNG\0*.png\0\0";
+              ofn.nFilterIndex = 1;
+              ofn.lpstrFileTitle = NULL;
+              ofn.nMaxFileTitle = 0;
+              ofn.lpstrInitialDir = NULL;
+              ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
 
-            ofn.lStructSize = sizeof(ofn);
-            ofn.hwndOwner = glfwGetWin32Window(GApplication->getWindow());
-            ofn.lpstrFile = filename;
-            ofn.lpstrFile[0] = '\0';
-            ofn.nMaxFile = sizeof(filename);
-            ofn.lpstrFilter = "BIN\0*.bin\0\0";
-            ofn.nFilterIndex = 1;
-            ofn.lpstrFileTitle = NULL;
-            ofn.nMaxFileTitle = 0;
-            ofn.lpstrInitialDir = NULL;
-            ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-
-            if (GetSaveFileName(&ofn)) {
-              m_pendingSaveBuffer = {
-                  std::string(filename),
-                  saveBufferButton.bufferIdx};
+              if (GetSaveFileName(&ofn)) {
+                m_pendingSaveImage = {
+                    std::string(filename),
+                    saveImageButton.imageIdx};
+              }
             }
+
+            break;
+          }
+          case ParsedFlr::UET_SAVE_BUFFER_BUTTON: {
+            const auto& saveBufferButton = m_parsed.m_saveBufferButtons[ui.idx];
+            char buf[256];
+            sprintf(
+                buf,
+                "Save Buffer: %s",
+                m_parsed.m_buffers[saveBufferButton.bufferIdx].name.c_str());
+            if (ImGui::Button(buf)) {
+              OPENFILENAME ofn{};
+              memset(&ofn, 0, sizeof(OPENFILENAME));
+
+              char filename[512] = {0};
+
+              ofn.lStructSize = sizeof(ofn);
+              ofn.hwndOwner = glfwGetWin32Window(GApplication->getWindow());
+              ofn.lpstrFile = filename;
+              ofn.lpstrFile[0] = '\0';
+              ofn.nMaxFile = sizeof(filename);
+              ofn.lpstrFilter = "BIN\0*.bin\0\0";
+              ofn.nFilterIndex = 1;
+              ofn.lpstrFileTitle = NULL;
+              ofn.nMaxFileTitle = 0;
+              ofn.lpstrInitialDir = NULL;
+              ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+              if (GetSaveFileName(&ofn)) {
+                m_pendingSaveBuffer = {
+                    std::string(filename),
+                    saveBufferButton.bufferIdx};
+              }
+            }
+
+            break;
+          }
+          case ParsedFlr::UET_TASK_BUTTON: {
+            const auto& taskButton = m_parsed.m_taskButtons[ui.idx];
+
+            char buf[256];
+            sprintf(
+                buf,
+                "Run Task: %s",
+                m_parsed.m_taskBlocks[taskButton.taskBlockIdx].name.c_str());
+            if (ImGui::Button(buf))
+              m_pendingTaskBlockExecs.push_back(taskButton.taskBlockIdx);
+
+            break;
+          }
+          case ParsedFlr::UET_SEPARATOR: {
+            ImGui::Separator();
+            break;
           }
 
-          break;
+            // already handled
+          case ParsedFlr::UET_DROPDOWN_START:
+          case ParsedFlr::UET_DROPDOWN_END:
+            break;
+          };
         }
-        case ParsedFlr::UET_TASK_BUTTON: {
-          const auto& taskButton = m_parsed.m_taskButtons[ui.idx];
-
-          char buf[256];
-          sprintf(
-              buf,
-              "Run Task: %s",
-              m_parsed.m_taskBlocks[taskButton.taskBlockIdx].name.c_str());
-          if (ImGui::Button(buf))
-            m_pendingTaskBlockExecs.push_back(taskButton.taskBlockIdx);
-
-          break;
-        }
-        case ParsedFlr::UET_SEPARATOR: {
-          ImGui::Separator();
-          break;
-        }
-
-        // already handled
-        case ParsedFlr::UET_DROPDOWN_START:
-        case ParsedFlr::UET_DROPDOWN_END:
-          break;
-        };
       }
-    }
 
-    ImGui::End();
+      ImGui::End();
+    }
 
     m_dynamicUniforms.updateData(
         frame.frameRingBufferIndex,
@@ -771,24 +777,24 @@ void Project::executeTaskList(
       c.bindDescriptorSets(commandBuffer, sets, 2);
       c.setPushConstants(commandBuffer, m_pushData);
 
-      if (dispatch.indirectBufferIdx >= 0) {
-        vkCmdDispatchIndirect(commandBuffer, m_buffers[dispatch.indirectBufferIdx][0].getBuffer(), 0);
-      }
-      else
-      {
+      if (dispatch.mode == ParsedFlr::DM_INDIRECT) {
+        vkCmdDispatchIndirect(
+            commandBuffer,
+            m_buffers[dispatch.param0][0].getBuffer(),
+            12 * dispatch.param1);
+      } else {
         uint32_t groupCountX, groupCountY, groupCountZ;
         if (dispatch.mode == ParsedFlr::DM_THREADS) {
-          groupCountX = (dispatch.dispatchSizeX + compute.groupSizeX - 1) /
-            compute.groupSizeX;
-          groupCountY = (dispatch.dispatchSizeY + compute.groupSizeY - 1) /
-            compute.groupSizeY;
-          groupCountZ = (dispatch.dispatchSizeZ + compute.groupSizeZ - 1) /
-            compute.groupSizeZ;
-        }
-        else {
-          groupCountX = dispatch.dispatchSizeX;
-          groupCountY = dispatch.dispatchSizeY;
-          groupCountZ = dispatch.dispatchSizeZ;
+          groupCountX =
+              (dispatch.param0 + compute.groupSizeX - 1) / compute.groupSizeX;
+          groupCountY =
+              (dispatch.param1 + compute.groupSizeY - 1) / compute.groupSizeY;
+          groupCountZ =
+              (dispatch.param2 + compute.groupSizeZ - 1) / compute.groupSizeZ;
+        } else {
+          groupCountX = dispatch.param0;
+          groupCountY = dispatch.param1;
+          groupCountZ = dispatch.param2;
         }
 
         vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
