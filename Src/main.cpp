@@ -1,12 +1,14 @@
 #if BUILD_FLR_APP
 
 #include "Fluorescence.h"
+#include "IpcProgram.h"
 
 #include <Althea/Application.h>
 
 #include <iostream>
 #include <filesystem>
 #include <Windows.h>
+
 
 using namespace AltheaEngine;
 
@@ -25,8 +27,13 @@ int main(int argc, char* argv[]) {
   app.createGame<flr::Fluorescence>();
 
   flr::Fluorescence* game = app.getGameInstance<flr::Fluorescence>();
+  flr::IpcProgram* ipc = nullptr;
   if (argc > 1) {
     game->setStartupProject(argv[1]);
+  }
+  if (argc > 2) {
+    // TODO actually do something with argv[1]
+    ipc = game->registerProgram<flr::IpcProgram>();
   }
 
   try {
