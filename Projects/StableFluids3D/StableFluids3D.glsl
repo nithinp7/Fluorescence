@@ -65,11 +65,13 @@ vec3 raymarch_pathTraceEnv(vec3 pos, vec3 dir, inout uvec2 seed) {
     vec3 density = sampleDensityField(samplePos);
     if (length(density) >= DENSITY_CUTOFF)
       stepSize = RAYMARCH_STEP_SIZE;
-
+    else
+      continue;
+    
     // seed *= uvec2(iter, iter + 1);
     vec3 lightRayPos = samplePos;
     vec3 lightDir = normalize(randVec3(seed) - 0.5.xxx);
-    float lightStepSize = RAYMARCH_STEP_SIZE;//lightDist / LIGHT_ITERS;
+    float lightStepSize = 2.5 * RAYMARCH_STEP_SIZE;//lightDist / LIGHT_ITERS;
     vec3 lightThroughput = 1.0.xxx;
 
     // jitter
@@ -243,12 +245,6 @@ void CS_PathTrace() {
   vec3 pos = camera.inverseView[3].xyz;
 // RAYMARCH_STEP_SIZE * rng(jitterSeed)
   vec4 color = vec4(raymarch_pathTraceEnv(pos + RAYMARCH_STEP_SIZE * rng(seed) * dir, dir, seed), 1.0);
-  if (false)
-  {
-    color.rgb *= 0.5;
-    color.rgb += 0.5 * raymarch_pathTraceEnv(pos + RAYMARCH_STEP_SIZE * rng(seed) * dir, dir, seed);
-  }
-
   color.rgb = mix(prevColor.rgb, color.rgb, 1.0 / globalStateBuffer[0].accumulationFrames);
   imageStore(accumulationBuffer, ivec2(pixelCoord), color);
 }
@@ -258,12 +254,10 @@ void CS_PathTrace() {
 ////////////////////////// VERTEX SHADERS //////////////////////////
 
 #ifdef IS_VERTEX_SHADER
-layout(location = 0) out vec2 outScreenUv;
-
-void VS_Display() {
+VertexOutput VS_Display() {
   vec2 pos = VS_FullScreen();
   gl_Position = vec4(pos * 2.0 - 1.0, 0.0, 1.0);
-  outScreenUv = pos;
+  return VertexOutput(pos);
 }
 
 #endif // IS_VERTEX_SHADER
@@ -271,25 +265,23 @@ void VS_Display() {
 ////////////////////////// PIXEL SHADERS //////////////////////////
 
 #ifdef IS_PIXEL_SHADER
-layout(location = 0) in vec2 inScreenUv;
 
-layout(location = 0) out vec4 outColor;
-
-void PS_Display() {
+void PS_Display(VertexOutput IN) {
+  float EXPOSURE = 0.1;
   if (RENDER_MODE == 0) {
-    outColor = vec4(texture(accumulationTexture, inScreenUv).rgb, 1.0);
-    outColor.rgb = vec3(1.0) - exp(-outColor.rgb * 0.8);
+    outColor = vec4(texture(accumulationTexture, IN.uv).rgb, 1.0);
+    outColor.rgb = vec3(1.0) - exp(-outColor.rgb * EXPOSURE);
   } else if (RENDER_MODE == 1) {
-    vec3 dir = (normalize(computeDir(inScreenUv)));
+    vec3 dir = (normalize(computeDir(IN.uv)));
     vec3 pos = (camera.inverseView[3].xyz);
 
-    uvec2 jitterSeed = uvec2(inScreenUv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
+    uvec2 jitterSeed = uvec2(IN.uv * vec2(SCREEN_WIDTH, SCREEN_HEIGHT));
     pos += RAYMARCH_STEP_SIZE * rng(jitterSeed) * dir;
 
     outColor = vec4(raymarch_directLight(pos, dir, jitterSeed), 1.0);
-    outColor.rgb = vec3(1.0) - exp(-outColor.rgb * 0.8);
+    outColor.rgb = vec3(1.0) - exp(-outColor.rgb * EXPOSURE);
   } else {
-    uvec2 coord = uvec2(inScreenUv * vec2(CELLS_X, CELLS_Y) - 0.05.xx);
+    uvec2 coord = uvec2(IN.uv * vec2(CELLS_X, CELLS_Y) - 0.05.xx);
     uint flatIdx = coordToFlatIdx(uvec3(coord, SLICE_IDX));
     if (RENDER_MODE == 2) {
       outColor = 10.0 * extraFields[flatIdx].color;

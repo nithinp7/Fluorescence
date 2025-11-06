@@ -12,6 +12,21 @@
 #define MAX_PRESSURE 0.000000
 #define DELTA_TIME 0.033333
 
+struct IndexedIndirectArgs {
+  uint indexCount;
+  uint instanceCount;
+  uint firstIndex;
+  uint vertexOffset;
+  uint firstInstance;
+};
+
+struct IndirectArgs {
+  uint vertexCount;
+  uint instanceCount;
+  uint firstVertex;
+  uint firstInstance;
+};
+
 struct GlobalState {
   vec2 pan;
   float zoom;
@@ -45,8 +60,16 @@ layout(set=1, binding=9) uniform _UserUniforms {
 	float MAX_VELOCITY;
 };
 
-#include <Fluorescence.glsl>
+#include <FlrLib/Fluorescence.glsl>
 
+
+
+#ifdef IS_PIXEL_SHADER
+#if defined(_ENTRY_POINT_PS_Display) && !defined(_ENTRY_POINT_PS_Display_ATTACHMENTS)
+#define _ENTRY_POINT_PS_Display_ATTACHMENTS
+layout(location = 0) out vec4 outColor;
+#endif // _ENTRY_POINT_PS_Display
+#endif // IS_PIXEL_SHADER
 #include "StableFluids2D.glsl"
 
 #ifdef IS_COMP_SHADER
@@ -93,7 +116,8 @@ void main() { VS_Display(); }
 
 
 #ifdef IS_PIXEL_SHADER
-#ifdef _ENTRY_POINT_PS_Display
+#if defined(_ENTRY_POINT_PS_Display) && !defined(_ENTRY_POINT_PS_Display_INTERPOLANTS)
+#define _ENTRY_POINT_PS_Display_INTERPOLANTS
 void main() { PS_Display(); }
 #endif // _ENTRY_POINT_PS_Display
 #endif // IS_PIXEL_SHADER

@@ -86,5 +86,7 @@ barrier: velocityField
 compute_dispatch: CS_AdvectColor CELLS_COUNT 1 1
 barrier: advectedExtraFields, velocityField
 
-display_pass:
+display_image DisplayImage
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
   draw: VS_Display PS_Display 3 1

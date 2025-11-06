@@ -126,8 +126,6 @@ void VS_Display() {
 #ifdef IS_PIXEL_SHADER
 layout(location = 0) in vec2 inScreenUv;
 
-layout(location = 0) out vec4 outColor;
-
 void PS_Display() {
   uvec2 coord = uvec2(inScreenUv * vec2(CELLS_X, CELLS_Y) - 0.05.xx);
   uint flatIdx = coordToFlatIdx(coord);

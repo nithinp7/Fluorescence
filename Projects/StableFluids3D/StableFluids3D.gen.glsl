@@ -11,6 +11,21 @@
 #define H 0.005000
 #define DELTA_TIME 0.033333
 
+struct IndexedIndirectArgs {
+  uint indexCount;
+  uint instanceCount;
+  uint firstIndex;
+  uint vertexOffset;
+  uint firstInstance;
+};
+
+struct IndirectArgs {
+  uint vertexCount;
+  uint instanceCount;
+  uint firstVertex;
+  uint firstInstance;
+};
+
 struct GlobalState {
   uint initialized;
   uint accumulationFrames;
@@ -25,6 +40,10 @@ struct Uint { uint u; };
 struct Float { float f; };
 
 struct U16x2 { uint packed; };
+
+struct VertexOutput {
+  vec2 uv;
+};
 
 layout(set=1,binding=1) buffer BUFFER_globalStateBuffer {  GlobalState globalStateBuffer[]; };
 layout(set=1,binding=2) buffer BUFFER_velocityField {  Uint velocityField[]; };
@@ -58,12 +77,21 @@ layout(set=1, binding=11) uniform _UserUniforms {
 	float BUOYANCY;
 	float G;
 	float VORT;
+	bool ENABLE_SIM;
 };
 
-#include <Fluorescence.glsl>
+#include <FlrLib/Fluorescence.glsl>
 
 layout(set=1, binding=12) uniform _CameraUniforms { PerspectiveCamera camera; };
 
+
+
+#ifdef IS_PIXEL_SHADER
+#if defined(_ENTRY_POINT_PS_Display) && !defined(_ENTRY_POINT_PS_Display_ATTACHMENTS)
+#define _ENTRY_POINT_PS_Display_ATTACHMENTS
+layout(location = 0) out vec4 outColor;
+#endif // _ENTRY_POINT_PS_Display
+#endif // IS_PIXEL_SHADER
 #include "StableFluids3D.glsl"
 
 #ifdef IS_COMP_SHADER
@@ -112,13 +140,16 @@ void main() { CS_PathTrace(); }
 
 #ifdef IS_VERTEX_SHADER
 #ifdef _ENTRY_POINT_VS_Display
-void main() { VS_Display(); }
+layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
+void main() { _VERTEX_OUTPUT = VS_Display(); }
 #endif // _ENTRY_POINT_VS_Display
 #endif // IS_VERTEX_SHADER
 
 
 #ifdef IS_PIXEL_SHADER
-#ifdef _ENTRY_POINT_PS_Display
-void main() { PS_Display(); }
+#if defined(_ENTRY_POINT_PS_Display) && !defined(_ENTRY_POINT_PS_Display_INTERPOLANTS)
+#define _ENTRY_POINT_PS_Display_INTERPOLANTS
+layout(location = 0) in VertexOutput _VERTEX_INPUT;
+void main() { PS_Display(_VERTEX_INPUT); }
 #endif // _ENTRY_POINT_PS_Display
 #endif // IS_PIXEL_SHADER

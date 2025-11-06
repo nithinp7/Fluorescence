@@ -9,6 +9,7 @@ uint QUARTER_CELLS_COUNT: CELLS_COUNT / 4
 
 float H: 1.0 / CELLS_X
 
+checkbox ENABLE_SIM: true;
 slider_uint SLICE_IDX: 0 0 199
 slider_float VEL_DAMPING: 1.0 0.8 1.0
 slider_float JITTER: 0.0 0.0 10.0
@@ -111,5 +112,14 @@ transition_layout: accumulationBuffer image
 compute_dispatch: CS_PathTrace SCREEN_WIDTH SCREEN_HEIGHT 1
 transition_layout: accumulationBuffer texture
 
-display_pass:
+display_image DisplayImage
+
+struct VertexOutput {
+  vec2 uv;
+}
+
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
   draw: VS_Display PS_Display 3 1
+    disable_depth
+    vertex_output: VertexOutput

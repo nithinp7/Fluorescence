@@ -295,7 +295,7 @@ vec3 bilerpVelocity(vec3 pos) {
 }
 
 void initVelocity(uint flatIdx) {
-  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0)
+  if (!ENABLE_SIM || (uniforms.inputMask & INPUT_BIT_SPACE) != 0)
     return;
 
   bool bInitRandom = globalStateBuffer[0].initialized <= 1 || (uniforms.inputMask & INPUT_BIT_R) != 0;
@@ -356,7 +356,7 @@ void computeCurl(uint flatIdx) {
 }
 
 void advectVelocity(uint flatIdx) {
-  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0)
+  if (!ENABLE_SIM || (uniforms.inputMask & INPUT_BIT_SPACE) != 0)
     return;
   
   vec3 aspectRatioFix = vec3(CELLS_X) / vec3(CELLS_X, CELLS_Y, CELLS_Z);
@@ -430,7 +430,7 @@ void computePressure(int phase, uint flatIdx) {
 }
 
 void resolveVelocity(uint flatIdx) {
-  if ((uniforms.inputMask & INPUT_BIT_SPACE) != 0)
+  if (!ENABLE_SIM || (uniforms.inputMask & INPUT_BIT_SPACE) != 0)
     return;
   
   ivec3 center = ivec3(flatIdxToCoord(flatIdx));
