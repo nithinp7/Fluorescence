@@ -1,11 +1,9 @@
 
 import flrlib
+import struct
+import math
 
-# TODO move this to a separate file, once the above can be turned into a package...
-# TEST USAGE - 
-    # "C:/Users/nithi/Documents/Code/Fluorescence/ScriptLib/Python_WIP/FlrProject/Test.flr"
-
-flr = FlrScriptInterface("C:/Users/nithi/Documents/Code/Fluorescence/ScriptLib/Python_WIP/FlrProject/Test.flr")
+flr = flrlib.FlrScriptInterface("C:/Users/nithi/Documents/Code/Fluorescence/ScriptLib/Test/FlrProject/Test.flr")
 
 t = 0.0
 DT = 1.0/30.0

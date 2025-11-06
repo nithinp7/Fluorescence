@@ -1,3 +1,10 @@
 /.vscode
 /build
 /.vs
+ScriptLib/Python/flrlib/__pycache__/__init__.cpython-311.pyc
+ScriptLib/Python/flrlib/__pycache__/flrlib.cpython-311.pyc
+ScriptLib/Python/flrlib.egg-info/dependency_links.txt
+ScriptLib/Python/flrlib.egg-info/PKG-INFO
+ScriptLib/Python/flrlib.egg-info/requires.txt
+ScriptLib/Python/flrlib.egg-info/SOURCES.txt
+ScriptLib/Python/flrlib.egg-info/top_level.txt

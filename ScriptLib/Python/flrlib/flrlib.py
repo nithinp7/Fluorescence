@@ -4,7 +4,6 @@ import win32event
 import win32api
 from multiprocessing import shared_memory
 from threading import Thread
-import math
 import struct
 # REFERENCES
 # - On Python side: https://docs.python.org/3/library/multiprocessing.shared_memory.html
