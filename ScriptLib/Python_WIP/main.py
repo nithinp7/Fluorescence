@@ -32,11 +32,17 @@ writeDoneSem = win32event.CreateSemaphore(None, 0, 1, "Global_FlrWriteDoneSemaph
 readDoneSem = win32event.CreateSemaphore(None, 0, 1, "Global_FlrReadDoneSemaphore")
 sharedMem = shared_memory.SharedMemory(name="Global_FlrSharedMemory", create=True, size=BUF_SIZE)
 
+flrDebugEnable = True
+flrExePath = \
+    "C:/Users/nithi/Documents/Code/Fluorescence/build/RelWithDebInfo/Fluorescence.exe" \
+    if flrDebugEnable else \
+    "Fluorescence.exe"
+
 def runFlr():
   # TODO convert from local to abs path before sending to flr
   subprocess.run( \
-      ["Fluorescence.exe", \
-       "C:/Users/nithi/Documents/Code/TestScripts/WindowsIPC/FlrProject/Test.flr", \
+      [flrExePath, \
+       "C:/Users/nithi/Documents/Code/Fluorescence/ScriptLib/Python_WIP/FlrProject/Test.flr", \
       "placeholder"], \
       stdout=subprocess.PIPE,)
       #  "C:/Users/nithi/Documents/Code/TestScripts/WindowsIPC/FlrProject/Test.flr" \
@@ -45,6 +51,9 @@ def runFlr():
 
 thread = Thread(target = runFlr)
 thread.start()
+
+# if flrDebugEnable:
+#   time.sleep(5)
 
 sharedMem.buf[:5] = b'mssga'
 
@@ -69,7 +78,7 @@ def resetPerFrameData():
   global perFrameEnd
   global perFrameFailure
   perFrameOffset = 0
-  perFrameOffset = BUF_SIZE
+  perFrameEnd = BUF_SIZE
   perFrameFailure = False
 
 def validateCmdAlloc(end : int):
@@ -80,6 +89,7 @@ def validateCmdAlloc(end : int):
 def validateDataAlloc(start : int):
   global perFrameFailure
   perFrameFailure = perFrameFailure or (start < perFrameOffset)
+  return not perFrameFailure
 
 def cmdPushConstants(push0 : int, push1 : int, push2 : int, push3 : int):
   global perFrameOffset
@@ -94,26 +104,26 @@ def cmdDispatch(computeShaderId : int, groupCountX : int, groupCountY : int, gro
   end = perFrameOffset + 4 + 16
   if validateCmdAlloc(end):
     sharedMem.buf[perFrameOffset:end] = \
-      struct.pack("<IIIII", 1, computeShaderId, groupCountX, groupCountY, groupCountZ)
+      struct.pack("<IIIII", 2, computeShaderId, groupCountX, groupCountY, groupCountZ)
     perFrameOffset = end
 
 def cmdBarrierRW(bufferId : int):
   global perFrameOffset
   end = perFrameOffset + 4 + 4
   if validateCmdAlloc(end):
-    sharedMem.buf[perFrameOffset:end] = struct.pack("<II", 2, bufferId)
+    sharedMem.buf[perFrameOffset:end] = struct.pack("<II", 3, bufferId)
     perFrameOffset = end
 
 def cmdBufferWrite(bufferId : int, subBufIdx : int, dstOffset : int, ba : bytearray):
   sizeBytes = len(ba)
   global perFrameOffset
   global perFrameEnd
-  end = perFrameOffset + 4 + 24
+  end = perFrameOffset + 4 + 20
   if validateCmdAlloc(end):
     memStart = perFrameEnd - sizeBytes
     if validateDataAlloc(memStart):
       sharedMem.buf[perFrameOffset:end] = \
-        struct.pack("<IIIII", 3, bufferId, subBufIdx, memStart, dstOffset, sizeBytes)
+        struct.pack("<IIIIII", 4, bufferId, subBufIdx, memStart, dstOffset, sizeBytes)
       perFrameOffset = end
       # TODO expose a variant where the shared memory data suballocations can be written to directly
       # to avoid this copy
@@ -128,22 +138,32 @@ def cmdUniformWrite(dstOffset : int, ba : bytearray):
   if validateCmdAlloc(end):
     memStart = perFrameEnd - sizeBytes
     if validateDataAlloc(memStart):
-      sharedMem.buf[perFrameOffset:end] = struct.pack("<IIII", 4, memStart, dstOffset, sizeBytes)
+      sharedMem.buf[perFrameOffset:end] = struct.pack("<IIII", 5, memStart, dstOffset, sizeBytes)
       perFrameOffset = end
       # TODO expose a variant where the shared memory data suballocations can be written to directly
       # to avoid this copy
       sharedMem.buf[memStart:perFrameEnd] = ba[:]
       perFrameEnd = memStart
 
+def cmdRunTask(taskId : int):
+  global perFrameOffset
+  end = perFrameOffset + 4 + 4
+  if validateCmdAlloc(end):
+    sharedMem.buf[perFrameOffset:end] = struct.pack("<II", 6, taskId)
+    perFrameOffset = end
+
 t = 0.0
 DT = 1.0/30.0
 while True:
+  resetPerFrameData()
+
   # TODO per-frame writing...
   t += DT
   f = 0.5 * math.sin(2.0 * t) + 0.5
   #0xFFFFFFFF
-  sharedMem.buf[0:28] = struct.pack("<IIIIIII", 4, 0, 0xFFFFFFFF, 28, 0, 12, 0)
-  sharedMem.buf[28:40] = struct.pack("<fff", f, f, f)
+  cmdBufferWrite(0, 0xFFFFFFFF, 0, struct.pack("<fff", f, f, f))
+  #sharedMem.buf[0:28] = struct.pack("<IIIIIII", 4, 0, 0xFFFFFFFF, 28, 0, 12, 0)
+  #sharedMem.buf[28:40] = struct.pack("<fff", f, f, f)
 
   win32event.ReleaseSemaphore(writeDoneSem, 1)
   # wait for read to complete - handling flr app termination if needed
