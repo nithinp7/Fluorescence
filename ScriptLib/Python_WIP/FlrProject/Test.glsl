@@ -6,6 +6,7 @@ VertexOutput VS_Test() {
 
 #ifdef IS_PIXEL_SHADER
 void PS_Test(VertexOutput IN) {
-  outColor = vec4(IN.uv, testBuf(uniforms.frameCount&1)[0], 1.0);
+  uint phase = uniforms.frameCount&1;
+  outColor = vec4(testBuf(phase)[0], testBuf(phase)[1], testBuf(phase)[2], 1.0);
 }
 #endif // IS_PIXEL_SHADER
