@@ -66,7 +66,8 @@ namespace flr {
       EST_BUFFER,
       EST_UI,
       EST_COMPUTE_SHADER,
-      EST_TASK, 
+      EST_TASK,
+      EST_CONST,
       EST_GREET = 0x1F1F1F1F,
       EST_FAILED = 0xFFFFFFFF
     };

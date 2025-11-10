@@ -188,7 +188,34 @@ void establishProject(Project* project, char* outStream, size_t streamSize) {
     serialize(cmd, 8);
     serialize(tb.name.data(), tb.name.size() + 1);
   }
+
+  for (const ParsedFlr::ConstFloat& c : parsed.m_constFloats) {
+    uint32_t cmd = EST_CONST;
+    serialize(&cmd, 4);
+    char type = 'f';
+    serialize(&type, 1);
+    serialize(&c.value, 4);
+    serialize(c.name.data(), c.name.size() + 1);
+  }
   
+  for (const ParsedFlr::ConstUint& c : parsed.m_constUints) {
+    uint32_t cmd = EST_CONST;
+    serialize(&cmd, 4);
+    char type = 'I';
+    serialize(&type, 1);
+    serialize(&c.value, 4);
+    serialize(c.name.data(), c.name.size() + 1);
+  }
+
+  for (const ParsedFlr::ConstInt& c : parsed.m_constInts) {
+    uint32_t cmd = EST_CONST;
+    serialize(&cmd, 4);
+    char type = 'i';
+    serialize(&type, 1);
+    serialize(&c.value, 4);
+    serialize(c.name.data(), c.name.size() + 1);
+  }
+
   {
     uint32_t finishCmd = EST_FINISH;
     serialize(&finishCmd, 4);

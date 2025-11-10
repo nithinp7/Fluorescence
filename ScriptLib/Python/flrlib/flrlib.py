@@ -47,6 +47,7 @@ class FlrEstType(IntEnum):
   EST_UI = 2
   EST_COMPUTE_SHADER = 3
   EST_TASK = 4
+  EST_CONST = 5
   EST_GREET = 0x1F1F1F1F
   EST_FAILED = 0xFFFFFFFF
 
@@ -115,6 +116,15 @@ class FlrScriptInterface:
   def __parseU32(self, offs : int):
     return int.from_bytes(self.sharedMem.buf[offs:offs+4], byteorder='little', signed=False), (offs+4)
   
+  def __parseI32(self, offs : int):
+    return int.from_bytes(self.sharedMem.buf[offs:offs+4], byteorder='little', signed=True), (offs+4)
+  
+  def __parseF32(self, offs : int):
+    return struct.unpack("<f", self.sharedMem.buf[offs:offs+4]), (offs+4)
+  
+  def __parseChar(self, offs : int):
+    return str(self.sharedMem.buf[offs:offs+1], 'utf-8'), (offs+1)
+  
   def __parseName(self, offs : int):
     for i in range(offs, min(offs + 1000, BUF_SIZE)): 
       if self.sharedMem.buf[i] == 0:
@@ -125,6 +135,9 @@ class FlrScriptInterface:
     self.bufferInfos = []
     self.computeShaders = []
     self.taskBlocks = []
+    self.constUints = []
+    self.constInts = []
+    self.constFloats = []
 
   def __establishProject(self):
     greeting, offs = self.__parseU32(0)
@@ -137,25 +150,47 @@ class FlrScriptInterface:
     while True:
       cmd, offs = self.__parseU32(offs)
       match cmd:
+        
         case FlrEstType.EST_BUFFER:
           bufIdx, offs = self.__parseU32(offs)
           bufCount, offs = self.__parseU32(offs)
           name, offs = self.__parseName(offs)
           assert(bufIdx == len(self.bufferInfos))
           self.bufferInfos.append((bufCount, name))
+
         case FlrEstType.EST_UI:
           # TODO handle this...
           assert(False) 
+
         case FlrEstType.EST_COMPUTE_SHADER:
           csidx, offs = self.__parseU32(offs)
           name, offs = self.__parseName(offs)
           assert(csidx == len(self.computeShaders))
           self.computeShaders.append(name)
+
         case FlrEstType.EST_TASK:
           tidx, offs = self.__parseU32(offs)
           name, offs = self.__parseName(offs)
           assert(tidx == len(self.taskBlocks))
           self.taskBlocks.append(name) 
+
+        case FlrEstType.EST_CONST:
+          c, offs = self.__parseChar(offs)
+          if c == 'i':
+            i, offs = self.__parseI32(offs)
+            name, offs = self.__parseName(offs)
+            self.constInts.append((name, i))
+          elif c == 'I':
+            u, offs = self.__parseU32(offs)
+            name, offs = self.__parseName(offs)
+            self.constUints.append((name, u))
+          elif c == 'f':
+            f, offs = self.__parseF32(offs)
+            name, offs = self.__parseName(offs)
+            self.constFloats.append((name, f))
+          else:
+            assert(False)
+
         case FlrEstType.EST_FINISH:
           return True
         case _:
@@ -199,6 +234,27 @@ class FlrScriptInterface:
         return FlrTaskHandle(tidx)
     return FlrTaskHandle()
   
+  def getConstFloat(self, name : str) -> float:
+    for c in self.constFloats:
+      if name == c[0]:
+        return c[1]
+    assert(False)
+    return 0.0
+  
+  def getConstInt(self, name : str) -> int:
+    for c in self.constInts:
+      if name == c[0]:
+        return c[1]
+    assert(False)
+    return 0
+
+  def getConstUint(self, name : str) -> int:
+    for c in self.constUints:
+      if name == c[0]:
+        return c[1]
+    assert(False)
+    return 0
+  
   def cmdPushConstants(self, push0 : int, push1 : int, push2 : int, push3 : int):
     end = self.perFrameOffset + 4 + 16
     if self.__validateCmdAlloc(end):
@@ -206,7 +262,6 @@ class FlrScriptInterface:
           struct.pack("<IIIII", FlrCmdType.CMD_PUSH_CONSTANTS, push0, push1, push2, push3)
       self.perFrameOffset = end
 
-  # TODO special ID types (bufferId, computeShaderId etc)
   def cmdDispatch(self, handle : FlrComputeShaderHandle, groupCountX : int, groupCountY : int, groupCountZ : int):
     assert(handle.isValid())
     end = self.perFrameOffset + 4 + 16
