@@ -10,8 +10,9 @@ using namespace AltheaEngine;
 
 namespace flr {
   namespace flr_cmds {
+    // NOTE: Keep in sync with FlrCmdType in flrlib.py
     enum eCmdType : uint32_t {
-      CMD_INVALID = 0,
+      CMD_FINISH = 0,
       CMD_PUSH_CONSTANTS,
       CMD_DISPATCH,
       CMD_BARRIER_RW,
@@ -59,6 +60,20 @@ namespace flr {
     bool processCmdList(Project* project, VkCommandBuffer commandBuffer, const FrameContext& frame, char* stream, size_t streamSize);
   } // namespace flr_cmds
 
+  namespace flr_handshake {
+    enum eEstablishType : uint32_t {
+      EST_FINISH = 0,
+      EST_BUFFER,
+      EST_UI,
+      EST_COMPUTE_SHADER,
+      EST_TASK, 
+      EST_GREET = 0x1F1F1F1F,
+      EST_FAILED = 0xFFFFFFFF
+    };
+
+    void establishProject(Project* project, char* stream, size_t streamSize);
+  } // namespace flr_handshake
+
   class IpcProgram : public IFlrProgram {
   public:
     IpcProgram();
@@ -83,5 +98,7 @@ namespace flr {
     HANDLE m_readDoneSemaphoreHandle;
     HANDLE m_sharedMemoryHandle;
     void* m_sharedMemoryBuffer;
+
+    bool m_bHandshakePending;
   };
 } // namespace flr

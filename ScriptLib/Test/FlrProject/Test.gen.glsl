@@ -28,10 +28,11 @@ struct VertexOutput {
   vec2 uv;
 };
 
-layout(set=1,binding=1) buffer BUFFER_testBuf {  float _INNER_testBuf[]; } _HEAP_testBuf [2];
+layout(set=1,binding=1) buffer BUFFER_args {  IndirectArgs args[]; };
+layout(set=1,binding=2) buffer BUFFER_testBuf {  float _INNER_testBuf[]; } _HEAP_testBuf [2];
 #define testBuf(IDX) _HEAP_testBuf[IDX]._INNER_testBuf
 
-layout(set=1, binding=2) uniform _UserUniforms {
+layout(set=1, binding=3) uniform _UserUniforms {
 	float TEST_SLIDER;
 };
 

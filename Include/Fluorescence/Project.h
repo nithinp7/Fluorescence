@@ -145,6 +145,10 @@ public:
 
   void setPushConstants(uint32_t push0, uint32_t push1 = 0, uint32_t push2 = 0, uint32 push3 = 0);
 
+  const ParsedFlr& getParsedFlr() const { return m_parsed; }
+  std::byte* getDynamicDataPtr() { return m_dynamicDataBuffer.data(); }
+  size_t getDynamicDataSize() const { return m_dynamicDataBuffer.size(); }
+
 private:
   void codeGenGlsl(const std::filesystem::path& autoGenFileName);
   void codeGenHlsl(const std::filesystem::path& autoGenFileName);

@@ -5,6 +5,7 @@ struct VertexOutput {
 }
 struct_size: 8
 
+structured_buffer args: IndirectArgs 10
 structured_buffer testBuf(2): float 12
   enable_cpu_access
 display_image DisplayImage
