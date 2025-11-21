@@ -1,6 +1,7 @@
 # Fluorescence
 
-<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/SDF.png" width=800px/>
+<img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/JupiterBox.png"/>
+<!-- <img src="https://github.com/nithinp7/Fluorescence/blob/main/Screenshots/SDF.png" width=800px/> -->
 
 Fluorescence is an application for fast prototyping and development of GPU-driven projects like rendering technique studies, GPU driven simulations, and procedural art. It is inspired by the ease-of-use of shadertoy, while retaining a bit more expressiveness for more complicated projects. It uses a custom text-based project format (".flr") which allows declarations of structures, buffers, and shaders, along with the sequence of GPU tasks (dispatches, draws, transitions, etc) performed each frame. UI inputs can be declared and transparently referenced in shader code. Texture files can be loaded / saved and a simple OBJ loader is built into the application. 
 
