@@ -1,0 +1,99 @@
+
+enable_feature: perspective_camera
+
+checkbox ACCUMULATE: false
+checkbox JITTER: false
+slider_float ETA: 0.3 0.01 0.99
+
+slider_float DOF_RAD: 0.61 0.0 1.0
+slider_float DOF_DIST: 0.18 0.001 0.25
+
+ui_dropdown_start TURBULENCE_OPTIONS:
+  checkbox APPLY_TURBULENCE: false
+  slider_float TURB_AMP: 0.1 0.01 1.0
+  slider_float TURB_FREQ: 1.0 0.1 100.0
+  slider_float TURB_SPEED: 1.0 0.1 10.0
+  slider_float TURB_ROT: 1.0 0.0 4.0
+  slider_float TURB_EXP: 1.3 1.0 4.0
+ui_dropdown_end
+ui_separator
+ui_dropdown_start RAYMARCH_OPTIONS:
+  slider_float RM_0: 1.0 0.01 2.0
+  slider_float RM_1: 1.0 0.01 2.0
+ui_dropdown_end
+ui_separator
+ui_dropdown_start COLOR_PALETTE:
+  slider_float COLOR0_FALLOFF: 100.0 1.0 1000.0
+  slider_float COLOR0_INT: 100.0 1.0 1000.0
+  color_picker COLOR0: 0.5 0.02 0.01 1.0
+
+  slider_float COLOR1_FALLOFF: 100.0 1.0 1000.0
+  slider_float COLOR1_INT: 100.0 1.0 1000.0
+  color_picker COLOR1: 0.5 0.02 0.01 1.0
+
+  slider_float COLOR2_FALLOFF: 100.0 1.0 1000.0
+  slider_float COLOR2_INT: 100.0 1.0 1000.0
+  color_picker COLOR2: 0.5 0.02 0.01 1.0
+
+  slider_float COLOR3_FALLOFF: 100.0 1.0 1000.0
+  slider_float COLOR3_INT: 100.0 1.0 1000.0
+  color_picker COLOR3: 0.5 0.02 0.01 1.0
+ui_dropdown_end
+ui_separator
+
+
+slider_float BLUR_RADIUS: 1.0 0.0 10.0
+checkbox SPEC_SAMPLE: true 
+slider_uint BOUNCES: 4 2 5
+slider_float EXPOSURE: 0.1 0.05 0.99
+slider_uint BRDF_MODE: 2 0 2
+slider_float BRDF_MIX: 0.5 0.001 0.999
+
+ui_separator
+
+ui_dropdown_start MISC:
+  slider_float BOUNCE_BIAS: 0.001 0.00001 0.01;
+  slider_uint RENDER_MODE: 0 0 2
+  slider_uint BACKGROUND: 0 0 3
+ui_dropdown_end
+
+struct GlobalState {
+  uint accumulationFrames;
+}
+struct_size: 4
+structured_buffer globalStateBuffer: GlobalState 1
+
+include "FlrLib/Scene/Scene.flrh"
+
+initialization_task: INIT_SCENE_CORNELL_BOX
+
+image accumulationBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
+texture_alias accumulationTexture
+image accumulationBuffer2: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
+texture_alias accumulationTexture2
+
+compute_shader CS_Tick: 1 1 1
+
+compute_shader CS_PathTrace: 32 32 1
+
+compute_dispatch: CS_Tick 1 1 1
+barrier: globalStateBuffer triBuffer sphereBuffer materialBuffer
+transition_layout: accumulationBuffer image
+transition_layout: accumulationBuffer2 image
+compute_dispatch: CS_PathTrace SCREEN_WIDTH SCREEN_HEIGHT 1
+transition_layout: accumulationBuffer texture
+transition_layout: accumulationBuffer2 texture
+
+struct VertexOutput {
+  vec2 screenUV;
+};
+struct_size: 8
+
+display_image DisplayImage
+
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+
+  draw: VS_Render PS_Render 3 1
+    vertex_output: VertexOutput
+

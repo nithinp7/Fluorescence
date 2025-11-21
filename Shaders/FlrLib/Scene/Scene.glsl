@@ -338,7 +338,7 @@ void CS_InitCornellBox() {
     pushMaterial(mat);
 
     // add light
-    mat.emissive = 2.0 * vec3(40.0, 40.0, 30.0);
+    mat.emissive = vec3(15.0, 20.0, 10.0);
     pushMaterial(mat);
     float lightSize = 6.0;
     float lightHeight = cornellBoxScale - 0.5;
