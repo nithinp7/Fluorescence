@@ -13,12 +13,21 @@ namespace flr {
     // NOTE: Keep in sync with FlrCmdType in flrlib.py
     enum eCmdType : uint32_t {
       CMD_FINISH = 0,
+      CMD_UINT_PARAM,
       CMD_PUSH_CONSTANTS,
       CMD_DISPATCH,
       CMD_BARRIER_RW,
       CMD_BUFFER_WRITE,
+      CMD_BUFFER_STAGED_UPLOAD,
       CMD_UNIFORM_WRITE,
       CMD_RUN_TASK
+    };
+
+    // only valid on introduction
+    struct CmdUintParam {
+      uint32_t nameOffset;
+      uint32_t nameSize;
+      uint32_t value;
     };
 
     struct CmdPushConstants {
@@ -47,6 +56,13 @@ namespace flr {
       uint32_t sizeBytes;
     };
 
+    struct CmdBufferStagedUpload {
+      uint32_t bufferId;
+      uint32_t subBufIdx;
+      uint32_t srcOffset;
+      uint32_t sizeBytes;
+    };
+
     struct CmdUniformWrite {
       uint32_t srcOffset;
       uint32_t dstOffset;
@@ -57,7 +73,8 @@ namespace flr {
       uint32_t taskId;
     };
 
-    bool processCmdList(Project* project, VkCommandBuffer commandBuffer, const FrameContext& frame, char* stream, size_t streamSize);
+    bool processIntroduction(const char* stream, size_t streamSize, flr::FlrParams& params);
+    bool processCmdList(Project* project, VkCommandBuffer commandBuffer, const FrameContext& frame, const char* stream, size_t streamSize);
   } // namespace flr_cmds
 
   namespace flr_handshake {
@@ -99,6 +116,8 @@ namespace flr {
     HANDLE m_readDoneSemaphoreHandle;
     HANDLE m_sharedMemoryHandle;
     void* m_sharedMemoryBuffer;
+
+    flr::FlrParams m_params;
 
     bool m_bHandshakePending;
   };

@@ -33,12 +33,14 @@ BUF_SIZE = 1<<30
 # NOTE Keep in sync with eCmdType in IpcProgram.h
 class FlrCmdType(IntEnum):
   CMD_FINISH = 0
-  CMD_PUSH_CONSTANTS = 1
-  CMD_DISPATCH = 2
-  CMD_BARRIER_RW = 3
-  CMD_BUFFER_WRITE = 4
-  CMD_UNIFORM_WRITE = 5
-  CMD_RUN_TASK = 6
+  CMD_UINT_PARAM = 1
+  CMD_PUSH_CONSTANTS = 2
+  CMD_DISPATCH = 3
+  CMD_BARRIER_RW = 4
+  CMD_BUFFER_WRITE = 5
+  CMD_BUFFER_STAGED_UPLOAD = 6
+  CMD_UNIFORM_WRITE = 7
+  CMD_RUN_TASK = 8
 
 # NOTE Keep in sync with eEstablishType in IpcProgram.h
 class FlrEstType(IntEnum):
@@ -67,12 +69,28 @@ class FlrTaskHandle(FlrHandle):
   pass
 
 def runFlr(exePath, flrPath):
-  subprocess.run([exePath, flrPath, "TODO_REMOVE"], stdout=subprocess.PIPE)
+  subprocess.run([exePath, flrPath, "-ipc"], stdout=subprocess.PIPE)
+
+class FlrBufInfo:
+  def __init__(self, name : str, bufferIdx : int, bufferSize : int, bufferCount : int, bCpuAccess : bool):
+    self.name = name
+    self.bufferIdx = bufferIdx
+    self.bufferSize = bufferSize
+    self.bufferCount = bufferCount
+    self.bCpuAccess = bCpuAccess
+
+class FlrParams:
+  def __init__(self):
+    self.names = []
+    self.values = []
+  
+  def append(self, name : str, value : int):
+    self.names.append(name)
+    self.values.append(value)
 
 class FlrScriptInterface:
-  
   # TODO encapsulate members as private ?
-  def __init__(self, flrProjPath):
+  def __init__(self, flrProjPath, params : FlrParams, flrDebugEnable = False):
     self.writeDoneSem = win32event.CreateSemaphore(None, 0, 1, "Global_FlrWriteDoneSemaphore")
     self.readDoneSem = win32event.CreateSemaphore(None, 0, 1, "Global_FlrReadDoneSemaphore")
     self.sharedMem = shared_memory.SharedMemory(name="Global_FlrSharedMemory", create=True, size=BUF_SIZE)
@@ -81,18 +99,19 @@ class FlrScriptInterface:
     self.perFrameEnd = BUF_SIZE
     self.perFrameFailure = False
 
-    flrDebugEnable = True
     self.flrExePath = \
         "C:/Users/nithi/Documents/Code/Fluorescence/build/RelWithDebInfo/Fluorescence.exe" \
         if flrDebugEnable else \
         "Fluorescence.exe"
     
+    for i in range(len(params.names)):
+      self.__cmdUintParam(params.names[i], params.values[i])
+    self.__cmdFinalize()
+    self.__resetPerFrameData()
+    
     self.flrProjPath = os.path.abspath(flrProjPath)
     self.flrThread = Thread(target = runFlr, args = [self.flrExePath, self.flrProjPath]) 
     self.flrThread.start()
-
-    # TODO remove hardcoded greeting
-    self.sharedMem.buf[:5] = b'mssga'
 
     win32event.ReleaseSemaphore(self.writeDoneSem, 1)
     win32event.WaitForSingleObject(self.readDoneSem, win32event.INFINITE)
@@ -153,10 +172,12 @@ class FlrScriptInterface:
         
         case FlrEstType.EST_BUFFER:
           bufIdx, offs = self.__parseU32(offs)
+          bufSize, offs = self.__parseU32(offs)
           bufCount, offs = self.__parseU32(offs)
+          bufType, offs = self.__parseU32(offs)
           name, offs = self.__parseName(offs)
           assert(bufIdx == len(self.bufferInfos))
-          self.bufferInfos.append((bufCount, name))
+          self.bufferInfos.append(FlrBufInfo(name, bufIdx, bufSize, bufCount, bufType == 1))
 
         case FlrEstType.EST_UI:
           # TODO handle this...
@@ -211,14 +232,14 @@ class FlrScriptInterface:
   
   def getBufferHandle(self, name : str):
     for bufIdx in range(0, len(self.bufferInfos)):
-      if name == self.bufferInfos[bufIdx][1]:
+      if name == self.bufferInfos[bufIdx].name:
         return FlrBufferHandle(bufIdx)
     return FlrBufferHandle()
   
   def __isValidBuffer(self, bufIdx : int, subBufIdx : int):
     if bufIdx < 0 or bufIdx >= len(self.bufferInfos):
       return False
-    if subBufIdx != 0xFFFFFFFF and (subBufIdx < 0 or subBufIdx >= self.bufferInfos[bufIdx][0]):
+    if subBufIdx != 0xFFFFFFFF and (subBufIdx < 0 or subBufIdx >= self.bufferInfos[bufIdx].bufferCount):
       return False
     return True
   
@@ -281,13 +302,35 @@ class FlrScriptInterface:
     assert(handle.isValid())
     bufferId = handle.idx
     assert(self.__isValidBuffer(bufferId, subBufIdx))
+    bufInfo = self.bufferInfos[bufferId]
+    assert(bufInfo.bCpuAccess)
     sizeBytes = len(ba)
+    assert(dstOffset >= 0 and (dstOffset + sizeBytes) <= bufInfo.bufferSize)
     end = self.perFrameOffset + 4 + 20
     if self.__validateCmdAlloc(end):
       memStart = self.perFrameEnd - sizeBytes
       if self.__validateDataAlloc(memStart):
         self.sharedMem.buf[self.perFrameOffset:end] = \
           struct.pack("<IIIIII", FlrCmdType.CMD_BUFFER_WRITE, bufferId, subBufIdx, memStart, dstOffset, sizeBytes)
+        self.perFrameOffset = end
+        # TODO expose a variant where the shared memory data suballocations can be written to directly
+        # to avoid this copy
+        self.sharedMem.buf[memStart:self.perFrameEnd] = ba[:]
+        self.perFrameEnd = memStart
+
+  def cmdBufferStagedUpload(self, handle : FlrBufferHandle, subBufIdx : int, ba : bytearray):
+    assert(handle.isValid())
+    bufferId = handle.idx
+    assert(self.__isValidBuffer(bufferId, subBufIdx))
+    bufInfo = self.bufferInfos[bufferId]
+    sizeBytes = len(ba)
+    assert(sizeBytes == bufInfo.bufferSize)
+    end = self.perFrameOffset + 4 + 16
+    if self.__validateCmdAlloc(end):
+      memStart = self.perFrameEnd - sizeBytes
+      if self.__validateDataAlloc(memStart):
+        self.sharedMem.buf[self.perFrameOffset:end] = \
+          struct.pack("<IIIII", FlrCmdType.CMD_BUFFER_STAGED_UPLOAD, bufferId, subBufIdx, memStart, sizeBytes)
         self.perFrameOffset = end
         # TODO expose a variant where the shared memory data suballocations can be written to directly
         # to avoid this copy
@@ -313,6 +356,18 @@ class FlrScriptInterface:
     if self.__validateCmdAlloc(end):
       self.sharedMem.buf[self.perFrameOffset:end] = struct.pack("<II", FlrCmdType.CMD_RUN_TASK, handle.idx)
       self.perFrameOffset = end
+
+  def __cmdUintParam(self, name : str, value : int):
+    ba = name.encode('utf-8')
+    nameLen = len(ba)
+    end = self.perFrameOffset + 4 + 12
+    if self.__validateCmdAlloc(end):
+      memStart = self.perFrameEnd - nameLen
+      if self.__validateDataAlloc(memStart):
+        self.sharedMem.buf[self.perFrameOffset:end] = struct.pack("<IIII", FlrCmdType.CMD_UINT_PARAM, memStart, nameLen, value)
+        self.perFrameOffset = end
+        self.sharedMem.buf[memStart:memStart+nameLen] = ba
+        self.perFrameEnd = memStart
 
   def __cmdFinalize(self):
     end = self.perFrameOffset + 4

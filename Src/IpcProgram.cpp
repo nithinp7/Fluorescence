@@ -15,7 +15,7 @@ namespace flr_cmds {
 namespace {
 class CmdStreamView {
 public:
-  CmdStreamView(char* stream, size_t streamSize)
+  CmdStreamView(const char* stream, size_t streamSize)
       : m_pStream(stream),
         m_streamOffset(0),
         m_streamSize(streamSize),
@@ -49,19 +49,45 @@ public:
     }
     memcpy(dst, m_pStream + srcOffset, sizeBytes);
   }
+
 private:
-  char* m_pStream;
+  const char* m_pStream;
   size_t m_streamOffset;
   size_t m_streamSize;
   bool m_bFailed;
 };
 } // namespace
 
+bool processIntroduction(const char* stream, size_t streamSize, flr::FlrParams& params) {
+  CmdStreamView streamView(stream, streamSize);
+  while (auto cmdType = streamView.read<uint32_t>()) {
+    switch (*cmdType) {
+    case CMD_FINISH: {
+      return true;
+    }
+    case CMD_UINT_PARAM: {
+      if (auto cmd = streamView.read<CmdUintParam>()) {
+        ParsedFlr::ConstUint& param = params.m_uintParams.emplace_back();
+        param.value = cmd->value;
+        param.name.resize(cmd->nameSize, 0);
+        streamView.copyTo(param.name.data(), cmd->nameOffset, cmd->nameSize);
+      }
+      break;
+    }
+    default: {
+      return false;
+    }
+    }
+  }
+
+  return false;
+}
+
 bool processCmdList(
     Project* project,
     VkCommandBuffer commandBuffer,
     const FrameContext& frame,
-    char* stream,
+    const char* stream,
     size_t streamSize) {
   CmdStreamView streamView(stream, streamSize);
 
@@ -99,10 +125,38 @@ bool processCmdList(
       if (auto cmd = streamView.read<CmdBufferWrite>()) {
         if (cmd->subBufIdx == ~0u)
           cmd->subBufIdx = frame.frameRingBufferIndex;
-        BufferAllocation* alloc = project->getBufferAlloc(BufferId(cmd->bufferId), cmd->subBufIdx);
+        BufferAllocation* alloc =
+            project->getBufferAlloc(BufferId(cmd->bufferId), cmd->subBufIdx);
         char* pMapped = (char*)alloc->mapMemory();
-        streamView.copyTo(pMapped + cmd->dstOffset, cmd->srcOffset, cmd->sizeBytes);
+        streamView.copyTo(
+            pMapped + cmd->dstOffset,
+            cmd->srcOffset,
+            cmd->sizeBytes);
         alloc->unmapMemory();
+      }
+      break;
+    }
+    case CMD_BUFFER_STAGED_UPLOAD: {
+      if (auto cmd = streamView.read<CmdBufferStagedUpload>()) {
+        BufferAllocation* alloc =
+            project->getBufferAlloc(BufferId(cmd->bufferId), cmd->subBufIdx);
+        BufferAllocation staging =
+            BufferUtilities::createStagingBuffer(cmd->sizeBytes);
+        char* pMapped = (char*)staging.mapMemory();
+        streamView.copyTo(pMapped, cmd->srcOffset, cmd->sizeBytes);
+        staging.unmapMemory();
+        BufferUtilities::copyBuffer(
+            commandBuffer,
+            staging.getBuffer(),
+            0,
+            alloc->getBuffer(),
+            0,
+            cmd->sizeBytes);
+        GApplication->addDeletiontask(
+            {[pStaging = new BufferAllocation(std::move(staging))]() {
+               delete pStaging;
+             },
+             frame.frameRingBufferIndex});
       }
       break;
     }
@@ -110,13 +164,19 @@ bool processCmdList(
       if (auto cmd = streamView.read<CmdUniformWrite>()) {
         if (cmd->dstOffset + cmd->sizeBytes > project->getDynamicDataSize())
           streamView.setFailed();
-        streamView.copyTo(project->getDynamicDataPtr() + cmd->dstOffset, cmd->srcOffset, cmd->sizeBytes);
+        streamView.copyTo(
+            project->getDynamicDataPtr() + cmd->dstOffset,
+            cmd->srcOffset,
+            cmd->sizeBytes);
       }
       break;
     }
     case CMD_RUN_TASK: {
       if (auto cmd = streamView.read<CmdRunTask>()) {
-        project->executeTaskBlock(TaskBlockId(cmd->taskId), commandBuffer, frame);
+        project->executeTaskBlock(
+            TaskBlockId(cmd->taskId),
+            commandBuffer,
+            frame);
       }
       break;
     }
@@ -131,7 +191,6 @@ bool processCmdList(
 } // namespace flr_cmds
 
 namespace flr_handshake {
-
 // the establishment is a flr --> script communication format consisting
 // of mappings between string names and element IDs
 void establishProject(Project* project, char* outStream, size_t streamSize) {
@@ -170,21 +229,24 @@ void establishProject(Project* project, char* outStream, size_t streamSize) {
 
   for (uint32_t bidx = 0; bidx < parsed.m_buffers.size(); bidx++) {
     const ParsedFlr::BufferDesc& buf = parsed.m_buffers[bidx];
-    uint32_t cmd[] = { EST_BUFFER, bidx, buf.bufferCount };
-    serialize(cmd, 12);
+    const ParsedFlr::StructDef& str = parsed.m_structDefs[buf.structIdx];
+    uint32_t bufType = buf.bCpuVisible ? 1u : 0u;
+    size_t bufSize = buf.elemCount * str.size;
+    uint32_t cmd[] = {EST_BUFFER, bidx, bufSize, buf.bufferCount, bufType};
+    serialize(cmd, 20);
     serialize(buf.name.data(), buf.name.size() + 1);
   }
 
   for (uint32_t cidx = 0; cidx < parsed.m_computeShaders.size(); cidx++) {
     const ParsedFlr::ComputeShader& cs = parsed.m_computeShaders[cidx];
-    uint32_t cmd[] = { EST_COMPUTE_SHADER, cidx };
+    uint32_t cmd[] = {EST_COMPUTE_SHADER, cidx};
     serialize(cmd, 8);
     serialize(cs.name.data(), cs.name.size() + 1);
   }
 
   for (uint32_t tidx = 0; tidx < parsed.m_taskBlocks.size(); tidx++) {
     const ParsedFlr::TaskBlock& tb = parsed.m_taskBlocks[tidx];
-    uint32_t cmd[] = { EST_TASK, tidx };
+    uint32_t cmd[] = {EST_TASK, tidx};
     serialize(cmd, 8);
     serialize(tb.name.data(), tb.name.size() + 1);
   }
@@ -197,7 +259,7 @@ void establishProject(Project* project, char* outStream, size_t streamSize) {
     serialize(&c.value, 4);
     serialize(c.name.data(), c.name.size() + 1);
   }
-  
+
   for (const ParsedFlr::ConstUint& c : parsed.m_constUints) {
     uint32_t cmd = EST_CONST;
     serialize(&cmd, 4);
@@ -259,9 +321,11 @@ IpcProgram::IpcProgram() {
 
   WaitForSingleObject(m_writeDoneSemaphoreHandle, INFINITE);
 
-  char c[512];
-  snprintf(c, 257, "%s", (char*)m_sharedMemoryBuffer);
-  std::cerr << c << std::endl;
+  if (!flr_cmds::processIntroduction((const char*)m_sharedMemoryBuffer, BUF_SIZE, m_params)) {
+    std::cerr << "Failed processing introduction cmdlist." << std::endl;
+    throw std::runtime_error("Failed processing introduction cmdlist.");
+    return;
+  }
 
   // Warning: semaphore needs to be signalled once we do the handshake
   m_bHandshakePending = true;
@@ -279,12 +343,16 @@ IpcProgram::~IpcProgram() {
     CloseHandle(m_sharedMemoryHandle);
 }
 
-void IpcProgram::setupParams(FlrParams& params) {}
+void IpcProgram::setupParams(FlrParams& params) {
+  params = m_params;
+}
 
 void IpcProgram::tick(Project* project, const FrameContext& frame) {
-  if (m_bHandshakePending)
-  {
-    flr_handshake::establishProject(project, (char*)m_sharedMemoryBuffer, BUF_SIZE);
+  if (m_bHandshakePending) {
+    flr_handshake::establishProject(
+        project,
+        (char*)m_sharedMemoryBuffer,
+        BUF_SIZE);
     char c[512];
     snprintf(c, 512, "%s", (char*)m_sharedMemoryBuffer);
     std::cerr << c << std::endl;
@@ -309,7 +377,12 @@ void IpcProgram::draw(
   WaitForSingleObject(m_writeDoneSemaphoreHandle, INFINITE);
 
   //*project->getSliderFloat("TEST_SLIDER") = *(float*)m_sharedMemoryBuffer;
-  bool result = flr_cmds::processCmdList(project, commandBuffer, frame, (char*)m_sharedMemoryBuffer, BUF_SIZE);
+  bool result = flr_cmds::processCmdList(
+      project,
+      commandBuffer,
+      frame,
+      (char*)m_sharedMemoryBuffer,
+      BUF_SIZE);
   if (!result)
     std::cerr << "Could not parse commandlist" << std::endl;
 

@@ -32,8 +32,17 @@ int main(int argc, char* argv[]) {
     game->setStartupProject(argv[1]);
   }
   if (argc > 2) {
-    // TODO actually do something with argv[1]
-    ipc = game->registerProgram<flr::IpcProgram>();
+    if (!strcmp(argv[2], "-ipc"))
+    {
+      ipc = game->registerProgram<flr::IpcProgram>();
+    }
+    else
+    {
+      return EXIT_FAILURE; // unknown args
+    }
+  }
+  if (argc > 3) {
+    return EXIT_FAILURE; // unknown args
   }
 
   try {
