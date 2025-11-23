@@ -77,20 +77,24 @@ namespace flr {
     bool processCmdList(Project* project, VkCommandBuffer commandBuffer, const FrameContext& frame, const char* stream, size_t streamSize);
   } // namespace flr_cmds
 
-  namespace flr_handshake {
-    enum eEstablishType : uint32_t {
-      EST_FINISH = 0,
-      EST_BUFFER,
-      EST_UI,
-      EST_COMPUTE_SHADER,
-      EST_TASK,
-      EST_CONST,
-      EST_GREET = 0x1F1F1F1F,
-      EST_FAILED = 0xFFFFFFFF
+  namespace flr_packets {
+    // NOTE: Keep in sync with FlrMessageType in flrlib.py
+    enum eMessageType : uint32_t {
+      FMT_FINISH = 0,
+      FMT_BUFFER,
+      FMT_UI,
+      FMT_UI_UPDATE,
+      FMT_COMPUTE_SHADER,
+      FMT_TASK,
+      FMT_CONST,
+      FMT_REINIT,
+      FMT_GREET = 0x1F1F1F1F,
+      FMT_FAILED = 0xFFFFFFFF
     };
 
-    void establishProject(Project* project, char* stream, size_t streamSize);
-  } // namespace flr_handshake
+    void assembleEstablishmentPacket(Project* project, char* stream, size_t streamSize);
+    void assembleUpdatePacket(Project* project, char* stream, size_t streamSize);
+  } // namespace flr_packets
 
   class IpcProgram : public IFlrProgram {
   public:
@@ -100,8 +104,8 @@ namespace flr {
     //void setupDescriptorTable(DescriptorSetLayoutBuilder& builder) override;
     //void createDescriptors(ResourcesAssignment& assignment) override;
     void setupParams(FlrParams& params) override;
-    //void createRenderState(Project* project, SingleTimeCommandBuffer& commandBuffer) override;
-    //void destroyRenderState() override;
+    void createRenderState(Project* project, SingleTimeCommandBuffer& commandBuffer) override;
+    void destroyRenderState() override;
 
     void tick(Project* project, const FrameContext& frame) override;
     void draw(
@@ -112,13 +116,15 @@ namespace flr {
   private:
     // TODO - would really like to double buffer so that the script can run a frame ahead of 
     // the FLR app
+
+    // TODO - should rename these, "writeDone" --> "scriptDone" and "readDone" --> "appDone"
     HANDLE m_writeDoneSemaphoreHandle;
     HANDLE m_readDoneSemaphoreHandle;
     HANDLE m_sharedMemoryHandle;
     void* m_sharedMemoryBuffer;
 
-    flr::FlrParams m_params;
+    bool m_bInitialSetup;
 
-    bool m_bHandshakePending;
+    flr::FlrParams m_params;
   };
 } // namespace flr

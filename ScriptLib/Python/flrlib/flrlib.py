@@ -42,16 +42,29 @@ class FlrCmdType(IntEnum):
   CMD_UNIFORM_WRITE = 7
   CMD_RUN_TASK = 8
 
-# NOTE Keep in sync with eEstablishType in IpcProgram.h
-class FlrEstType(IntEnum):
-  EST_FINISH = 0
-  EST_BUFFER = 1
-  EST_UI = 2
-  EST_COMPUTE_SHADER = 3
-  EST_TASK = 4
-  EST_CONST = 5
-  EST_GREET = 0x1F1F1F1F
-  EST_FAILED = 0xFFFFFFFF
+# NOTE Keep in sync with eMessageType in IpcProgram.h
+class FlrMessageType(IntEnum):
+  FMT_FINISH = 0
+  FMT_BUFFER = 1
+  FMT_UI = 2
+  FMT_UI_UPDATE = 3
+  FMT_COMPUTE_SHADER = 4
+  FMT_TASK = 5
+  FMT_CONST = 6
+  FMT_REINIT = 7
+  FMT_GREET = 0x1F1F1F1F
+  FMT_FAILED = 0xFFFFFFFF
+
+class FlrUpdateType(IntEnum):
+  UT_FINISH = 0,
+  UT_UI_UPDATE = 1
+  UT_GREET = 0x1F1F1F1F
+  UT_FAILED = 0xFFFFFFFF
+
+class FlrTickResult(IntEnum):
+  TR_SUCCESS = 0
+  TR_TERMINATE = 1
+  TR_REINIT = 2
 
 class FlrHandle:
   def __init__(self, idx : int = 0xFFFFFFFF):
@@ -66,6 +79,18 @@ class FlrComputeShaderHandle(FlrHandle):
   pass
 
 class FlrTaskHandle(FlrHandle):
+  pass
+
+class FlrUintSliderHandle(FlrHandle):
+  pass
+  
+class FlrIntSliderHandle(FlrHandle):
+  pass
+
+class FlrFloatSliderHandle(FlrHandle):
+  pass
+
+class FlrCheckboxHandle(FlrHandle):
   pass
 
 def runFlr(exePath, flrPath):
@@ -87,6 +112,11 @@ class FlrParams:
   def append(self, name : str, value : int):
     self.names.append(name)
     self.values.append(value)
+
+class FlrUiElem:
+  def __init__(self, name : str, offset : int):
+    self.name = name
+    self.offset = offset
 
 class FlrScriptInterface:
   # TODO encapsulate members as private ?
@@ -113,15 +143,14 @@ class FlrScriptInterface:
     self.flrThread = Thread(target = runFlr, args = [self.flrExePath, self.flrProjPath]) 
     self.flrThread.start()
 
-    win32event.ReleaseSemaphore(self.writeDoneSem, 1)
+    # NOTE waiting for params to be read and initial establishment packet to be written
     win32event.WaitForSingleObject(self.readDoneSem, win32event.INFINITE)
     
     self.__resetProject()
-    self.__establishProject()
-    self.sharedMem.buf[:5] = b'mssgb'
-
-    win32event.ReleaseSemaphore(self.writeDoneSem, 1)
-    win32event.WaitForSingleObject(self.readDoneSem, win32event.INFINITE)
+    self.__processPacket()
+    self.bReinitProject = False
+    
+    # NOTE next signal is not set until after the initial draw's cmdlist is finished
 
   def __del__(self):
     self.flrThread.join()
@@ -157,65 +186,107 @@ class FlrScriptInterface:
     self.constUints = []
     self.constInts = []
     self.constFloats = []
+    self.uiBuffer = []
+    self.uintSliders = []
+    self.intSliders = []
+    self.floatSliders = []
+    self.checkboxes = []
+    self.bReinitProject = False
 
-  def __establishProject(self):
+  def __processMessage(self, cmd : int, offs : int):
+    match cmd:
+
+      case FlrMessageType.FMT_BUFFER:
+        bufIdx, offs = self.__parseU32(offs)
+        bufSize, offs = self.__parseU32(offs)
+        bufCount, offs = self.__parseU32(offs)
+        bufType, offs = self.__parseU32(offs)
+        name, offs = self.__parseName(offs)
+        assert(bufIdx == len(self.bufferInfos))
+        self.bufferInfos.append(FlrBufInfo(name, bufIdx, bufSize, bufCount, bufType == 1))
+
+      case FlrMessageType.FMT_UI:
+        uiType, offs = self.__parseU32(offs)
+        assert(uiType < 5)
+        if uiType == 0:
+          # buffer size
+          uiBufSize, offs = self.__parseU32(offs)
+          self.uiBuffer = bytearray(uiBufSize)
+        else:
+          uiBufOffset, offs = self.__parseU32(offs)
+          name, offs = self.__parseName(offs)
+          # TODO formalize these sub-ui types
+          if uiType == 1:
+            # uint slider
+            self.uintSliders.append(FlrUiElem(name, uiBufOffset))
+          elif uiType == 2:
+            # int slider
+            self.uintSliders.append(FlrUiElem(name, uiBufOffset))
+          elif uiType == 3:
+            # float slider
+            self.floatSliders.append(FlrUiElem(name, uiBufOffset))
+          elif uiType == 4:
+            # checkbox
+            self.checkboxes.append(FlrUiElem(name, uiBufOffset))
+
+      case FlrMessageType.FMT_UI_UPDATE:
+        allocOffs, offs = self.__parseU32(offs)
+        allocSize, offs = self.__parseU32(offs)
+        assert(allocSize == len(self.uiBuffer))
+        self.uiBuffer[:] = self.sharedMem.buf[allocOffs:allocOffs+allocSize]
+      
+      case FlrMessageType.FMT_COMPUTE_SHADER:
+        csidx, offs = self.__parseU32(offs)
+        name, offs = self.__parseName(offs)
+        assert(csidx == len(self.computeShaders))
+        self.computeShaders.append(name)
+
+      case FlrMessageType.FMT_TASK:
+        tidx, offs = self.__parseU32(offs)
+        name, offs = self.__parseName(offs)
+        assert(tidx == len(self.taskBlocks))
+        self.taskBlocks.append(name) 
+
+      case FlrMessageType.FMT_CONST:
+        c, offs = self.__parseChar(offs)
+        if c == 'i':
+          i, offs = self.__parseI32(offs)
+          name, offs = self.__parseName(offs)
+          self.constInts.append((name, i))
+        elif c == 'I':
+          u, offs = self.__parseU32(offs)
+          name, offs = self.__parseName(offs)
+          self.constUints.append((name, u))
+        elif c == 'f':
+          f, offs = self.__parseF32(offs)
+          name, offs = self.__parseName(offs)
+          self.constFloats.append((name, f))
+        else:
+          assert(False)
+
+      case FlrMessageType.FMT_REINIT:
+        self.__resetProject()
+        self.bReinitProject = True
+      
+      case _:
+        return False, offs
+    return True, offs
+
+  def __processPacket(self):
     greeting, offs = self.__parseU32(0)
-    if greeting == FlrEstType.EST_FAILED:
+    if greeting == FlrMessageType.FMT_FAILED:
       return False
-    assert(greeting == FlrEstType.EST_GREET)
-    if greeting != FlrEstType.EST_GREET:
+    assert(greeting == FlrMessageType.FMT_GREET)
+    if greeting != FlrMessageType.FMT_GREET:
       return False
-
+    
     while True:
       cmd, offs = self.__parseU32(offs)
-      match cmd:
-        
-        case FlrEstType.EST_BUFFER:
-          bufIdx, offs = self.__parseU32(offs)
-          bufSize, offs = self.__parseU32(offs)
-          bufCount, offs = self.__parseU32(offs)
-          bufType, offs = self.__parseU32(offs)
-          name, offs = self.__parseName(offs)
-          assert(bufIdx == len(self.bufferInfos))
-          self.bufferInfos.append(FlrBufInfo(name, bufIdx, bufSize, bufCount, bufType == 1))
-
-        case FlrEstType.EST_UI:
-          # TODO handle this...
-          assert(False) 
-
-        case FlrEstType.EST_COMPUTE_SHADER:
-          csidx, offs = self.__parseU32(offs)
-          name, offs = self.__parseName(offs)
-          assert(csidx == len(self.computeShaders))
-          self.computeShaders.append(name)
-
-        case FlrEstType.EST_TASK:
-          tidx, offs = self.__parseU32(offs)
-          name, offs = self.__parseName(offs)
-          assert(tidx == len(self.taskBlocks))
-          self.taskBlocks.append(name) 
-
-        case FlrEstType.EST_CONST:
-          c, offs = self.__parseChar(offs)
-          if c == 'i':
-            i, offs = self.__parseI32(offs)
-            name, offs = self.__parseName(offs)
-            self.constInts.append((name, i))
-          elif c == 'I':
-            u, offs = self.__parseU32(offs)
-            name, offs = self.__parseName(offs)
-            self.constUints.append((name, u))
-          elif c == 'f':
-            f, offs = self.__parseF32(offs)
-            name, offs = self.__parseName(offs)
-            self.constFloats.append((name, f))
-          else:
-            assert(False)
-
-        case FlrEstType.EST_FINISH:
-          return True
-        case _:
-          return False
+      if cmd == FlrMessageType.FMT_FINISH:
+        return True
+      bResult, offs = self.__processMessage(cmd, offs)
+      if not bResult:
+        return False
 
   def __resetPerFrameData(self):
     self.perFrameOffset = 0
@@ -254,6 +325,37 @@ class FlrScriptInterface:
       if name == self.taskBlocks[tidx]:
         return FlrTaskHandle(tidx)
     return FlrTaskHandle()
+  
+  def __getUiHandle(self, name : str, arr):
+    for i in range(0, len(arr)):
+      if name == arr[i].name:
+        return i
+    return 0xFFFFFFFF
+  
+  def getSliderFloatHandle(self, name : str) -> FlrFloatSliderHandle:
+    return FlrFloatSliderHandle(self.__getUiHandle(name, self.floatSliders))
+  def getSliderUintHandle(self, name : str) -> FlrUintSliderHandle:
+    return FlrUintSliderHandle(self.__getUiHandle(name, self.uintSliders))
+  def getSliderIntHandle(self, name : str) -> FlrIntSliderHandle:
+    return FlrIntSliderHandle(self.__getUiHandle(name, self.intSliders))
+  def getCheckboxHandle(self, name : str) -> FlrCheckboxHandle:
+    return FlrCheckboxHandle(self.__getUiHandle(name, self.checkboxes))
+  
+  def getSliderFloat(self, handle : FlrFloatSliderHandle) -> float:
+    offs = self.floatSliders[handle.idx].offset
+    return struct.unpack("<f", self.uiBuffer[offs:offs+4])
+  
+  def getSliderUint(self, handle : FlrUintSliderHandle) -> int:
+    offs = self.uintSliders[handle.idx].offset
+    return int.from_bytes(self.uiBuffer[offs:offs+4], byteorder='little', signed=False)
+    
+  def getSliderInt(self, handle : FlrIntSliderHandle) -> int:
+    offs = self.intSliders[handle.idx].offset
+    return int.from_bytes(self.uiBuffer[offs:offs+4], byteorder='little', signed=True)
+    
+  def getCheckbox(self, handle : FlrCheckboxHandle) -> int:
+    offs = self.checkboxes[handle.idx].offset
+    return int.from_bytes(self.uiBuffer[offs:offs+4], byteorder='little', signed=False)
   
   def getConstFloat(self, name : str) -> float:
     for c in self.constFloats:
@@ -375,17 +477,20 @@ class FlrScriptInterface:
       self.sharedMem.buf[self.perFrameOffset:end] = struct.pack("<I", FlrCmdType.CMD_FINISH)
       self.perFrameOffset = end
   
-  def tick(self):
+  def tick(self) -> FlrTickResult:
     self.__cmdFinalize()
+    self.__resetPerFrameData()
     win32event.ReleaseSemaphore(self.writeDoneSem, 1)
-    # wait for read to complete - handling flr app termination if needed
-    break_outer = False
+    # NOTE wait for cmdlist read to complete and any update packet to be written
+    # uses timout to handle flr app termination
     while True:
       res = win32event.WaitForSingleObject(self.readDoneSem, 500)
       if res == win32event.WAIT_OBJECT_0:
-        break 
+        if not self.__processPacket():
+          return FlrTickResult.TR_TERMINATE
+        if self.bReinitProject:
+          self.bReinitProject = False
+          return FlrTickResult.TR_REINIT
+        return FlrTickResult.TR_SUCCESS
       elif not self.flrThread.is_alive():
-        break_outer = True
-        break
-    self.__resetPerFrameData()
-    return not break_outer
+        return FlrTickResult.TR_TERMINATE

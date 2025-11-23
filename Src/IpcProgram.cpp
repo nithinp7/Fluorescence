@@ -190,41 +190,79 @@ bool processCmdList(
 }
 } // namespace flr_cmds
 
-namespace flr_handshake {
+namespace flr_packets {
+namespace {
+class PacketWriter {
+public:
+  PacketWriter(char* stream, size_t size)
+    : m_pStream(stream)
+    , m_streamSize(size)
+    , m_writeOffset(0u)
+    , m_allocBottom(size)
+    , m_bFailed(false) {}
+
+  void declareFailure() {
+    m_bFailed = true;
+    // TODO what about shader recompile failed (where flr has parsed fine?)
+    uint32_t failedCmd = FMT_FAILED;
+    memcpy(m_pStream, &failedCmd, 4);
+  }
+
+  void serialize(const void* src, size_t sz) {
+    if (m_writeOffset + sz > m_allocBottom)
+      declareFailure();
+    
+     if (m_bFailed)
+      return;
+
+    memcpy(m_pStream + m_writeOffset, src, sz);
+    m_writeOffset += sz;
+  }
+
+  void serialize(const std::string& s) {
+    serialize(s.data(), s.size() + 1);
+  }
+
+  std::optional<uint32_t> allocate(const void* src, size_t sz) {
+    if (m_writeOffset + sz > m_allocBottom)
+      declareFailure();
+    
+    if (m_bFailed)
+      return std::nullopt;
+
+    m_allocBottom -= sz;
+    memcpy(m_pStream + m_allocBottom, src, sz);
+    return m_allocBottom;
+  }
+
+private:
+  char* m_pStream;
+  size_t m_streamSize;
+  uint32_t m_writeOffset;
+  uint32_t m_allocBottom;
+  bool m_bFailed;
+};
+}
 // the establishment is a flr --> script communication format consisting
 // of mappings between string names and element IDs
-void establishProject(Project* project, char* outStream, size_t streamSize) {
-  char* pDynamicData = (char*)project->getDynamicDataPtr();
-  size_t dynamicDataSize = project->getDynamicDataSize();
+void assembleEstablishmentPacket(Project* project, char* outStream, size_t streamSize) {
   const ParsedFlr& parsed = project->getParsedFlr();
 
-  auto declareFailure = [&]() {
-    // TODO what about shader recompile failed (where flr has parsed fine?)
-    uint32_t failedCmd = EST_FAILED;
-    memcpy(outStream, &failedCmd, 4);
-  };
+  PacketWriter writer(outStream, streamSize);
 
   if (project->hasFailed()) {
-    declareFailure();
+    writer.declareFailure();
     return;
   }
 
-  bool failed = false;
-  size_t writeOffset = 0;
-  auto serialize = [&](const void* src, size_t sz) {
-    if (writeOffset + sz > streamSize) {
-      declareFailure();
-      failed = true;
-    }
-    if (failed)
-      return;
-    memcpy(outStream + writeOffset, src, sz);
-    writeOffset += sz;
-  };
+  {
+    uint32_t greetCmd = FMT_GREET;
+    writer.serialize(&greetCmd, 4);
+  }
 
   {
-    uint32_t greetCmd = EST_GREET;
-    serialize(&greetCmd, 4);
+    uint32_t cmd = FMT_REINIT;
+    writer.serialize(&cmd, 4);
   }
 
   for (uint32_t bidx = 0; bidx < parsed.m_buffers.size(); bidx++) {
@@ -232,65 +270,128 @@ void establishProject(Project* project, char* outStream, size_t streamSize) {
     const ParsedFlr::StructDef& str = parsed.m_structDefs[buf.structIdx];
     uint32_t bufType = buf.bCpuVisible ? 1u : 0u;
     size_t bufSize = buf.elemCount * str.size;
-    uint32_t cmd[] = {EST_BUFFER, bidx, bufSize, buf.bufferCount, bufType};
-    serialize(cmd, 20);
-    serialize(buf.name.data(), buf.name.size() + 1);
+    uint32_t cmd[] = {FMT_BUFFER, bidx, bufSize, buf.bufferCount, bufType};
+    writer.serialize(cmd, 20);
+    writer.serialize(buf.name);
   }
 
   for (uint32_t cidx = 0; cidx < parsed.m_computeShaders.size(); cidx++) {
     const ParsedFlr::ComputeShader& cs = parsed.m_computeShaders[cidx];
-    uint32_t cmd[] = {EST_COMPUTE_SHADER, cidx};
-    serialize(cmd, 8);
-    serialize(cs.name.data(), cs.name.size() + 1);
+    uint32_t cmd[] = {FMT_COMPUTE_SHADER, cidx};
+    writer.serialize(cmd, 8);
+    writer.serialize(cs.name);
   }
 
   for (uint32_t tidx = 0; tidx < parsed.m_taskBlocks.size(); tidx++) {
     const ParsedFlr::TaskBlock& tb = parsed.m_taskBlocks[tidx];
-    uint32_t cmd[] = {EST_TASK, tidx};
-    serialize(cmd, 8);
-    serialize(tb.name.data(), tb.name.size() + 1);
+    uint32_t cmd[] = {FMT_TASK, tidx};
+    writer.serialize(cmd, 8);
+    writer.serialize(tb.name);
   }
 
   for (const ParsedFlr::ConstFloat& c : parsed.m_constFloats) {
-    uint32_t cmd = EST_CONST;
-    serialize(&cmd, 4);
+    uint32_t cmd = FMT_CONST;
+    writer.serialize(&cmd, 4);
     char type = 'f';
-    serialize(&type, 1);
-    serialize(&c.value, 4);
-    serialize(c.name.data(), c.name.size() + 1);
+    writer.serialize(&type, 1);
+    writer.serialize(&c.value, 4);
+    writer.serialize(c.name);
   }
 
   for (const ParsedFlr::ConstUint& c : parsed.m_constUints) {
-    uint32_t cmd = EST_CONST;
-    serialize(&cmd, 4);
+    uint32_t cmd = FMT_CONST;
+    writer.serialize(&cmd, 4);
     char type = 'I';
-    serialize(&type, 1);
-    serialize(&c.value, 4);
-    serialize(c.name.data(), c.name.size() + 1);
+    writer.serialize(&type, 1);
+    writer.serialize(&c.value, 4);
+    writer.serialize(c.name);
   }
 
   for (const ParsedFlr::ConstInt& c : parsed.m_constInts) {
-    uint32_t cmd = EST_CONST;
-    serialize(&cmd, 4);
+    uint32_t cmd = FMT_CONST;
+    writer.serialize(&cmd, 4);
     char type = 'i';
-    serialize(&type, 1);
-    serialize(&c.value, 4);
-    serialize(c.name.data(), c.name.size() + 1);
+    writer.serialize(&type, 1);
+    writer.serialize(&c.value, 4);
+    writer.serialize(c.name);
+  }
+
+  char* pDynamicData = (char*)project->getDynamicDataPtr();
+  uint32_t dynamicDataSize = static_cast<uint32_t>(project->getDynamicDataSize());
+  {
+    uint32_t uiCmdType = 0;
+    uint32_t cmd[] = { FMT_UI, uiCmdType, dynamicDataSize };
+    writer.serialize(&cmd, 12);
+  }
+    
+  for (const ParsedFlr::SliderUint& slider : parsed.m_sliderUints) {
+    uint32_t uiCmdType = 1;
+    uint32_t ptrdif = static_cast<uint32_t>(((char*)slider.pValue) - pDynamicData);
+    uint32_t cmd[] = { FMT_UI, uiCmdType, ptrdif };
+    writer.serialize(&cmd, 12);
+    writer.serialize(slider.name);
+  }
+
+  for (const ParsedFlr::SliderInt& slider : parsed.m_sliderInts) {
+    uint32_t uiCmdType = 2;
+    uint32_t ptrdif = static_cast<uint32_t>(((char*)slider.pValue) - pDynamicData);
+    uint32_t cmd[] = { FMT_UI, uiCmdType, ptrdif };
+    writer.serialize(&cmd, 12);
+    writer.serialize(slider.name);
+  }
+
+  for (const ParsedFlr::SliderFloat& slider : parsed.m_sliderFloats) {
+    uint32_t uiCmdType = 3;
+    uint32_t ptrdif = static_cast<uint32_t>(((char*)slider.pValue) - pDynamicData);
+    uint32_t cmd[] = { FMT_UI, uiCmdType, ptrdif };
+    writer.serialize(&cmd, 12);
+    writer.serialize(slider.name);
+  }
+
+  if (auto allocOffs = writer.allocate(pDynamicData, dynamicDataSize)) {
+    uint32_t cmd[] = { FMT_UI_UPDATE, *allocOffs, dynamicDataSize };
+    writer.serialize(cmd, 12);
   }
 
   {
-    uint32_t finishCmd = EST_FINISH;
-    serialize(&finishCmd, 4);
+    uint32_t finishCmd = FMT_FINISH;
+    writer.serialize(&finishCmd, 4);
   }
 }
 
-} // namespace flr_handshake
+void assembleUpdatePacket(Project* project, char* stream, size_t streamSize) {
+  PacketWriter writer(stream, streamSize);
+
+  if (project->hasFailed()) {
+    writer.declareFailure();
+    return;
+  }
+
+  {
+    uint32_t greetCmd = FMT_GREET;
+    writer.serialize(&greetCmd, 4);
+  }
+
+  char* pDynamicData = (char*)project->getDynamicDataPtr();
+  uint32_t dynamicDataSize = static_cast<uint32_t>(project->getDynamicDataSize());
+  if (auto allocOffs = writer.allocate(pDynamicData, dynamicDataSize)) {
+    uint32_t cmd[] = { FMT_UI_UPDATE, *allocOffs, dynamicDataSize };
+    writer.serialize(cmd, 12);
+  }
+
+  {
+    uint32_t finishCmd = FMT_FINISH;
+    writer.serialize(&finishCmd, 4);
+  }
+}
+} // namespace flr_packets
 
 // TODO - pass in desired shared buffer size from cmdline args... ? (still
 // need to clamp)
 #define BUF_SIZE (1 << 30)
 
-IpcProgram::IpcProgram() {
+IpcProgram::IpcProgram()
+  : m_bInitialSetup(true) {
   m_writeDoneSemaphoreHandle = OpenSemaphoreW(
       SEMAPHORE_ALL_ACCESS,
       false,
@@ -319,16 +420,11 @@ IpcProgram::IpcProgram() {
     return;
   }
 
-  WaitForSingleObject(m_writeDoneSemaphoreHandle, INFINITE);
-
   if (!flr_cmds::processIntroduction((const char*)m_sharedMemoryBuffer, BUF_SIZE, m_params)) {
     std::cerr << "Failed processing introduction cmdlist." << std::endl;
     throw std::runtime_error("Failed processing introduction cmdlist.");
     return;
   }
-
-  // Warning: semaphore needs to be signalled once we do the handshake
-  m_bHandshakePending = true;
 }
 
 IpcProgram::~IpcProgram() {
@@ -347,27 +443,22 @@ void IpcProgram::setupParams(FlrParams& params) {
   params = m_params;
 }
 
-void IpcProgram::tick(Project* project, const FrameContext& frame) {
-  if (m_bHandshakePending) {
-    flr_handshake::establishProject(
-        project,
-        (char*)m_sharedMemoryBuffer,
-        BUF_SIZE);
-    char c[512];
-    snprintf(c, 512, "%s", (char*)m_sharedMemoryBuffer);
-    std::cerr << c << std::endl;
-
-    ReleaseSemaphore(m_readDoneSemaphoreHandle, 1, nullptr);
+void IpcProgram::createRenderState(Project* project, SingleTimeCommandBuffer& commandBuffer) {
+  if (!m_bInitialSetup)
     WaitForSingleObject(m_writeDoneSemaphoreHandle, INFINITE);
+  flr_packets::assembleEstablishmentPacket(
+    project,
+    (char*)m_sharedMemoryBuffer,
+    BUF_SIZE);
 
-    snprintf(c, 512, "%s", (char*)m_sharedMemoryBuffer);
-    std::cerr << c << std::endl;
+  ReleaseSemaphore(m_readDoneSemaphoreHandle, 1, nullptr);
 
-    ReleaseSemaphore(m_readDoneSemaphoreHandle, 1, nullptr);
-
-    m_bHandshakePending = false;
-  }
+  m_bInitialSetup = false;
 }
+
+void IpcProgram::destroyRenderState() {}
+
+void IpcProgram::tick(Project* project, const FrameContext& frame) {}
 
 void IpcProgram::draw(
     Project* project,
@@ -376,7 +467,6 @@ void IpcProgram::draw(
 
   WaitForSingleObject(m_writeDoneSemaphoreHandle, INFINITE);
 
-  //*project->getSliderFloat("TEST_SLIDER") = *(float*)m_sharedMemoryBuffer;
   bool result = flr_cmds::processCmdList(
       project,
       commandBuffer,
@@ -385,6 +475,7 @@ void IpcProgram::draw(
       BUF_SIZE);
   if (!result)
     std::cerr << "Could not parse commandlist" << std::endl;
+  flr_packets::assembleUpdatePacket(project, (char*)m_sharedMemoryBuffer, BUF_SIZE);
 
   ReleaseSemaphore(m_readDoneSemaphoreHandle, 1, nullptr);
 }
