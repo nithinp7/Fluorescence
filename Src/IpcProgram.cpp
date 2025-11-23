@@ -419,6 +419,9 @@ IpcProgram::IpcProgram()
     throw std::runtime_error("Could not map shared memory.");
     return;
   }
+  
+  // The introduction params are populated into sharedmem before the flr app is launched,
+  // so not initial synchronization is necessary for processing the introduction
 
   if (!flr_cmds::processIntroduction((const char*)m_sharedMemoryBuffer, BUF_SIZE, m_params)) {
     std::cerr << "Failed processing introduction cmdlist." << std::endl;
@@ -444,6 +447,9 @@ void IpcProgram::setupParams(FlrParams& params) {
 }
 
 void IpcProgram::createRenderState(Project* project, SingleTimeCommandBuffer& commandBuffer) {
+  // On initial setup, the invoking script launches the app and immediately waits for both the introduction
+  // to be parsed and the establishment packet to be written. The app has logical ownership of the sharedmem
+  // upon initial launch so no wait is necessary the first time around.
   if (!m_bInitialSetup)
     WaitForSingleObject(m_writeDoneSemaphoreHandle, INFINITE);
   flr_packets::assembleEstablishmentPacket(
