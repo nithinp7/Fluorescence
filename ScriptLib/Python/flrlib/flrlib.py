@@ -13,19 +13,36 @@ from enum import IntEnum
 # - On C++ side: https://learn.microsoft.com/en-us/windows/win32/memory/creating-named-shared-memory
 # - Semaphore docs: https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createsemaphoreexa
 
-# PLANNING NOTES
-# - Need handshake protocol, probably need to re-run when glsl / flr reload happens ?
-#   - Handshake resolves IDs for UI elems, buffers, images, shaders, task blocks, etc
-#   - Initial deserialized UI values ?
-#   - Script resolves IDs for each string during handshake, later must use ID only when referencing objects
-# - Game loop will probably be a bit more dynamics
-#   - Can consist of various "commands" , basically generates a command buffer
-#   - Commandbuffer format needs to be documented somewhere (handshake too for that matter)
-#   - Sub-allocates into the shared memory
-# - On Flr side - need a command buffer interpreter thing
-#   - Loops through commands and executes them (already have something like that for executeTaskList)
-#   - But here, it will need to include other things like - update UI, upload data, etc
-#   - Will still need classic things like barriers, layout transitions, dispatches, run-tasks, etc
+# Fluorescence IPC protocol
+# - The protocol consists of a synchronized series of communications in a shared memory buffer
+# - flr messages are host app --> client script communications
+#   - messages are used during project init for transmitting resources and name strings
+#   - messages are also used after each tick, to communicate UI updates
+# - flr cmds are client script --> host app communications
+#   - cmds are used upon app launch to set compile-time parameters for the flr project
+#   - cmds are used during each tick to interact with the flr api, update buffers, run dispatches, run tasks, etc
+# - Script implementations of the protocol need to implement the following:
+#   - Create the sync objects and shared memory, launch the Fluorescence app with the -ipc arg
+#   - flr cmd buffer assembly and flr message parsing into/from shared memory
+#   - Handshake with flr app: 
+#     - Assemble cmds to generate compile-time params into shared memory before flr app launch
+#     - Wait for app to finish processing the cmds and to write out the initial project establishment packet
+#     - Parse all the names and resources from the project establishment
+#   - Tick implementation:
+#     - Assemble cmds based on user script calls into the lib
+#     - Wait for app to finish processing tick cmds, wait for the app to write out an update packet
+#     - Consume the update packet, update any changed state, terminate or re-initialize as needed
+#       - Timeout if flr app exits
+
+# TODO - finish documenting python library-specific details
+# Fluorescence in Python
+# - flrlib is a python implementation of the above IPC protocol
+# - It is designed for fast prototyping and workflow integration of Fluorescence with other tools or DCCs
+
+# TODO LIST
+# - Minimize required user-side handling of project re-init, specifically avoid having to regenerate handles
+#   - Handle registry, with internal references to handle objects?
+#   - Could repair all previously issued handles...
 
 # TODO coordinate this with flr, send as commandline or something...
 BUF_SIZE = 1<<30
@@ -54,12 +71,6 @@ class FlrMessageType(IntEnum):
   FMT_REINIT = 7
   FMT_GREET = 0x1F1F1F1F
   FMT_FAILED = 0xFFFFFFFF
-
-class FlrUpdateType(IntEnum):
-  UT_FINISH = 0,
-  UT_UI_UPDATE = 1
-  UT_GREET = 0x1F1F1F1F
-  UT_FAILED = 0xFFFFFFFF
 
 class FlrTickResult(IntEnum):
   TR_SUCCESS = 0
