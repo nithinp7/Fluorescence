@@ -1,35 +1,59 @@
-enable_feature: perspective_camera
-
-# EXPECTED PARAMS
+# ---- EXTERNAL ----
 # uint VERT_COUNT
 
+# ---- CONSTANTS ----
 uint POS_FLOATS_COUNT: VERT_COUNT*3
-
-slider_float MESH_SCALE: 0.1 0.01 1.0
-
 uint SPHERE_RES: 12
 uint SPHERE_VERT_COUNT: SPHERE_RES*SPHERE_RES*2*3
+uint POINT_LIGHT_COUNT: 5
 
-slider_uint BACKGROUND: 0 0 3
-slider_float TEST_SLIDER: 0.0 0.0 1.0
+# ---- FEATURES ----
+enable_feature: perspective_camera
+
+# ---- STRUCTS ----
+struct PointLight {
+  vec3 light;
+  float padding;
+  vec3 pos;
+  float falloff;
+}
+struct_size: 32
+
 struct VertexOutput {
+  vec3 pos;
   vec3 normal;
   vec2 uv;
 }
-struct_size: 8
 
+# ------ UI -------
+ui_dropdown_start MESH_OPTIONS:
+  slider_float MESH_SCALE: 0.1 0.01 1.0
+ui_dropdown_end
+ui_separator
+ui_dropdown_start LIGHTING:
+  slider_float FALLOFF: 1000.0 0.0 2000.0
+  slider_uint BACKGROUND: 0 0 3
+ui_dropdown_end
+ui_separator
+ui_dropdown_start MISC:
+  slider_float TEST_SLIDER: 0.0 0.0 1.0
+ui_dropdown_end
+
+# ---- RESOURCES ----
 structured_buffer positions: float POS_FLOATS_COUNT
 structured_buffer normals: float POS_FLOATS_COUNT
 
 structured_buffer sphereVertexBuffer: vec4 SPHERE_VERT_COUNT
+structured_buffer pointLights: PointLight POINT_LIGHT_COUNT
 
 display_image DisplayImage
 
+# ----- SHADERS -----
 compute_shader CS_Init: 1 1 1
 
 task_block_start INIT_TASK:
   dispatch: CS_Init 1 1 1
-  barrier: sphereVertexBuffer  
+  barrier: sphereVertexBuffer pointLights
 task_block_end
 
 initialization_task: INIT_TASK

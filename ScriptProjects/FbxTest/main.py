@@ -112,10 +112,6 @@ while True:
       initProject()
     case flrlib.FlrTickResult.TR_TERMINATE:
       break
-    case flrlib.FlrTickResult.TR_SUCCESS:
-      continue
-    case _:
-      exit(1)
 
 destroy_fbx()
 

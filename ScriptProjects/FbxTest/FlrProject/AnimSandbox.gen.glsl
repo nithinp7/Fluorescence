@@ -6,6 +6,7 @@
 #define POS_FLOATS_COUNT 439632
 #define SPHERE_RES 12
 #define SPHERE_VERT_COUNT 864
+#define POINT_LIGHT_COUNT 5
 
 struct IndexedIndirectArgs {
   uint indexCount;
@@ -28,7 +29,15 @@ struct IndirectDispatch {
   uint groupCountZ;
 };
 
+struct PointLight {
+  vec3 light;
+  float padding;
+  vec3 pos;
+  float falloff;
+};
+
 struct VertexOutput {
+  vec3 pos;
   vec3 normal;
   vec2 uv;
 };
@@ -36,16 +45,18 @@ struct VertexOutput {
 layout(set=1,binding=1) buffer BUFFER_positions {  float positions[]; };
 layout(set=1,binding=2) buffer BUFFER_normals {  float normals[]; };
 layout(set=1,binding=3) buffer BUFFER_sphereVertexBuffer {  vec4 sphereVertexBuffer[]; };
+layout(set=1,binding=4) buffer BUFFER_pointLights {  PointLight pointLights[]; };
 
-layout(set=1, binding=4) uniform _UserUniforms {
+layout(set=1, binding=5) uniform _UserUniforms {
 	uint BACKGROUND;
 	float MESH_SCALE;
+	float FALLOFF;
 	float TEST_SLIDER;
 };
 
 #include <FlrLib/Fluorescence.glsl>
 
-layout(set=1, binding=5) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=6) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 
