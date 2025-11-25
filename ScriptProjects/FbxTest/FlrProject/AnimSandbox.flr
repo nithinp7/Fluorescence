@@ -1,0 +1,47 @@
+enable_feature: perspective_camera
+
+# EXPECTED PARAMS
+# uint VERT_COUNT
+
+uint POS_FLOATS_COUNT: VERT_COUNT*3
+
+slider_float MESH_SCALE: 0.1 0.01 1.0
+
+uint SPHERE_RES: 12
+uint SPHERE_VERT_COUNT: SPHERE_RES*SPHERE_RES*2*3
+
+slider_uint BACKGROUND: 0 0 3
+slider_float TEST_SLIDER: 0.0 0.0 1.0
+struct VertexOutput {
+  vec3 normal;
+  vec2 uv;
+}
+struct_size: 8
+
+structured_buffer positions: float POS_FLOATS_COUNT
+structured_buffer normals: float POS_FLOATS_COUNT
+
+structured_buffer sphereVertexBuffer: vec4 SPHERE_VERT_COUNT
+
+display_image DisplayImage
+
+compute_shader CS_Init: 1 1 1
+
+task_block_start INIT_TASK:
+  dispatch: CS_Init 1 1 1
+  barrier: sphereVertexBuffer  
+task_block_end
+
+initialization_task: INIT_TASK
+
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+  draw: VS_Test PS_Test 3 1
+    disable_depth
+    vertex_output: VertexOutput
+
+#  draw: VS_Sphere PS_Sphere SPHERE_VERT_COUNT VERT_COUNT
+#    vertex_output: VertexOutput
+
+  draw: VS_Tris PS_Tris VERT_COUNT 1
+    vertex_output: VertexOutput
