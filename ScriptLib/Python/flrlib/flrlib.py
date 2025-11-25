@@ -46,6 +46,7 @@ from enum import IntEnum
 
 # TODO coordinate this with flr, send as commandline or something...
 BUF_SIZE = 1<<30
+INVALID_HANDLE = 0xFFFFFFFF
 
 # NOTE Keep in sync with eCmdType in IpcProgram.h
 class FlrCmdType(IntEnum):
@@ -77,38 +78,30 @@ class FlrTickResult(IntEnum):
   TR_TERMINATE = 1
   TR_REINIT = 2
 
+class FlrHandleType(IntEnum):
+  HT_INVALID = 0
+  HT_BUFFER = 1
+  HT_COMPUTE_SHADER = 2
+  HT_TASK = 3
+  HT_UINT_SLIDER = 4
+  HT_INT_SLIDER = 5
+  HT_FLOAT_SLIDER = 6
+  HT_CHECKBOX = 7
+
 class FlrHandle:
-  def __init__(self, idx : int = 0xFFFFFFFF):
+  def __init__(self, htype : int = FlrHandleType.HT_INVALID, idx : int = INVALID_HANDLE, name : int = INVALID_HANDLE):
+    self.htype = htype
     self.idx = idx
+    self.name = name
+
   def isValid(self):
-    return self.idx != 0xFFFFFFFF
-  
-class FlrBufferHandle(FlrHandle):
-  pass
-  
-class FlrComputeShaderHandle(FlrHandle):
-  pass
-
-class FlrTaskHandle(FlrHandle):
-  pass
-
-class FlrUintSliderHandle(FlrHandle):
-  pass
-  
-class FlrIntSliderHandle(FlrHandle):
-  pass
-
-class FlrFloatSliderHandle(FlrHandle):
-  pass
-
-class FlrCheckboxHandle(FlrHandle):
-  pass
+    return self.htype != FlrHandleType.HT_INVALID and self.idx != INVALID_HANDLE and self.name != INVALID_HANDLE
 
 def runFlr(exePath, flrPath):
   subprocess.run([exePath, flrPath, "-ipc"], stdout=subprocess.PIPE)
 
 class FlrBufInfo:
-  def __init__(self, name : str, bufferIdx : int, bufferSize : int, bufferCount : int, bCpuAccess : bool):
+  def __init__(self, name : int, bufferIdx : int, bufferSize : int, bufferCount : int, bCpuAccess : bool):
     self.name = name
     self.bufferIdx = bufferIdx
     self.bufferSize = bufferSize
@@ -124,8 +117,12 @@ class FlrParams:
     self.names.append(name)
     self.values.append(value)
 
+class FlrGenericElem:
+  def __init__(self, name : int):
+    self.name = name
+
 class FlrUiElem:
-  def __init__(self, name : str, offset : int):
+  def __init__(self, name : int, offset : int):
     self.name = name
     self.offset = offset
 
@@ -149,6 +146,10 @@ class FlrScriptInterface:
       self.__cmdUintParam(params.names[i], params.values[i])
     self.__cmdFinalize()
     self.__resetPerFrameData()
+
+    self.externalHandles = []
+    self.stringCount = 0
+    self.stringTable = {}
     
     self.flrProjPath = os.path.abspath(flrProjPath)
     self.flrThread = Thread(target = runFlr, args = [self.flrExePath, self.flrProjPath]) 
@@ -172,6 +173,14 @@ class FlrScriptInterface:
     self.sharedMem.close()
     self.sharedMem.unlink()
   
+  def __registerString(self, s : str) -> int:
+    idx = self.stringTable.get(s)
+    if idx == None:
+      idx = self.stringCount
+      self.stringCount = self.stringCount + 1
+      self.stringTable[s] = idx
+    return idx
+  
   def __parseU32(self, offs : int):
     return int.from_bytes(self.sharedMem.buf[offs:offs+4], byteorder='little', signed=False), (offs+4)
   
@@ -187,7 +196,8 @@ class FlrScriptInterface:
   def __parseName(self, offs : int):
     for i in range(offs, min(offs + 1000, BUF_SIZE)): 
       if self.sharedMem.buf[i] == 0:
-        return str(self.sharedMem.buf[offs:i], 'utf-8'), (i+1)
+        name, offs = str(self.sharedMem.buf[offs:i], 'utf-8'), (i+1)
+        return self.__registerString(name), offs
     return None, offs
   
   def __resetProject(self):
@@ -250,13 +260,13 @@ class FlrScriptInterface:
         csidx, offs = self.__parseU32(offs)
         name, offs = self.__parseName(offs)
         assert(csidx == len(self.computeShaders))
-        self.computeShaders.append(name)
+        self.computeShaders.append(FlrGenericElem(name))
 
       case FlrMessageType.FMT_TASK:
         tidx, offs = self.__parseU32(offs)
         name, offs = self.__parseName(offs)
         assert(tidx == len(self.taskBlocks))
-        self.taskBlocks.append(name) 
+        self.taskBlocks.append(FlrGenericElem(name)) 
 
       case FlrMessageType.FMT_CONST:
         c, offs = self.__parseChar(offs)
@@ -299,6 +309,35 @@ class FlrScriptInterface:
       if not bResult:
         return False
 
+  def __rectifyHandle(self, elems, h : FlrHandle):
+    for i in range(len(elems)):
+      if h.name == elems[i].name:
+        h.idx = i
+        break
+    else:
+      assert(False)
+  
+  def __rectifyHandles(self):
+    for h in self.externalHandles:
+      assert(h.isValid())
+      match h.htype:
+        case FlrHandleType.HT_BUFFER:
+          self.__rectifyHandle(self.bufferInfos, h)
+        case FlrHandleType.HT_COMPUTE_SHADER:
+          self.__rectifyHandle(self.computeShaders, h)
+        case FlrHandleType.HT_TASK:
+          self.__rectifyHandle(self.taskBlocks, h)
+        case FlrHandleType.HT_UINT_SLIDER:
+          self.__rectifyHandle(self.uintSliders, h)
+        case FlrHandleType.HT_INT_SLIDER:
+          self.__rectifyHandle(self.intSliders, h)
+        case FlrHandleType.HT_FLOAT_SLIDER:
+          self.__rectifyHandle(self.floatSliders, h)
+        case FlrHandleType.HT_CHECKBOX:
+          self.__rectifyHandle(self.checkboxes, h)
+        case _:
+          assert(False)
+  
   def __resetPerFrameData(self):
     self.perFrameOffset = 0
     self.perFrameEnd = BUF_SIZE
@@ -312,11 +351,17 @@ class FlrScriptInterface:
     self.perFrameFailure = self.perFrameFailure or (start < self.perFrameOffset)
     return not self.perFrameFailure
   
+  def __createHandle(self, htype : int, idx : int, name : int):
+    self.externalHandles.append(FlrHandle(htype, idx, name))
+    return self.externalHandles[-1]
+  
   def getBufferHandle(self, name : str):
-    for bufIdx in range(0, len(self.bufferInfos)):
-      if name == self.bufferInfos[bufIdx].name:
-        return FlrBufferHandle(bufIdx)
-    return FlrBufferHandle()
+    nameId = self.stringTable.get(name)
+    if nameId != None:
+      for bufIdx in range(len(self.bufferInfos)):
+        if nameId == self.bufferInfos[bufIdx].name:
+          return self.__createHandle(FlrHandleType.HT_BUFFER, bufIdx, nameId)
+    return FlrHandle()
   
   def __isValidBuffer(self, bufIdx : int, subBufIdx : int):
     if bufIdx < 0 or bufIdx >= len(self.bufferInfos):
@@ -326,45 +371,56 @@ class FlrScriptInterface:
     return True
   
   def getComputeShaderHandle(self, name : str):
-    for csidx in range(0, len(self.computeShaders)):
-      if name == self.computeShaders[csidx]:
-        return FlrComputeShaderHandle(csidx)
-    return FlrComputeShaderHandle()
+    nameId = self.stringTable.get(name)
+    if nameId != None:
+      for csidx in range(len(self.computeShaders)):
+        if nameId == self.computeShaders[csidx].name:
+          return self.__createHandle(FlrHandleType.HT_COMPUTE_SHADER, csidx, nameId)
+    return FlrHandle()
   
   def getTaskHandle(self, name : str):
-    for tidx in range(0, len(self.taskBlocks)):
-      if name == self.taskBlocks[tidx]:
-        return FlrTaskHandle(tidx)
-    return FlrTaskHandle()
+    nameId = self.stringTable.get(name)
+    if nameId != None:
+      for tidx in range(len(self.taskBlocks)):
+        if nameId == self.taskBlocks[tidx]:
+          return self.__createHandle(FlrHandleType.HT_TASK, tidx, nameId)
+    return FlrHandle()
   
-  def __getUiHandle(self, name : str, arr):
-    for i in range(0, len(arr)):
-      if name == arr[i].name:
-        return i
-    return 0xFFFFFFFF
+  def __createUiHandle(self, htype : int, name : str, arr):
+    nameId = self.stringTable.get(name)
+    if nameId != None:
+      for i in range(len(arr)):
+        if nameId == arr[i].name:
+          return self.__createHandle(htype, i, nameId)
+        
+    return FlrHandle()
   
-  def getSliderFloatHandle(self, name : str) -> FlrFloatSliderHandle:
-    return FlrFloatSliderHandle(self.__getUiHandle(name, self.floatSliders))
-  def getSliderUintHandle(self, name : str) -> FlrUintSliderHandle:
-    return FlrUintSliderHandle(self.__getUiHandle(name, self.uintSliders))
-  def getSliderIntHandle(self, name : str) -> FlrIntSliderHandle:
-    return FlrIntSliderHandle(self.__getUiHandle(name, self.intSliders))
-  def getCheckboxHandle(self, name : str) -> FlrCheckboxHandle:
-    return FlrCheckboxHandle(self.__getUiHandle(name, self.checkboxes))
+  def getSliderFloatHandle(self, name : str):
+    return self.__createUiHandle(FlrHandleType.HT_FLOAT_SLIDER, name, self.floatSliders)
+  def getSliderUintHandle(self, name : str):
+    return self.__createUiHandle(FlrHandleType.HT_UINT_SLIDER, name, self.uintSliders)
+  def getSliderIntHandle(self, name : str):
+    return self.__createUiHandle(FlrHandleType.HT_INT_SLIDER, name, self.intSliders)
+  def getCheckboxHandle(self, name : str):
+    return self.__createUiHandle(FlrHandleType.HT_CHECKBOX, name, self.checkboxes)
   
-  def getSliderFloat(self, handle : FlrFloatSliderHandle) -> float:
+  def getSliderFloat(self, handle : FlrHandle) -> float:
+    assert(handle.htype == FlrHandleType.HT_FLOAT_SLIDER)
     offs = self.floatSliders[handle.idx].offset
     return struct.unpack("<f", self.uiBuffer[offs:offs+4])
   
-  def getSliderUint(self, handle : FlrUintSliderHandle) -> int:
+  def getSliderUint(self, handle : FlrHandle) -> int:
+    assert(handle.htype == FlrHandleType.HT_UINT_SLIDER)
     offs = self.uintSliders[handle.idx].offset
     return int.from_bytes(self.uiBuffer[offs:offs+4], byteorder='little', signed=False)
     
-  def getSliderInt(self, handle : FlrIntSliderHandle) -> int:
+  def getSliderInt(self, handle : FlrHandle) -> int:
+    assert(handle.htype == FlrHandleType.HT_INT_SLIDER)
     offs = self.intSliders[handle.idx].offset
     return int.from_bytes(self.uiBuffer[offs:offs+4], byteorder='little', signed=True)
     
-  def getCheckbox(self, handle : FlrCheckboxHandle) -> int:
+  def getCheckbox(self, handle : FlrHandle) -> int:
+    assert(handle.htype == FlrHandleType.HT_CHECKBOX)
     offs = self.checkboxes[handle.idx].offset
     return int.from_bytes(self.uiBuffer[offs:offs+4], byteorder='little', signed=False)
   
@@ -396,7 +452,8 @@ class FlrScriptInterface:
           struct.pack("<IIIII", FlrCmdType.CMD_PUSH_CONSTANTS, push0, push1, push2, push3)
       self.perFrameOffset = end
 
-  def cmdDispatch(self, handle : FlrComputeShaderHandle, groupCountX : int, groupCountY : int, groupCountZ : int):
+  def cmdDispatch(self, handle : FlrHandle, groupCountX : int, groupCountY : int, groupCountZ : int):
+    assert(handle.htype == FlrHandleType.HT_COMPUTE_SHADER)
     assert(handle.isValid())
     end = self.perFrameOffset + 4 + 16
     if self.__validateCmdAlloc(end):
@@ -404,14 +461,16 @@ class FlrScriptInterface:
         struct.pack("<IIIII", FlrCmdType.CMD_DISPATCH, handle.idx, groupCountX, groupCountY, groupCountZ)
       self.perFrameOffset = end
 
-  def cmdBarrierRW(self, handle : FlrBufferHandle):
+  def cmdBarrierRW(self, handle : FlrHandle):
+    assert(handle.htype == FlrHandleType.HT_BUFFER)
     assert(handle.isValid())
     end = self.perFrameOffset + 4 + 4
     if self.__validateCmdAlloc(end):
       self.sharedMem.buf[self.perFrameOffset:end] = struct.pack("<II", FlrCmdType.CMD_BARRIER_RW, handle.idx)
       self.perFrameOffset = end
 
-  def cmdBufferWrite(self, handle : FlrBufferHandle, subBufIdx : int, dstOffset : int, ba : bytearray):
+  def cmdBufferWrite(self, handle : FlrHandle, subBufIdx : int, dstOffset : int, ba : bytearray):
+    assert(handle.htype == FlrHandleType.HT_BUFFER)
     assert(handle.isValid())
     bufferId = handle.idx
     assert(self.__isValidBuffer(bufferId, subBufIdx))
@@ -431,7 +490,8 @@ class FlrScriptInterface:
         self.sharedMem.buf[memStart:self.perFrameEnd] = ba[:]
         self.perFrameEnd = memStart
 
-  def cmdBufferStagedUpload(self, handle : FlrBufferHandle, subBufIdx : int, ba : bytearray):
+  def cmdBufferStagedUpload(self, handle : FlrHandle, subBufIdx : int, ba : bytearray):
+    assert(handle.htype == FlrHandleType.HT_BUFFER)
     assert(handle.isValid())
     bufferId = handle.idx
     assert(self.__isValidBuffer(bufferId, subBufIdx))
@@ -463,7 +523,8 @@ class FlrScriptInterface:
         self.sharedMem.buf[memStart:self.perFrameEnd] = ba[:]
         self.perFrameEnd = memStart
 
-  def cmdRunTask(self, handle : FlrTaskHandle):
+  def cmdRunTask(self, handle : FlrHandle):
+    assert(handle.htype == FlrHandleType.HT_TASK)
     assert(handle.isValid())
     end = self.perFrameOffset + 4 + 4
     if self.__validateCmdAlloc(end):
@@ -500,6 +561,7 @@ class FlrScriptInterface:
         if not self.__processPacket():
           return FlrTickResult.TR_TERMINATE
         if self.bReinitProject:
+          self.__rectifyHandles()
           self.bReinitProject = False
           return FlrTickResult.TR_REINIT
         return FlrTickResult.TR_SUCCESS
