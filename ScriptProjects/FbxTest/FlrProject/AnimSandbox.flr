@@ -1,8 +1,13 @@
 # ---- EXTERNAL ----
+# uint INDEX_COUNT
 # uint VERT_COUNT
+# uint BONE_COUNT
+# uint MATRICES_COUNT
+# uint MAX_INFLUENCES
 
 # ---- CONSTANTS ----
 uint POS_FLOATS_COUNT: VERT_COUNT*3
+uint SKINNING_INDICES_COUNT: VERT_COUNT*MAX_INFLUENCES
 uint SPHERE_RES: 12
 uint SPHERE_VERT_COUNT: SPHERE_RES*SPHERE_RES*2*3
 uint POINT_LIGHT_COUNT: 5
@@ -19,13 +24,23 @@ struct PointLight {
 }
 struct_size: 32
 
+struct SimpleVertexOutput {
+  vec2 uv;
+}
+
 struct VertexOutput {
   vec3 pos;
   vec3 normal;
   vec2 uv;
+  vec4 debugColor;
 }
 
 # ------ UI -------
+checkbox ENABLE_SKINNING: true
+checkbox LOOP_ANIM: true
+slider_float ANIM_TIME: 0.0 0.0 10.0
+slider_int SELECT_BONE_INFLUENCE: -1 -1 128
+ui_separator
 ui_dropdown_start MESH_OPTIONS:
   slider_float MESH_SCALE: 0.1 0.01 1.0
 ui_dropdown_end
@@ -35,14 +50,15 @@ ui_dropdown_start LIGHTING:
   slider_uint BACKGROUND: 0 0 3
 ui_dropdown_end
 ui_separator
-ui_dropdown_start MISC:
-  slider_float TEST_SLIDER: 0.0 0.0 1.0
-ui_dropdown_end
 
 # ---- RESOURCES ----
+index_buffer indexBuffer: INDEX_COUNT
 structured_buffer positions: float POS_FLOATS_COUNT
 structured_buffer normals: float POS_FLOATS_COUNT
-
+structured_buffer blendIndices: uint SKINNING_INDICES_COUNT
+structured_buffer blendWeights: float SKINNING_INDICES_COUNT
+structured_buffer matrices(2): mat4 MATRICES_COUNT
+  enable_cpu_access
 structured_buffer sphereVertexBuffer: vec4 SPHERE_VERT_COUNT
 structured_buffer pointLights: PointLight POINT_LIGHT_COUNT
 
@@ -62,10 +78,10 @@ render_pass DISPLAY_PASS:
   store_attachments: outColor=DisplayImage
   draw: VS_Test PS_Test 3 1
     disable_depth
-    vertex_output: VertexOutput
+    vertex_output: SimpleVertexOutput
 
-#  draw: VS_Sphere PS_Sphere SPHERE_VERT_COUNT VERT_COUNT
-#    vertex_output: VertexOutput
+  #draw: VS_Sphere PS_Sphere SPHERE_VERT_COUNT BONE_COUNT
+  #  vertex_output: VertexOutput
 
-  draw: VS_Tris PS_Tris VERT_COUNT 1
+  draw_indexed: VS_Tris PS_Tris 1 indexBuffer
     vertex_output: VertexOutput

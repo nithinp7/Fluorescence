@@ -13,10 +13,9 @@ struct Material {
 #include <FlrLib/PBR/BRDF.glsl>
 
 vec3 sampleEnv(vec3 dir) {
-  float intensity = 10.0;
+  float intensity = 1.0;
   float c = 5.0;
   vec3 n = 0.5 * normalize(dir) + 0.5.xxx;
-  uint BACKGROUND = 0;
   if (BACKGROUND == 0) {
     return intensity * round(n * c) / c;
   } else if (BACKGROUND == 1) {
