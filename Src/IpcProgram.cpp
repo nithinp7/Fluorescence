@@ -269,7 +269,7 @@ void assembleEstablishmentPacket(Project* project, char* outStream, size_t strea
     const ParsedFlr::BufferDesc& buf = parsed.m_buffers[bidx];
     const ParsedFlr::StructDef& str = parsed.m_structDefs[buf.structIdx];
     uint32_t bufType = buf.bCpuVisible ? 1u : 0u;
-    size_t bufSize = buf.elemCount * str.size;
+    uint32_t bufSize = buf.elemCount * str.size;
     uint32_t cmd[] = {FMT_BUFFER, bidx, bufSize, buf.bufferCount, bufType};
     writer.serialize(cmd, 20);
     writer.serialize(buf.name);
@@ -346,6 +346,14 @@ void assembleEstablishmentPacket(Project* project, char* outStream, size_t strea
     uint32_t cmd[] = { FMT_UI, uiCmdType, ptrdif };
     writer.serialize(&cmd, 12);
     writer.serialize(slider.name);
+  }
+
+  for (const ParsedFlr::Checkbox& checkbox : parsed.m_checkboxes) {
+    uint32_t uiCmdType = 4;
+    uint32_t ptrdif = static_cast<uint32_t>(((char*)checkbox.pValue) - pDynamicData);
+    uint32_t cmd[] = { FMT_UI, uiCmdType, ptrdif };
+    writer.serialize(&cmd, 12);
+    writer.serialize(checkbox.name);
   }
 
   if (auto allocOffs = writer.allocate(pDynamicData, dynamicDataSize)) {

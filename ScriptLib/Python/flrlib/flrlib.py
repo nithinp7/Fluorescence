@@ -40,9 +40,10 @@ from enum import IntEnum
 # - It is designed for fast prototyping and workflow integration of Fluorescence with other tools or DCCs
 
 # TODO LIST
-# - Minimize required user-side handling of project re-init, specifically avoid having to regenerate handles
-#   - Handle registry, with internal references to handle objects?
-#   - Could repair all previously issued handles...
+# - UI handles can also be auto updated with modified values... allow users to skip having to fetch UI values every frame
+# - Improve API for double-buffered CPU-visible buffers
+# - Probably should be a proper Fluorescence feature, should not need to manually manage double buffer phase in shaders...
+# - Probably should not necessitate sub-buffer idx in cmdBufferWrite
 
 # TODO coordinate this with flr, send as commandline or something...
 BUF_SIZE = 1<<30
@@ -188,7 +189,7 @@ class FlrScriptInterface:
     return int.from_bytes(self.sharedMem.buf[offs:offs+4], byteorder='little', signed=True), (offs+4)
   
   def __parseF32(self, offs : int):
-    return struct.unpack("<f", self.sharedMem.buf[offs:offs+4]), (offs+4)
+    return struct.unpack("<f", self.sharedMem.buf[offs:offs+4])[0], (offs+4)
   
   def __parseChar(self, offs : int):
     return str(self.sharedMem.buf[offs:offs+1], 'utf-8'), (offs+1)
@@ -242,7 +243,7 @@ class FlrScriptInterface:
             self.uintSliders.append(FlrUiElem(name, uiBufOffset))
           elif uiType == 2:
             # int slider
-            self.uintSliders.append(FlrUiElem(name, uiBufOffset))
+            self.intSliders.append(FlrUiElem(name, uiBufOffset))
           elif uiType == 3:
             # float slider
             self.floatSliders.append(FlrUiElem(name, uiBufOffset))
@@ -407,7 +408,7 @@ class FlrScriptInterface:
   def getSliderFloat(self, handle : FlrHandle) -> float:
     assert(handle.htype == FlrHandleType.HT_FLOAT_SLIDER)
     offs = self.floatSliders[handle.idx].offset
-    return struct.unpack("<f", self.uiBuffer[offs:offs+4])
+    return struct.unpack("<f", self.uiBuffer[offs:offs+4])[0]
   
   def getSliderUint(self, handle : FlrHandle) -> int:
     assert(handle.htype == FlrHandleType.HT_UINT_SLIDER)

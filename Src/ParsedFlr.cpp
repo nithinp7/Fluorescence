@@ -89,6 +89,8 @@ ParsedFlr::ParsedFlr(
   m_structDefs.push_back({"uvec4", "", 16});
   m_structDefs.push_back({"uint4", "", 16});
 
+  m_structDefs.push_back({"mat4", "", 64});
+
   struct File {
     File(const char* filename)
         : m_filename(filename), m_stream(filename), m_lineNumber(0) {}
