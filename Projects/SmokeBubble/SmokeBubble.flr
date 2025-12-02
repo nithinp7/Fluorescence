@@ -1,0 +1,57 @@
+enable_feature: perspective_camera
+
+checkbox REFRACT_BUBBLE: true
+slider_float ETA: 0.3 0.01 0.99
+slider_float DENSITY: 1.0 0.1 10.0
+ui_dropdown_start RAYMARCH_OPTIONS:
+  slider_uint SAMPLE_COUNT: 1 1 10
+  slider_uint RM_ITERS: 1 1 100
+  slider_uint SHADOW_ITERS: 4 1 20
+  slider_float SHADOW_DT: 0.01 0.001 0.5
+ui_dropdown_end
+
+ui_dropdown_start TURB_OPTIONS:
+  slider_float RM_0: 1.0 0.01 2.0
+  slider_float RM_1: 1.0 0.01 2.0
+
+  checkbox APPLY_TURBULENCE: true
+
+  slider_float TURB_MULT: 0.9 0.5 1.5
+  slider_float TURB_AMP: 0.1 0.01 1.0
+  slider_float TURB_FREQ: 1.0 0.1 100.0
+  slider_float TURB_SPEED: 1.0 0.1 10.0
+  slider_float TURB_ROT: 1.0 0.0 4.0
+  slider_float TURB_EXP: 1.3 1.0 4.0
+ui_dropdown_end
+
+ui_separator
+
+ui_dropdown_start SUNSKY_OPTIONS:
+  slider_float SUN_INT: 1.0 1.0 100.0
+  slider_float SUN_ELEV: 0.5 0.0 1.0
+  slider_float SUN_ROT: 0.5 0.0 1.0
+  ui_separator
+  color_picker SKY_COLOR: 0.5 0.4 0.8 1.0
+  slider_float SKY_INT: 10.0 0.001 20.0
+  slider_float HORIZON_WHITENESS: 0.758 0.0 1.0
+  slider_float HORIZON_WHITENESS_FALLOFF: 0.842 0.0 4.0
+ui_dropdown_end
+
+ui_separator
+
+ui_dropdown_start CAMERA_OPTIONS:
+  slider_float EXPOSURE: 0.3 0.001 0.999
+ui_dropdown_end
+
+struct VertexOutput {
+  vec2 uv;
+}
+struct_size: 8
+
+display_image DisplayImage rgba32f
+
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+  draw: VS_SkyBox PS_SkyBox 3 1
+    disable_depth
+    vertex_output: VertexOutput
