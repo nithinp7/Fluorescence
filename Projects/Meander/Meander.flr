@@ -1,0 +1,136 @@
+
+# ----------------------------
+# -------- Features ----------
+# ----------------------------
+
+enable_feature: perspective_camera
+
+# ----------------------------
+# -------- Constants ---------
+# ----------------------------
+
+uint GRID_WIDTH: 800
+uint GRID_NUM_POINTS: GRID_WIDTH * GRID_WIDTH
+uint GRID_NUM_INDICES: (GRID_WIDTH - 1) * (GRID_WIDTH - 1) * 6
+float VISC_MAX: 10.0
+
+# ----------------------------
+# -------- UI ----------------
+# ----------------------------
+
+ui_dropdown_start RIVER:
+  checkbox SHOW_FLOW: false
+  slider_float INLET_SPEED: 10.0 0.0 100.0
+  slider_float INLET_HEIGHT: 0.01 0.0 0.025
+  slider_float VISC: 0.5 0.0 VISC_MAX
+ui_dropdown_end
+
+ui_separator
+
+ui_dropdown_start EROSION: 
+  slider_float TEST: 0.0 0.0 1.0
+ui_dropdown_end
+
+ui_separator
+
+ui_dropdown_start LIGHTING:
+  slider_float EXPOSURE: 0.3 0.0 1.0
+  ui_separator
+  slider_float SUN_INT: 1.0 1.0 100.0
+  slider_float SUN_ELEV: 0.5 0.0 1.0
+  slider_float SUN_ROT: 0.5 0.0 1.0
+  ui_separator
+  color_picker SKY_COLOR: 0.5 0.4 0.8 1.0
+  slider_float SKY_INT: 10.0 0.001 20.0
+  slider_float HORIZON_WHITENESS: 0.758 0.0 1.0
+  slider_float HORIZON_WHITENESS_FALLOFF: 0.842 0.0 4.0
+ui_dropdown_end
+
+ui_separator
+
+# ----------------------------
+# -------- Types -------------
+# ----------------------------
+
+struct VertexOutput {
+  vec2 uv;
+}
+
+struct GridVertex {
+  vec3 pos;
+  vec2 uv;
+}
+
+# ----------------------------
+# ------- Resources ----------
+# ----------------------------
+
+image HeightImage: GRID_WIDTH GRID_WIDTH rg16f
+  texture_alias HeightTexture
+image FlowFieldImage: GRID_WIDTH GRID_WIDTH rgba16f
+  texture_alias FlowFieldTexture
+image PrevFlowFieldImage: GRID_WIDTH GRID_WIDTH rgba16f
+  texture_alias PrevFlowFieldTexture
+
+index_buffer gridIndices: GRID_NUM_INDICES
+
+display_image DisplayImage
+
+compute_shader CS_Init: 1 1 1
+compute_shader CS_InitHeight: 8 8 1
+compute_shader CS_UpdateFlow: 8 8 1
+compute_shader CS_UpdateHeight: 8 8 1
+compute_shader CS_CopyFlow: 8 8 1
+
+# ----------------------------
+# ------- Update -------------
+# ----------------------------
+
+task_block_start INIT_TASK:
+  transition_layout: HeightImage image
+  transition_layout: PrevFlowFieldImage image
+  transition_layout: FlowFieldImage image
+  barrier: gridIndices
+  dispatch: CS_Init 1 1 1
+  dispatch: CS_InitHeight GRID_WIDTH GRID_WIDTH 1
+  barrier indexBuffer: gridIndices
+  transition_layout: HeightImage texture
+  transition_layout: PrevFlowFieldImage texture
+  transition_layout: FlowFieldImage texture
+task_block_end
+
+task_block_start UPDATE_FLOW:
+  transition_layout: HeightImage texture
+  transition_layout: PrevFlowFieldImage texture
+  transition_layout: FlowFieldImage image
+  dispatch: CS_UpdateFlow GRID_WIDTH GRID_WIDTH 1
+task_block_end
+
+task_block_start UPDATE_HEIGHT:
+  transition_layout: FlowFieldImage texture
+  transition_layout: HeightImage image
+  transition_layout: PrevFlowFieldImage image
+  dispatch: CS_UpdateHeight GRID_WIDTH GRID_WIDTH 1
+  dispatch: CS_CopyFlow GRID_WIDTH GRID_WIDTH 1
+task_block_end
+
+initialization_task: INIT_TASK
+task_button RESET: INIT_TASK
+
+run_task: UPDATE_FLOW
+run_task: UPDATE_HEIGHT
+
+transition_layout: HeightImage texture
+
+# TODO impl shadow pass...
+
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+
+  draw: VS_Background PS_Background 3 1
+    vertex_output: VertexOutput
+    disable_depth
+  
+  draw_indexed: VS_Grid PS_Grid 1 gridIndices
+    vertex_output: GridVertex
+     
