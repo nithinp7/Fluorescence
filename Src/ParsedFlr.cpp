@@ -1616,7 +1616,7 @@ ParsedFlr::ParsedFlr(
       }
     }
     if (!bNeedDepth)
-      break;
+      continue;
     bool bHasDepth = false;
     for (const auto& a : pass.attachments) {
       const auto& imageDesc = m_images[a.imageIdx];
@@ -1627,7 +1627,7 @@ ParsedFlr::ParsedFlr(
       }
     }
     if (bHasDepth)
-      break;
+      continue;
 
     AttachmentRef& ref = pass.attachments.emplace_back();
     ref.imageIdx = m_images.size();
