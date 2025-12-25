@@ -1,0 +1,167 @@
+# ---- EXTERNAL ----
+# uint VERT_COUNT
+
+# ---- CONSTANTS ----
+uint POS_FLOATS_COUNT: VERT_COUNT*3
+uint SPHERE_RES: 12
+uint SPHERE_VERT_COUNT: SPHERE_RES*SPHERE_RES*2*3
+uint GIZMO_VERT_COUNT: SPHERE_VERT_COUNT*3
+uint POINT_LIGHT_COUNT: 5
+float FLOOR_HEIGHT: -25.0
+float SPHERE_RADIUS: 0.5
+
+uint MATERIAL_SLOT_GROUND: 0
+uint MATERIAL_SLOT_NODES: 1
+uint MATERIAL_SLOT_GIZMO_RED: 2
+uint MATERIAL_SLOT_GIZMO_GREEN: 3
+uint MATERIAL_SLOT_GIZMO_BLUE: 4
+uint MATERIAL_SLOT_COUNT: 10
+
+uint MAX_GIZMOS: 1000
+
+# ---- FEATURES ----
+enable_feature: perspective_camera
+
+# ---- STRUCTS ----
+struct SimpleVertexOutput {
+  vec2 uv;
+}
+
+struct VertexOutput {
+  vec3 pos;
+  vec3 normal;
+  vec2 uv;
+  vec4 debugColor;
+  float materialIdx;
+}
+
+struct Material {
+  vec3 diffuse;
+  float roughness;
+  vec3 emissive;
+  float metallic;
+  vec3 specular;
+  float padding;
+}
+struct_size: 48
+
+# ------ UI -------
+checkbox USE_CONTROLLER: false
+slider_uint TRAIL_FREQUENCY: 0 0 10
+slider_uint LOG_FREQUENCY: 0 0 4
+ui_dropdown_start PID_OPTIONS:
+  slider_float LIN_PROP: 1.5 0.0 2.5
+  slider_float LIN_DIFF: 20.0 0.0 40.0
+  slider_float LIN_INT: 0.029 0.0 1.0
+ui_dropdown_end
+ui_separator
+ui_dropdown_start SIM_OPTIONS:
+  checkbox ENABLE_SIM: true
+  ui_separator
+  checkbox OSCILLATE_MOTORS: false
+  slider_float THROTTLE0: 0.0 0.0 1.0
+  slider_float THROTTLE1: 0.0 0.0 1.0
+  slider_float THROTTLE2: 0.0 0.0 1.0
+  slider_float THROTTLE3: 0.0 0.0 1.0
+ui_dropdown_end
+ui_separator
+ui_dropdown_start MESH_OPTIONS:
+  slider_float GIZMO_SCALE: 0.1 0.01 1.0
+  slider_float GIZMO_THICKNESS: 0.1 0.01 1.0
+ui_dropdown_end
+ui_separator
+ui_dropdown_start LIGHTING:
+  checkbox ENABLE_SHADOWS: true
+  checkbox SHOW_SHADOWMAP: true
+  ui_separator
+  checkbox SHOW_NORMALS: false
+  slider_float EXPOSURE: 0.3 0.0 1.0
+  ui_separator
+  slider_float SUN_INT: 1.0 1.0 100.0
+  slider_float SUN_ELEV: 0.5 0.0 1.0
+  slider_float SUN_ROT: 0.5 0.0 1.0
+  ui_separator
+  color_picker SKY_COLOR: 0.5 0.4 0.8 1.0
+  slider_float SKY_INT: 10.0 0.001 20.0
+  slider_float HORIZON_WHITENESS: 0.758 0.0 1.0
+  slider_float HORIZON_WHITENESS_FALLOFF: 0.842 0.0 4.0
+ui_dropdown_end
+ui_separator
+
+# ---- RESOURCES ----
+structured_buffer positions(2): float POS_FLOATS_COUNT
+  enable_cpu_access
+structured_buffer sphereVertexBuffer: vec4 SPHERE_VERT_COUNT
+structured_buffer cylinderVertexBuffer: vec4 SPHERE_VERT_COUNT
+
+structured_buffer materialBuffer: Material MATERIAL_SLOT_COUNT
+
+struct GizmoView {
+  uint head;
+  uint tail;
+}
+struct_size: 8
+structured_buffer gizmoView(2): GizmoView 1
+  enable_cpu_access
+structured_buffer gizmoBuffer: mat4 MAX_GIZMOS
+  enable_cpu_access
+
+structured_buffer shadowCamera: mat4 1
+depth_image shadowMap: 1024 1024
+  texture_alias shadowMapTexture
+
+display_image DisplayImage
+
+# ----- SHADERS -----
+compute_shader CS_Init: 1 1 1
+compute_shader CS_UpdateCamera: 32 1 1
+
+task_block_start INIT_TASK:
+  dispatch: CS_Init 1 1 1
+  barrier: sphereVertexBuffer cylinderVertexBuffer materialBuffer gizmoBuffer
+task_block_end
+
+initialization_task: INIT_TASK
+
+task_block_start UPDATE_SHADOW_CAMERA:
+  dispatch: CS_UpdateCamera 1 1 1
+  barrier: shadowCamera
+task_block_end
+
+run_task: UPDATE_SHADOW_CAMERA
+
+#transition_layout: shadowMap attachment
+
+render_pass SHADOW_PASS:
+  store_depth: shadowMap
+  draw: VS_ShadowSphere PS_Shadow SPHERE_VERT_COUNT VERT_COUNT
+    disable_backface_culling
+  draw: VS_ShadowGizmo PS_Shadow GIZMO_VERT_COUNT MAX_GIZMOS
+    disable_backface_culling
+  
+#transition_layout: shadowMap texture
+
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+
+  draw: VS_Sky PS_Sky 3 1
+    disable_depth
+    vertex_output: SimpleVertexOutput
+
+  draw: VS_Floor PS_Shaded 6 1
+    vertex_output: VertexOutput
+    disable_backface_culling
+
+  draw: VS_Sphere PS_Shaded SPHERE_VERT_COUNT VERT_COUNT
+    vertex_output: VertexOutput
+
+  draw: VS_Gizmo PS_Shaded GIZMO_VERT_COUNT MAX_GIZMOS
+    vertex_output: VertexOutput
+  
+  draw: VS_Overlay PS_Overlay 6 1
+    disable_depth
+    disable_backface_culling
+    vertex_output: SimpleVertexOutput
+
+  #draw_indexed: VS_Tris PS_Tris 1 indexBuffer
+  #  vertex_output: VertexOutput
