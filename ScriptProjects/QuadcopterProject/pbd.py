@@ -8,6 +8,8 @@ shapes = []
 fixedNodes = []
 motors = []
 
+disableFloorCollisions = False
+
 def resetScene():
   global nodeCount
   global nodePositions
@@ -110,6 +112,19 @@ def finalizeScene():
       nodeIdx = shape.nodeIndices[i]
       shape.nodeLocalPositions[i] = nodePositions[nodeIdx] - shape.centerOfMass
 
+def getGlobalCenterOfMass():
+  com = np.zeros(3)
+  for nodeIdx in range(nodeCount):
+    com += nodePositions[nodeIdx]
+  com /= nodeCount
+  return com
+
+def rebaseToOrigin():
+  com = getGlobalCenterOfMass()  
+  for nodeIdx in range(nodeCount):
+    nodePositions[nodeIdx] -= com
+    nodePrevPositions[nodeIdx] -= com
+
 time = 0.0
 DT = 1.0 / 30.0
 GRAVITY = 20.0
@@ -154,14 +169,15 @@ def stepSimulation():
   # constraints
     
   # floor constraint
-  for i in range(nodeCount):
-    h = floorHeight - nodePositions[i][1]
-    if h > 0:
-      nodePositions[i][1] += kFloor * h
-      # friction damps perp velocity
-      errDiff = nodePrevPositions[i] - nodePositions[i]
-      errDiff[1] = 0.0
-      nodePositions[i] += kFriction * errDiff 
+  if not disableFloorCollisions:
+    for i in range(nodeCount):
+      h = floorHeight - nodePositions[i][1]
+      if h > 0:
+        nodePositions[i][1] += kFloor * h
+        # friction damps perp velocity
+        errDiff = nodePrevPositions[i] - nodePositions[i]
+        errDiff[1] = 0.0
+        nodePositions[i] += kFriction * errDiff 
 
   for shape in shapes:
     localNodeCount = len(shape.nodeIndices)

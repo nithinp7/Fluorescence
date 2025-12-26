@@ -119,7 +119,7 @@ VertexOutput VS_Sphere() {
   OUT.pos = worldPos.xyz;
   OUT.normal = normalize(vpos);
   OUT.uv = spos.xy / spos.w * 0.5 + 0.5.xx;
-  OUT.materialIdx = float(MATERIAL_SLOT_NODES);
+  OUT.materialIdx = float(nodeMaterials[gl_InstanceIndex]);
   return OUT;
 }
 
@@ -197,6 +197,8 @@ VertexOutput VS_Floor() {
   // vec4 pos = vec4(floorXZ[0], 0.0, floorXZ[1], 0.0);
 
   vec4 screenPos = camera.projection * camera.view * pos;
+  if (DISABLE_FLOOR)
+    screenPos = vec4(0.0.xxx, 1.0);
   gl_Position = screenPos;
 
   VertexOutput OUT;
@@ -219,8 +221,22 @@ void PS_Sky(SimpleVertexOutput IN) {
   outColor = vec4(color, 1.0);
 }
 
+#include <Misc/Sampling.glsl>
+
 void PS_Shaded(VertexOutput IN) {
-  Material mat = materialBuffer[uint(round(IN.materialIdx))];
+  uint matIdx = uint(round(IN.materialIdx));
+  Material mat = materialBuffer[matIdx];
+  if (matIdx >= MATERIAL_SLOT_MOTOR0 && matIdx <= MATERIAL_SLOT_MOTOR3) {
+    uint motorIdx = matIdx - MATERIAL_SLOT_MOTOR0;
+    float throttle = throttleData(getPhase())[0][motorIdx];
+    vec3 red = vec3(1.0, 0.0, 0.0);
+    vec3 green = vec3(0.0, 1.0, 0.0);
+    if (throttle >= 0.0) {
+      mat.diffuse = mix(mat.diffuse, green, throttle);
+    } else {
+      mat.diffuse = mix(mat.diffuse, red, -throttle);
+    }
+  }
   vec3 viewDir = normalize(IN.pos - camera.inverseView[3].xyz);
   vec3 color = computeSurfaceLighting(mat, IN.pos, IN.normal, viewDir);
   color = linearToSdr(color);

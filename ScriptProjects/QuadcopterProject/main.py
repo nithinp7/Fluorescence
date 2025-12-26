@@ -9,15 +9,14 @@ import math
 gizmoViewStart = 0
 gizmoViewEnd = 0
 
-motorInputs = []
+motorInputs = [None, None, None, None]
+motorShapes = [None, None, None, None]
+
 body = None
 def initScene():
   pbd.resetScene()
 
-  global motorInputs
   global body
-
-  motorInputs = []
 
   body = pbd.createBox([0, 0, 0], [2.0, 0.25, 2.0])
   body.addNewNode([0.0, 2.0, 0.0])
@@ -41,12 +40,11 @@ def initScene():
     motor.addNode(mountNodeTopIdx)
     motor.addNode(mountNodeRightIdx)
     motor.addNode(mountNodeLeftIdx)
-    motorInputs.append(
-      pbd.createMotor(
-        mountNodeMidIdx, mountNodeTopIdx, mountNodeLeftIdx, mountNodeRightIdx, 1000.0, (i%2) == 0))
+    motorShapes[i] = motor
+    motorInputs[i] = pbd.createMotor(
+        mountNodeMidIdx, mountNodeTopIdx, mountNodeLeftIdx, mountNodeRightIdx, 1000.0, (i%2) == 0)
   
   pbd.finalizeScene()
-
   pid.reset()
 
 def printSensorLogs():
@@ -69,6 +67,8 @@ flr = flrlib.FlrScriptInterface("FlrProject/Sandbox.flr", params, flrDebugEnable
 
 # buffer handles
 positionsHandle = flr.getBufferHandle("positions")
+nodeMaterialsHandle = flr.getBufferHandle("nodeMaterials")
+throttlesBufferHandle = flr.getBufferHandle("throttleData")
 gizmoViewHandle = flr.getBufferHandle("gizmoView")
 gizmoBufferHandle = flr.getBufferHandle("gizmoBuffer")
 
@@ -78,6 +78,8 @@ maxGizmoCount = flr.getConstUint("MAX_GIZMOS")
 # ui handles
 simulateCheckbox = flr.getCheckboxHandle("ENABLE_SIM")
 enableFlightController = flr.getCheckboxHandle("USE_CONTROLLER")
+pinToOrigin = flr.getCheckboxHandle("PIN_TO_ORIGIN")
+disableFloor = flr.getCheckboxHandle("DISABLE_FLOOR")
 testMotorsCheckbox = flr.getCheckboxHandle("OSCILLATE_MOTORS")
 logFrequency = flr.getSliderUintHandle("LOG_FREQUENCY")
 trailFrequency = flr.getSliderUintHandle("TRAIL_FREQUENCY")
@@ -89,16 +91,45 @@ throttle3 = flr.getSliderFloatHandle("THROTTLE3")
 pid_linProp = flr.getSliderFloatHandle("LIN_PROP")
 pid_linDiff = flr.getSliderFloatHandle("LIN_DIFF")
 pid_linInt = flr.getSliderFloatHandle("LIN_INT")
+pid_tiltProp = flr.getSliderFloatHandle("TILT_PROP")
+pid_tiltDiff = flr.getSliderFloatHandle("TILT_DIFF")
+pid_tiltInt = flr.getSliderFloatHandle("TILT_INT")
+
+def initResources():
+  defaultNodeMaterial = flr.getConstUint("MATERIAL_SLOT_NODES")
+  motorMaterialStart = flr.getConstUint("MATERIAL_SLOT_MOTOR0")
+  buf = bytearray(pbd.nodeCount * 4)
+  for i in range(pbd.nodeCount):
+    buf[4*i:4*i+4] = struct.pack("<I", defaultNodeMaterial)
+  
+  for motorIdx in range(4):
+    matIdx = motorMaterialStart + motorIdx
+    for nodeIdx in motorShapes[motorIdx].nodeIndices:
+      buf[4*nodeIdx:4*nodeIdx+4] = struct.pack("<I", matIdx)
+
+  flr.cmdBufferStagedUpload(nodeMaterialsHandle, 0, buf)
+
+initResources()
 
 def uploadPositions():
+  posOffs = pbd.getGlobalCenterOfMass() if flr.getCheckbox(pinToOrigin) else np.zeros(3)
   buf = bytearray(pbd.nodeCount * 4 * 3)
   for i in range(pbd.nodeCount):
-    buf[12*i:12*(i+1)] = struct.pack(
-        "<fff", pbd.nodePositions[i][0], pbd.nodePositions[i][1], pbd.nodePositions[i][2])
+    pos = pbd.nodePositions[i] - posOffs
+    buf[12*i:12*(i+1)] = struct.pack("<fff", pos[0], pos[1], pos[2])
   flr.cmdBufferWrite(positionsHandle, 0xFFFFFFFF, 0, buf)
 
+def uploadThrottleData():
+  buf = struct.pack("<ffff", motorInputs[0].throttle, motorInputs[1].throttle, motorInputs[2].throttle, motorInputs[3].throttle)
+  flr.cmdBufferWrite(throttlesBufferHandle, 0xFFFFFFFF, 0, buf)
+
+prevGizmoPos = np.zeros(3)
 def addGizmo(tr, rot):
   global gizmoViewEnd
+  global prevGizmoPos
+  diff = tr - prevGizmoPos
+  if np.dot(diff,diff) < 0.5:
+    return
   buf = bytearray(64)
   buf[0:16] = struct.pack("<ffff", rot[0][0], rot[1][0], rot[2][0], 0.0)
   buf[16:32] = struct.pack("<ffff", rot[0][1], rot[1][1], rot[2][1], 0.0)
@@ -107,6 +138,7 @@ def addGizmo(tr, rot):
   offs = gizmoViewEnd % maxGizmoCount
   flr.cmdBufferWrite(gizmoBufferHandle, 0, offs * 64, buf)
   gizmoViewEnd += 1
+  prevGizmoPos = tr
 
 def updateGizmos():
   global gizmoViewStart
@@ -123,6 +155,9 @@ while True:
     pid.kProp = flr.getSliderFloat(pid_linProp)
     pid.kDiff = flr.getSliderFloat(pid_linDiff)
     pid.kInt = flr.getSliderFloat(pid_linInt)
+    pid.kTiltProp = flr.getSliderFloat(pid_tiltProp)
+    pid.kTiltDiff = flr.getSliderFloat(pid_tiltDiff)
+    pid.kTiltInt = flr.getSliderFloat(pid_tiltInt)
     throttleSolution = pid.update(body.centerOfMass, body.rotation, pbd.DT)
     for i in range(4):
       motorInputs[i].setThrottle(throttleSolution[i])
@@ -149,14 +184,19 @@ while True:
   elif frame%(3*trailFreq) == 0:
     addGizmo(body.centerOfMass, body.rotation)
   
+  # if flr.getCheckbox(pinToOrigin):
+  #   pbd.rebaseToOrigin()
+  pbd.disableFloorCollisions = flr.getCheckbox(disableFloor)
   if flr.getCheckbox(simulateCheckbox):
     pbd.stepSimulation()
 
   uploadPositions()
   updateGizmos()
+  uploadThrottleData()
   match flr.tick():
     case flrlib.FlrTickResult.TR_REINIT:
       initScene()
+      initResources()
     case flrlib.FlrTickResult.TR_TERMINATE:
       break
   frame += 1

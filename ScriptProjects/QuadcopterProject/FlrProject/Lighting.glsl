@@ -100,6 +100,18 @@ void initMaterials() {
     materialBuffer[MATERIAL_SLOT_NODES] = mat;
   }
   
+  for (int i = 0; i < 4; i++) 
+  {
+    // these are dynamic materials that get colored based on throttle percentage
+    Material mat;
+    mat.diffuse = vec3(0.8, 0.2, 0.5);
+    mat.roughness = 0.3;
+    mat.emissive = 0.0.xxx;
+    mat.metallic = 0.0;
+    mat.specular = 0.03.xxx;
+    materialBuffer[MATERIAL_SLOT_MOTOR0 + i] = mat;
+  }
+
   {
     Material mat;
     mat.diffuse = 0.1.xxx;

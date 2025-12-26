@@ -15,9 +15,13 @@ uint MATERIAL_SLOT_NODES: 1
 uint MATERIAL_SLOT_GIZMO_RED: 2
 uint MATERIAL_SLOT_GIZMO_GREEN: 3
 uint MATERIAL_SLOT_GIZMO_BLUE: 4
+uint MATERIAL_SLOT_MOTOR0: 5
+uint MATERIAL_SLOT_MOTOR1: 6
+uint MATERIAL_SLOT_MOTOR2: 7
+uint MATERIAL_SLOT_MOTOR3: 8
 uint MATERIAL_SLOT_COUNT: 10
 
-uint MAX_GIZMOS: 1000
+uint MAX_GIZMOS: 500
 
 # ---- FEATURES ----
 enable_feature: perspective_camera
@@ -46,23 +50,29 @@ struct Material {
 struct_size: 48
 
 # ------ UI -------
+checkbox ENABLE_SIM: true
 checkbox USE_CONTROLLER: false
+checkbox PIN_TO_ORIGIN: false
+checkbox DISABLE_FLOOR: false
 slider_uint TRAIL_FREQUENCY: 0 0 10
 slider_uint LOG_FREQUENCY: 0 0 4
 ui_dropdown_start PID_OPTIONS:
   slider_float LIN_PROP: 1.5 0.0 2.5
-  slider_float LIN_DIFF: 20.0 0.0 40.0
+  slider_float LIN_DIFF: 0.65 0.0 1.0
   slider_float LIN_INT: 0.029 0.0 1.0
+  ui_separator
+  slider_float TILT_PROP: 1.5 0.0 1.5
+  slider_float TILT_DIFF: 0.65 0.0 1.0
+  slider_float TILT_INT: 0.029 0.0 1.0
 ui_dropdown_end
 ui_separator
 ui_dropdown_start SIM_OPTIONS:
-  checkbox ENABLE_SIM: true
   ui_separator
   checkbox OSCILLATE_MOTORS: false
-  slider_float THROTTLE0: 0.0 0.0 1.0
-  slider_float THROTTLE1: 0.0 0.0 1.0
-  slider_float THROTTLE2: 0.0 0.0 1.0
-  slider_float THROTTLE3: 0.0 0.0 1.0
+  slider_float THROTTLE0: 0.0 -1.0 1.0
+  slider_float THROTTLE1: 0.0 -1.0 1.0
+  slider_float THROTTLE2: 0.0 -1.0 1.0
+  slider_float THROTTLE3: 0.0 -1.0 1.0
 ui_dropdown_end
 ui_separator
 ui_dropdown_start MESH_OPTIONS:
@@ -91,8 +101,12 @@ ui_separator
 # ---- RESOURCES ----
 structured_buffer positions(2): float POS_FLOATS_COUNT
   enable_cpu_access
+structured_buffer throttleData(2): vec4 1
+  enable_cpu_access
 structured_buffer sphereVertexBuffer: vec4 SPHERE_VERT_COUNT
 structured_buffer cylinderVertexBuffer: vec4 SPHERE_VERT_COUNT
+
+structured_buffer nodeMaterials: uint VERT_COUNT
 
 structured_buffer materialBuffer: Material MATERIAL_SLOT_COUNT
 
