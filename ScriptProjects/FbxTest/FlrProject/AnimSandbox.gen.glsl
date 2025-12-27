@@ -70,6 +70,7 @@ layout(set=1, binding=9) uniform _UserUniforms {
 	float FALLOFF;
 	bool ENABLE_SKINNING;
 	bool LOOP_ANIM;
+	bool SHOW_NORMALS;
 };
 
 #include <FlrLib/Fluorescence.glsl>

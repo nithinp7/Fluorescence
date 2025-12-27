@@ -24,7 +24,7 @@ uint MATERIAL_SLOT_COUNT: 10
 uint MAX_GIZMOS: 500
 
 # ---- FEATURES ----
-enable_feature: perspective_camera
+enable_feature: perspective_camera 64.0
 
 # ---- STRUCTS ----
 struct SimpleVertexOutput {
@@ -56,14 +56,19 @@ checkbox PIN_TO_ORIGIN: false
 checkbox DISABLE_FLOOR: false
 slider_uint TRAIL_FREQUENCY: 0 0 10
 slider_uint LOG_FREQUENCY: 0 0 4
-ui_dropdown_start PID_OPTIONS:
-  slider_float LIN_PROP: 1.5 0.0 2.5
-  slider_float LIN_DIFF: 0.65 0.0 1.0
-  slider_float LIN_INT: 0.029 0.0 1.0
+ui_dropdown_start PID:
+  ui_dropdown_start ALT_CONTROLLER:
+    slider_float ALT_PROP: 1.5 0.0 2.5
+    slider_float ALT_DIFF: 0.65 0.0 1.0
+    slider_float ALT_INT: 0.029 0.0 1.0
+  ui_dropdown_end
   ui_separator
-  slider_float TILT_PROP: 1.5 0.0 1.5
-  slider_float TILT_DIFF: 0.65 0.0 1.0
-  slider_float TILT_INT: 0.029 0.0 1.0
+  ui_dropdown_start ROT_CONTROLLER:
+    slider_float ROT_PROP: 10.0 0.0 20.0
+    slider_float ROT_DIFF: 4.0 0.0 10.0
+    slider_float ROT_INT: 0.029 0.0 1.0
+  ui_dropdown_end
+  ui_separator
 ui_dropdown_end
 ui_separator
 ui_dropdown_start SIM_OPTIONS:

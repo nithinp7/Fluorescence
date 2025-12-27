@@ -45,7 +45,6 @@ def initScene():
         mountNodeMidIdx, mountNodeTopIdx, mountNodeLeftIdx, mountNodeRightIdx, 1000.0, (i%2) == 0)
   
   pbd.finalizeScene()
-  pid.reset()
 
 def printSensorLogs():
   sensorPos = body.centerOfMass
@@ -88,12 +87,7 @@ throttle1 = flr.getSliderFloatHandle("THROTTLE1")
 throttle2 = flr.getSliderFloatHandle("THROTTLE2")
 throttle3 = flr.getSliderFloatHandle("THROTTLE3")
 
-pid_linProp = flr.getSliderFloatHandle("LIN_PROP")
-pid_linDiff = flr.getSliderFloatHandle("LIN_DIFF")
-pid_linInt = flr.getSliderFloatHandle("LIN_INT")
-pid_tiltProp = flr.getSliderFloatHandle("TILT_PROP")
-pid_tiltDiff = flr.getSliderFloatHandle("TILT_DIFF")
-pid_tiltInt = flr.getSliderFloatHandle("TILT_INT")
+quadcopterController = None
 
 def initResources():
   defaultNodeMaterial = flr.getConstUint("MATERIAL_SLOT_NODES")
@@ -108,6 +102,9 @@ def initResources():
       buf[4*nodeIdx:4*nodeIdx+4] = struct.pack("<I", matIdx)
 
   flr.cmdBufferStagedUpload(nodeMaterialsHandle, 0, buf)
+
+  global quadcopterController
+  quadcopterController = pid.QuadcopterController(flr)
 
 initResources()
 
@@ -152,23 +149,18 @@ def updateGizmos():
 frame = 0
 while True:  
   if flr.getCheckbox(enableFlightController):
-    pid.kProp = flr.getSliderFloat(pid_linProp)
-    pid.kDiff = flr.getSliderFloat(pid_linDiff)
-    pid.kInt = flr.getSliderFloat(pid_linInt)
-    pid.kTiltProp = flr.getSliderFloat(pid_tiltProp)
-    pid.kTiltDiff = flr.getSliderFloat(pid_tiltDiff)
-    pid.kTiltInt = flr.getSliderFloat(pid_tiltInt)
-    throttleSolution = pid.update(body.centerOfMass, body.rotation, pbd.DT)
+    throttleSolution = quadcopterController.evaluate(
+        flr, body.centerOfMass, body.rotation, pbd.DT)
     for i in range(4):
       motorInputs[i].setThrottle(throttleSolution[i])
   elif flr.getCheckbox(testMotorsCheckbox):
-    pid.reset()
+    quadcopterController.reset()
     motorInputs[0].setThrottle(0.1 + 0.1 * math.sin(pbd.time))
     motorInputs[1].setThrottle(0.1 + 0.1 * math.sin(1.3 * pbd.time + 2))
     motorInputs[2].setThrottle(0.1 + 0.1 * math.sin(2.12 * pbd.time + 1))
     motorInputs[3].setThrottle(0.1 + 0.1 * math.sin(0.9 * pbd.time + 3.1))
-  else:
-    pid.reset()
+  else:    
+    quadcopterController.reset()
     motorInputs[0].setThrottle(flr.getSliderFloat(throttle0))
     motorInputs[1].setThrottle(flr.getSliderFloat(throttle1))
     motorInputs[2].setThrottle(flr.getSliderFloat(throttle2))

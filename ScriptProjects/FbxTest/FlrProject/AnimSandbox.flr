@@ -46,6 +46,7 @@ ui_dropdown_start MESH_OPTIONS:
 ui_dropdown_end
 ui_separator
 ui_dropdown_start LIGHTING:
+  checkbox SHOW_NORMALS: false
   slider_float FALLOFF: 1000.0 0.0 2000.0
   slider_uint BACKGROUND: 0 0 3
 ui_dropdown_end

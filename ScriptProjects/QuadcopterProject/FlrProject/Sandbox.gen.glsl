@@ -1,8 +1,8 @@
 #version 460 core
 
 #define VERT_COUNT 57
-#define SCREEN_WIDTH 1920
-#define SCREEN_HEIGHT 1009
+#define SCREEN_WIDTH 1440
+#define SCREEN_HEIGHT 1061
 #define POS_FLOATS_COUNT 171
 #define SPHERE_RES 12
 #define SPHERE_VERT_COUNT 864
@@ -87,12 +87,12 @@ layout(set=1, binding=11) uniform _UserUniforms {
 	vec4 SKY_COLOR;
 	uint TRAIL_FREQUENCY;
 	uint LOG_FREQUENCY;
-	float LIN_PROP;
-	float LIN_DIFF;
-	float LIN_INT;
-	float TILT_PROP;
-	float TILT_DIFF;
-	float TILT_INT;
+	float ALT_PROP;
+	float ALT_DIFF;
+	float ALT_INT;
+	float ROT_PROP;
+	float ROT_DIFF;
+	float ROT_INT;
 	float THROTTLE0;
 	float THROTTLE1;
 	float THROTTLE2;

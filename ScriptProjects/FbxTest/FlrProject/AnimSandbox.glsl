@@ -99,8 +99,9 @@ void PS_Tris(VertexOutput IN) {
   vec3 normal = normalize(IN.normal);
   uvec2 seed = uvec2(0);
   vec3 color = computeSurfaceLighting(seed, IN.pos, normal, computeDir(IN.uv));
-  // color = linearToSdr(color);
-  color = IN.normal * 0.5 + 0.5.xxx;
+  color = linearToSdr(color);
+  if (SHOW_NORMALS)
+    color = IN.normal * 0.5 + 0.5.xxx;
   if (SELECT_BONE_INFLUENCE >= 0)
     color = IN.debugColor.rgb;
   outColor = vec4(color, 1.0);
