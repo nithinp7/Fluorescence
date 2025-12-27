@@ -16,10 +16,7 @@ class PidController:
     self.accumErr = 0.0
 
   def evaluate(self, flr : flrlib.FlrScriptInterface, err : float, vel : float):
-    kProp = flr.getSliderFloat(self.kProp)
-    kDiff = flr.getSliderFloat(self.kDiff)
-    kInt = flr.getSliderFloat(self.kInt)
-    response = kProp * err - kDiff * vel + kInt * self.accumErr
+    response = self.kProp.get() * err - self.kDiff.get() * vel + self.kInt.get() * self.accumErr
     self.accumErr += err
     return response
 

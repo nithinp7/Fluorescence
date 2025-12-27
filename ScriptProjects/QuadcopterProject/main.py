@@ -148,12 +148,12 @@ def updateGizmos():
 
 frame = 0
 while True:  
-  if flr.getCheckbox(enableFlightController):
+  if enableFlightController.get():
     throttleSolution = quadcopterController.evaluate(
         flr, body.centerOfMass, body.rotation, pbd.DT)
     for i in range(4):
       motorInputs[i].setThrottle(throttleSolution[i])
-  elif flr.getCheckbox(testMotorsCheckbox):
+  elif testMotorsCheckbox.get():
     quadcopterController.reset()
     motorInputs[0].setThrottle(0.1 + 0.1 * math.sin(pbd.time))
     motorInputs[1].setThrottle(0.1 + 0.1 * math.sin(1.3 * pbd.time + 2))
@@ -161,25 +161,23 @@ while True:
     motorInputs[3].setThrottle(0.1 + 0.1 * math.sin(0.9 * pbd.time + 3.1))
   else:    
     quadcopterController.reset()
-    motorInputs[0].setThrottle(flr.getSliderFloat(throttle0))
-    motorInputs[1].setThrottle(flr.getSliderFloat(throttle1))
-    motorInputs[2].setThrottle(flr.getSliderFloat(throttle2))
-    motorInputs[3].setThrottle(flr.getSliderFloat(throttle3))
+    motorInputs[0].setThrottle(throttle0.get())
+    motorInputs[1].setThrottle(throttle1.get())
+    motorInputs[2].setThrottle(throttle2.get())
+    motorInputs[3].setThrottle(throttle3.get())
 
-  logFreqSecs = flr.getSliderUint(logFrequency)
-  if logFreqSecs > 0 and frame%(30 * logFreqSecs) == 0:
+  if logFrequency.get() > 0 and frame%(30 * logFrequency.get()) == 0:
     printSensorLogs()
   
-  trailFreq = flr.getSliderUint(trailFrequency)
-  if trailFreq == 0:
+  if trailFrequency.get() == 0:
     gizmoViewStart = gizmoViewEnd
-  elif frame%(3*trailFreq) == 0:
+  elif frame%(3*trailFrequency.get()) == 0:
     addGizmo(body.centerOfMass, body.rotation)
   
   # if flr.getCheckbox(pinToOrigin):
   #   pbd.rebaseToOrigin()
-  pbd.disableFloorCollisions = flr.getCheckbox(disableFloor)
-  if flr.getCheckbox(simulateCheckbox):
+  pbd.disableFloorCollisions = disableFloor.get()
+  if simulateCheckbox.get():
     pbd.stepSimulation()
 
   uploadPositions()

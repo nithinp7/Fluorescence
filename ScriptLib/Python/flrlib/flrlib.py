@@ -90,13 +90,17 @@ class FlrHandleType(IntEnum):
   HT_CHECKBOX = 7
 
 class FlrHandle:
-  def __init__(self, htype : int = FlrHandleType.HT_INVALID, idx : int = INVALID_HANDLE, name : int = INVALID_HANDLE):
+  def __init__(self, htype : int = FlrHandleType.HT_INVALID, idx : int = INVALID_HANDLE, name : int = INVALID_HANDLE, value = None):
     self.htype = htype
     self.idx = idx
     self.name = name
+    self.value = value
 
   def isValid(self):
     return self.htype != FlrHandleType.HT_INVALID and self.idx != INVALID_HANDLE and self.name != INVALID_HANDLE
+  
+  def get(self):
+    return self.value
 
 def runFlr(exePath, flrPath):
   subprocess.run([exePath, flrPath, "-ipc"], stdout=subprocess.PIPE)
@@ -139,7 +143,7 @@ class FlrScriptInterface:
     self.perFrameFailure = False
 
     self.flrExePath = \
-        "C:/Users/nithi/Documents/Code/Fluorescence/build/RelWithDebInfo/Fluorescence.exe" \
+        "C:/Users/nithi/Documents/Code/Fluorescence/build/Debug/Fluorescence.exe" \
         if flrDebugEnable else \
         "Fluorescence.exe"
     
@@ -256,6 +260,7 @@ class FlrScriptInterface:
         allocSize, offs = self.__parseU32(offs)
         assert(allocSize == len(self.uiBuffer))
         self.uiBuffer[:] = self.sharedMem.buf[allocOffs:allocOffs+allocSize]
+        self.__updateUiHandles()
       
       case FlrMessageType.FMT_COMPUTE_SHADER:
         csidx, offs = self.__parseU32(offs)
@@ -339,6 +344,19 @@ class FlrScriptInterface:
         case _:
           assert(False)
   
+  def __updateUiHandles(self):
+    for h in self.externalHandles:
+      assert(h.isValid())
+      match h.htype:
+        case FlrHandleType.HT_UINT_SLIDER:
+          h.value = self.getSliderUint(h)
+        case FlrHandleType.HT_INT_SLIDER:
+          h.vaue = self.getSliderInt(h)
+        case FlrHandleType.HT_FLOAT_SLIDER:
+          h.value = self.getSliderFloat(h)
+        case FlrHandleType.HT_CHECKBOX:
+          h.value = self.getCheckbox(h)
+
   def __resetPerFrameData(self):
     self.perFrameOffset = 0
     self.perFrameEnd = BUF_SIZE
@@ -352,8 +370,8 @@ class FlrScriptInterface:
     self.perFrameFailure = self.perFrameFailure or (start < self.perFrameOffset)
     return not self.perFrameFailure
   
-  def __createHandle(self, htype : int, idx : int, name : int):
-    self.externalHandles.append(FlrHandle(htype, idx, name))
+  def __createHandle(self, htype : int, idx : int, name : int, value = None):
+    self.externalHandles.append(FlrHandle(htype, idx, name, value))
     return self.externalHandles[-1]
   
   def getBufferHandle(self, name : str):
@@ -387,24 +405,6 @@ class FlrScriptInterface:
           return self.__createHandle(FlrHandleType.HT_TASK, tidx, nameId)
     return FlrHandle()
   
-  def __createUiHandle(self, htype : int, name : str, arr):
-    nameId = self.stringTable.get(name)
-    if nameId != None:
-      for i in range(len(arr)):
-        if nameId == arr[i].name:
-          return self.__createHandle(htype, i, nameId)
-        
-    return FlrHandle()
-  
-  def getSliderFloatHandle(self, name : str):
-    return self.__createUiHandle(FlrHandleType.HT_FLOAT_SLIDER, name, self.floatSliders)
-  def getSliderUintHandle(self, name : str):
-    return self.__createUiHandle(FlrHandleType.HT_UINT_SLIDER, name, self.uintSliders)
-  def getSliderIntHandle(self, name : str):
-    return self.__createUiHandle(FlrHandleType.HT_INT_SLIDER, name, self.intSliders)
-  def getCheckboxHandle(self, name : str):
-    return self.__createUiHandle(FlrHandleType.HT_CHECKBOX, name, self.checkboxes)
-  
   def getSliderFloat(self, handle : FlrHandle) -> float:
     assert(handle.htype == FlrHandleType.HT_FLOAT_SLIDER)
     offs = self.floatSliders[handle.idx].offset
@@ -425,23 +425,52 @@ class FlrScriptInterface:
     offs = self.checkboxes[handle.idx].offset
     return int.from_bytes(self.uiBuffer[offs:offs+4], byteorder='little', signed=False)
   
+  def __createUiHandle(self, htype : int, name : str, arr):
+    nameId = self.stringTable.get(name)
+    if nameId != None:
+      for i in range(len(arr)):
+        if nameId == arr[i].name:
+          return self.__createHandle(htype, i, nameId)
+        
+    return FlrHandle()
+  
+  def getSliderFloatHandle(self, name : str):
+    h = self.__createUiHandle(FlrHandleType.HT_FLOAT_SLIDER, name, self.floatSliders)
+    h.value = self.getSliderFloat(h)
+    return h
+  def getSliderUintHandle(self, name : str):
+    h = self.__createUiHandle(FlrHandleType.HT_UINT_SLIDER, name, self.uintSliders)
+    h.value = self.getSliderUint(h)
+    return h
+  def getSliderIntHandle(self, name : str):
+    h = self.__createUiHandle(FlrHandleType.HT_INT_SLIDER, name, self.intSliders)
+    h.value = self.getSliderInt(h)
+    return h
+  def getCheckboxHandle(self, name : str):
+    h = self.__createUiHandle(FlrHandleType.HT_CHECKBOX, name, self.checkboxes)
+    h.value = self.getCheckbox(h)
+    return h
+  
   def getConstFloat(self, name : str) -> float:
+    nameId = self.stringTable.get(name)
     for c in self.constFloats:
-      if name == c[0]:
+      if nameId == c[0]:
         return c[1]
     assert(False)
     return 0.0
   
   def getConstInt(self, name : str) -> int:
+    nameId = self.stringTable.get(name)
     for c in self.constInts:
-      if name == c[0]:
+      if nameId == c[0]:
         return c[1]
     assert(False)
     return 0
 
   def getConstUint(self, name : str) -> int:
+    nameId = self.stringTable.get(name)
     for c in self.constUints:
-      if name == c[0]:
+      if nameId == c[0]:
         return c[1]
     assert(False)
     return 0
