@@ -1317,6 +1317,14 @@ ParsedFlr::ParsedFlr(
       auto featureIdx = findIndexByName(FEATURE_FLAG_NAMES, *featureName);
       PARSER_VERIFY(featureIdx, "Invalid feature flag specified.");
 
+      p.parseWhitespace();
+      if ((1 << *featureIdx) == FF_PERSPECTIVE_CAMERA) {
+        // optional max speed arg
+        auto maxSpeed = p.parseFloat();
+        m_maxCameraSpeed = maxSpeed ? *maxSpeed : 8.0f;
+        p.parseWhitespace();
+      }
+
       m_featureFlags |= (FeatureFlag)(1 << *featureIdx);
 
       break;

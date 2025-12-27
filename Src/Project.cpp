@@ -222,6 +222,7 @@ Project::Project(
         60.0f,
         (float)GApplication->getSwapChainExtent().width /
             (float)GApplication->getSwapChainExtent().height);
+    m_cameraController.setMaxSpeed(m_parsed.m_maxCameraSpeed);
     m_perspectiveCamera = TransientUniforms<PerspectiveCamera>(*GApplication);
   }
 

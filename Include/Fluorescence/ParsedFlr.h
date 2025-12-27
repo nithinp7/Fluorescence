@@ -292,6 +292,8 @@ struct ParsedFlr {
   };
   uint32_t m_featureFlags;
 
+  float m_maxCameraSpeed;
+
   int m_displayImageIdx;
   int m_initializationTaskIdx;
 
