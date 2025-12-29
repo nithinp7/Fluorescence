@@ -82,7 +82,7 @@ vec3 computeSurfaceLighting(Material mat, vec3 pos, vec3 normal, vec3 dir) {
 void initMaterials() {
   {
     Material mat;
-    mat.diffuse = vec3(0.3, 0.2, 0.2);
+    mat.diffuse = vec3(0.15, 0.1, 0.1);
     mat.roughness = 0.5;
     mat.emissive = 0.0.xxx;
     mat.metallic = 0.0;
@@ -141,5 +141,14 @@ void initMaterials() {
     mat.specular = 0.03.xxx;
     materialBuffer[MATERIAL_SLOT_GIZMO_BLUE] = mat;
   }
+
+  {
+    Material mat;
+    mat.diffuse = 0.5.xxx;
+    mat.roughness = 0.7;
+    mat.emissive = vec3(2.0, 2.0, 0.0);
+    mat.metallic = 0.0;
+    mat.specular = 0.03.xxx;
+    materialBuffer[MATERIAL_SLOT_WAYPOINT] = mat;}
 }
 #endif // _LIGHTING_GLSL_

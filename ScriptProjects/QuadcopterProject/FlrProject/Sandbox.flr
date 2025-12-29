@@ -19,6 +19,7 @@ uint MATERIAL_SLOT_MOTOR0: 5
 uint MATERIAL_SLOT_MOTOR1: 6
 uint MATERIAL_SLOT_MOTOR2: 7
 uint MATERIAL_SLOT_MOTOR3: 8
+uint MATERIAL_SLOT_WAYPOINT: 9
 uint MATERIAL_SLOT_COUNT: 10
 
 uint MAX_GIZMOS: 500
@@ -57,16 +58,36 @@ checkbox DISABLE_FLOOR: false
 slider_uint TRAIL_FREQUENCY: 0 0 10
 slider_uint LOG_FREQUENCY: 0 0 4
 ui_dropdown_start PID:
+  slider_float TARGET_POS_X: 0.0 -400.0 400.0
+  slider_float TARGET_POS_Y: 20.0 -50.0 250.0
+  slider_float TARGET_POS_Z: 0.0 -400.0 400.0
+  ui_separator
+  slider_float TARGET_DEADBAND: 7.72 0.0 20.0
+  ui_separator
+  slider_float CRUISE_VEL: 49.123 0.0 100.0
+
   ui_dropdown_start ALT_CONTROLLER:
+    slider_float ALT_THRUST_LIMIT: 8.2 0.0 20.0
+    ui_separator
+    checkbox ALT_ENABLE: true
     slider_float ALT_PROP: 1.5 0.0 2.5
     slider_float ALT_DIFF: 0.65 0.0 1.0
-    slider_float ALT_INT: 0.029 0.0 1.0
+    slider_float ALT_INT: 0.0 0.0 1.0
   ui_dropdown_end
   ui_separator
   ui_dropdown_start ROT_CONTROLLER:
-    slider_float ROT_PROP: 10.0 0.0 20.0
-    slider_float ROT_DIFF: 4.0 0.0 10.0
-    slider_float ROT_INT: 0.029 0.0 1.0
+    checkbox ROT_ENABLE: true
+    slider_float ROT_PROP: 11.2 0.0 20.0
+    slider_float ROT_DIFF: 4.3 0.0 10.0
+    slider_float ROT_INT: 0.0 0.0 1.0
+  ui_dropdown_end
+  ui_separator
+  ui_dropdown_start TILT_CONTROLLER:
+    slider_float TILT_LIMIT: 0.667 0.0 2.0
+    checkbox TILT_ENABLE: true
+    slider_float TILT_PROP: 0.0 0.0 5.0
+    slider_float TILT_DIFF: 0.11 0.0 20.0
+    slider_float TILT_INT: 0.0 0.0 1.0
   ui_dropdown_end
   ui_separator
 ui_dropdown_end
@@ -85,21 +106,25 @@ ui_dropdown_start MESH_OPTIONS:
   slider_float GIZMO_THICKNESS: 0.1 0.01 1.0
 ui_dropdown_end
 ui_separator
-ui_dropdown_start LIGHTING:
+ui_dropdown_start RENDERING:
+  slider_float ZOOM_MULT: 1.0 0.01 10.0
   checkbox ENABLE_SHADOWS: true
   checkbox SHOW_SHADOWMAP: true
   ui_separator
   checkbox SHOW_NORMALS: false
   slider_float EXPOSURE: 0.3 0.0 1.0
   ui_separator
-  slider_float SUN_INT: 1.0 1.0 100.0
-  slider_float SUN_ELEV: 0.5 0.0 1.0
-  slider_float SUN_ROT: 0.5 0.0 1.0
+  ui_dropdown_start SKY:
+    slider_float SUN_INT: 1.0 1.0 100.0
+    slider_float SUN_ELEV: 0.5 0.0 1.0
+    slider_float SUN_ROT: 0.5 0.0 1.0
+    ui_separator
+    color_picker SKY_COLOR: 0.5 0.4 0.8 1.0
+    slider_float SKY_INT: 10.0 0.001 20.0
+    slider_float HORIZON_WHITENESS: 0.758 0.0 1.0
+    slider_float HORIZON_WHITENESS_FALLOFF: 0.842 0.0 4.0
+  ui_dropdown_end
   ui_separator
-  color_picker SKY_COLOR: 0.5 0.4 0.8 1.0
-  slider_float SKY_INT: 10.0 0.001 20.0
-  slider_float HORIZON_WHITENESS: 0.758 0.0 1.0
-  slider_float HORIZON_WHITENESS_FALLOFF: 0.842 0.0 4.0
 ui_dropdown_end
 ui_separator
 
@@ -155,6 +180,8 @@ render_pass SHADOW_PASS:
   store_depth: shadowMap
   draw: VS_ShadowSphere PS_Shadow SPHERE_VERT_COUNT VERT_COUNT
     disable_backface_culling
+  draw: VS_ShadowWayPoint PS_Shadow SPHERE_VERT_COUNT VERT_COUNT
+    disable_backface_culling
   draw: VS_ShadowGizmo PS_Shadow GIZMO_VERT_COUNT MAX_GIZMOS
     disable_backface_culling
   
@@ -175,6 +202,9 @@ render_pass DISPLAY_PASS:
     vertex_output: VertexOutput
 
   draw: VS_Gizmo PS_Shaded GIZMO_VERT_COUNT MAX_GIZMOS
+    vertex_output: VertexOutput
+
+  draw: VS_WayPoint PS_Shaded SPHERE_VERT_COUNT 1
     vertex_output: VertexOutput
   
   draw: VS_Overlay PS_Overlay 6 1

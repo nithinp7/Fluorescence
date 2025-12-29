@@ -149,8 +149,7 @@ def updateGizmos():
 frame = 0
 while True:  
   if enableFlightController.get():
-    throttleSolution = quadcopterController.evaluate(
-        flr, body.centerOfMass, body.rotation, pbd.DT)
+    throttleSolution = quadcopterController.evaluate(body.centerOfMass, body.rotation, pbd.DT)
     for i in range(4):
       motorInputs[i].setThrottle(throttleSolution[i])
   elif testMotorsCheckbox.get():

@@ -1,8 +1,70 @@
+
+bool isZoomEnabled() {
+  return (uniforms.inputMask & (INPUT_BIT_RIGHT_MOUSE | INPUT_BIT_SPACE)) != 0;
+}
+
+uint getPhase() {
+  return uniforms.frameCount & 1;
+}
+
+vec3 getPos(uint idx) {
+  uint phase = getPhase();
+  return 
+      vec3(
+          positions(phase)[3*idx + 0], 
+          positions(phase)[3*idx + 1],
+          positions(phase)[3*idx + 2]);
+}
+
+mat4 getInverseView() {
+  mat4 inverseView = camera.inverseView;
+  vec4 camPos = inverseView[3];
+  if (isZoomEnabled()) {
+    vec3 focusPos = getPos(0);//shadowCamera[0][3].xyz;
+    vec3 worldUp = vec3(0.0, 1.0, 0.0);
+    vec3 front = normalize(focusPos - camPos.xyz);
+    vec3 right = normalize(cross(front, worldUp));
+    vec3 up = normalize(cross(right, front));
+    inverseView[0] = vec4(right, 0.0);
+    inverseView[1] = vec4(up, 0.0);
+    inverseView[2] = vec4(-front, 0.0);
+    inverseView[3] = camPos;
+  }
+  return inverseView; 
+}
+
+mat4 getView() {
+  if (isZoomEnabled()) {
+    return inverse(getInverseView());
+  }
+  return camera.view;
+}
+
+mat4 getProjection() {
+  mat4 projection = camera.projection;
+  if (isZoomEnabled()) {
+    vec3 focusPos = getPos(0);//shadowCamera[0][3].xyz;
+    vec3 diff = focusPos - camera.inverseView[3].xyz;
+    float dist = length(diff);
+    float zoom = ZOOM_MULT * dist;
+    projection[0] *= zoom;
+    projection[1] *= zoom;
+  }
+  return projection;
+}
+
+mat4 getInverseProjection() {
+  if (isZoomEnabled()) {
+    return inverse(getProjection());
+  }
+  return camera.inverseProjection;
+}
+
 vec3 computeDir(vec2 uv) {
 	vec2 d = uv * 2.0 - 1.0;
 
-	vec4 target = camera.inverseProjection * vec4(d, 1.0.xx);
-	return (camera.inverseView * vec4(normalize(target.xyz), 0)).xyz;
+	vec4 target = getInverseProjection() * vec4(d, 1.0.xx);
+	return (getInverseView() * vec4(normalize(target.xyz), 0)).xyz;
 }
 
 vec4 calcSphereVert(float theta, float phi) {

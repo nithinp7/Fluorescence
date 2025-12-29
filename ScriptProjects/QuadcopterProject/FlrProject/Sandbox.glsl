@@ -8,17 +8,8 @@
 #define FLT_MIN 1.175494351e-38
 #define FLT_LOWEST (-FLT_MAX)
 
-uint getPhase() {
-  return uniforms.frameCount & 1;
-}
-
-vec3 getPos(uint idx) {
-  uint phase = getPhase();
-  return 
-      vec3(
-          positions(phase)[3*idx + 0], 
-          positions(phase)[3*idx + 1],
-          positions(phase)[3*idx + 2]);
+float getWayPointRadius() {
+  return 2.5 * (0.5 * sin(2.0 * uniforms.time) + 1.5);
 }
 
 mat4 getGizmoTransform(uint instanceIdx) {
@@ -114,12 +105,26 @@ VertexOutput VS_Sphere() {
   vec3 particlePos = getPos(gl_InstanceIndex);
   vec3 vpos = sphereVertexBuffer[gl_VertexIndex].xyz;
   vec3 worldPos = particlePos + SPHERE_RADIUS * vpos;
-  vec4 spos = camera.projection * camera.view * vec4(worldPos, 1.0);
+  vec4 spos = getProjection() * getView() * vec4(worldPos, 1.0);
   gl_Position = spos; 
   OUT.pos = worldPos.xyz;
   OUT.normal = normalize(vpos);
   OUT.uv = spos.xy / spos.w * 0.5 + 0.5.xx;
   OUT.materialIdx = float(nodeMaterials[gl_InstanceIndex]);
+  return OUT;
+}
+
+VertexOutput VS_WayPoint() {
+  VertexOutput OUT;
+  vec3 particlePos = vec3(TARGET_POS_X, TARGET_POS_Y, TARGET_POS_Z);
+  vec3 vpos = sphereVertexBuffer[gl_VertexIndex].xyz;
+  vec3 worldPos = particlePos + getWayPointRadius() * vpos;
+  vec4 spos = getProjection() * getView() * vec4(worldPos, 1.0);
+  gl_Position = spos; 
+  OUT.pos = worldPos.xyz;
+  OUT.normal = normalize(vpos);
+  OUT.uv = spos.xy / spos.w * 0.5 + 0.5.xx;
+  OUT.materialIdx = float(MATERIAL_SLOT_WAYPOINT);
   return OUT;
 }
 
@@ -140,7 +145,7 @@ VertexOutput VS_Gizmo() {
 
   mat4 gizmoTransform = getGizmoTransform(gl_InstanceIndex);
   vec3 worldPos = SPHERE_RADIUS * vpos;
-  vec4 spos = camera.projection * camera.view * gizmoTransform * vec4(worldPos, 1.0);
+  vec4 spos = getProjection() * getView() * gizmoTransform * vec4(worldPos, 1.0);
   gl_Position = spos; 
   OUT.pos = worldPos.xyz;
   OUT.normal = normal;
@@ -156,6 +161,14 @@ void VS_ShadowSphere() {
   gl_Position = worldToShadowSpace(worldPos);
 }
 
+void VS_ShadowWayPoint() {
+  vec3 particlePos = vec3(TARGET_POS_X, TARGET_POS_Y, TARGET_POS_Z);
+  vec3 vpos = sphereVertexBuffer[gl_VertexIndex].xyz;
+  vec3 worldPos = particlePos + getWayPointRadius() * vpos;
+  gl_Position = worldToShadowSpace(worldPos);
+}
+
+// TODO multi-level cascade shadows
 void VS_ShadowGizmo() {
   uint axisIdx = gl_VertexIndex / SPHERE_VERT_COUNT;
   uint cylinderVertIdx = gl_VertexIndex % SPHERE_VERT_COUNT;
@@ -196,7 +209,7 @@ VertexOutput VS_Floor() {
   vec4 pos = vec4(floorXZ[0], FLOOR_HEIGHT - SPHERE_RADIUS, floorXZ[1], 1.0);
   // vec4 pos = vec4(floorXZ[0], 0.0, floorXZ[1], 0.0);
 
-  vec4 screenPos = camera.projection * camera.view * pos;
+  vec4 screenPos = getProjection() * getView() * pos;
   if (DISABLE_FLOOR)
     screenPos = vec4(0.0.xxx, 1.0);
   gl_Position = screenPos;
@@ -215,14 +228,6 @@ VertexOutput VS_Floor() {
 #if defined(_ENTRY_POINT_PS_Shadow)
 void PS_Shadow() {}
 #else
-void PS_Sky(SimpleVertexOutput IN) {
-  vec3 color = sampleSky(computeDir(IN.uv));
-  color = linearToSdr(color);
-  outColor = vec4(color, 1.0);
-}
-
-#include <Misc/Sampling.glsl>
-
 void PS_Shaded(VertexOutput IN) {
   uint matIdx = uint(round(IN.materialIdx));
   Material mat = materialBuffer[matIdx];
@@ -242,6 +247,27 @@ void PS_Shaded(VertexOutput IN) {
   color = linearToSdr(color);
   if (SHOW_NORMALS)
     color = IN.normal * 0.5 + 0.5.xxx;
+  outColor = vec4(color, 1.0);
+}
+
+void PS_Sky(SimpleVertexOutput IN) {
+  vec3 dir = computeDir(IN.uv);
+  vec3 camPos = camera.inverseView[3].xyz;
+  if (!DISABLE_FLOOR && dir.y < 0.0 && camPos.y > FLOOR_HEIGHT) {
+    float h = FLOOR_HEIGHT - camPos.y;
+    float tFloor = h / dir.y;
+    vec3 floorInt = camPos + tFloor * dir;
+    
+    VertexOutput IN_shaded;
+    IN_shaded.pos = floorInt;
+    IN_shaded.normal = vec3(0.0, 1.0, 0.0);
+    IN_shaded.uv = IN.uv;
+    IN_shaded.materialIdx = float(MATERIAL_SLOT_GROUND);
+    PS_Shaded(IN_shaded);
+    return;
+  }
+  vec3 color = sampleSky(dir);
+  color = linearToSdr(color);
   outColor = vec4(color, 1.0);
 }
 

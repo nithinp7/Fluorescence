@@ -1,8 +1,8 @@
 #version 460 core
 
 #define VERT_COUNT 57
-#define SCREEN_WIDTH 1440
-#define SCREEN_HEIGHT 1280
+#define SCREEN_WIDTH 1920
+#define SCREEN_HEIGHT 1009
 #define POS_FLOATS_COUNT 171
 #define SPHERE_RES 12
 #define SPHERE_VERT_COUNT 864
@@ -17,6 +17,7 @@
 #define MATERIAL_SLOT_MOTOR1 6
 #define MATERIAL_SLOT_MOTOR2 7
 #define MATERIAL_SLOT_MOTOR3 8
+#define MATERIAL_SLOT_WAYPOINT 9
 #define MATERIAL_SLOT_COUNT 10
 #define MAX_GIZMOS 500
 #define FLOOR_HEIGHT -25.000000
@@ -87,18 +88,29 @@ layout(set=1, binding=11) uniform _UserUniforms {
 	vec4 SKY_COLOR;
 	uint TRAIL_FREQUENCY;
 	uint LOG_FREQUENCY;
+	float TARGET_POS_X;
+	float TARGET_POS_Y;
+	float TARGET_POS_Z;
+	float TARGET_DEADBAND;
+	float CRUISE_VEL;
+	float ALT_THRUST_LIMIT;
 	float ALT_PROP;
 	float ALT_DIFF;
 	float ALT_INT;
 	float ROT_PROP;
 	float ROT_DIFF;
 	float ROT_INT;
+	float TILT_LIMIT;
+	float TILT_PROP;
+	float TILT_DIFF;
+	float TILT_INT;
 	float THROTTLE0;
 	float THROTTLE1;
 	float THROTTLE2;
 	float THROTTLE3;
 	float GIZMO_SCALE;
 	float GIZMO_THICKNESS;
+	float ZOOM_MULT;
 	float EXPOSURE;
 	float SUN_INT;
 	float SUN_ELEV;
@@ -110,6 +122,9 @@ layout(set=1, binding=11) uniform _UserUniforms {
 	bool USE_CONTROLLER;
 	bool PIN_TO_ORIGIN;
 	bool DISABLE_FLOOR;
+	bool ALT_ENABLE;
+	bool ROT_ENABLE;
+	bool TILT_ENABLE;
 	bool OSCILLATE_MOTORS;
 	bool ENABLE_SHADOWS;
 	bool SHOW_SHADOWMAP;
@@ -129,10 +144,17 @@ layout(set=1, binding=12) uniform _CameraUniforms { PerspectiveCamera camera; };
 #if defined(_ENTRY_POINT_PS_Shadow) && !defined(_ENTRY_POINT_PS_Shadow_ATTACHMENTS)
 #define _ENTRY_POINT_PS_Shadow_ATTACHMENTS
 #endif // _ENTRY_POINT_PS_Shadow
+#if defined(_ENTRY_POINT_PS_Shadow) && !defined(_ENTRY_POINT_PS_Shadow_ATTACHMENTS)
+#define _ENTRY_POINT_PS_Shadow_ATTACHMENTS
+#endif // _ENTRY_POINT_PS_Shadow
 #if defined(_ENTRY_POINT_PS_Sky) && !defined(_ENTRY_POINT_PS_Sky_ATTACHMENTS)
 #define _ENTRY_POINT_PS_Sky_ATTACHMENTS
 layout(location = 0) out vec4 outColor;
 #endif // _ENTRY_POINT_PS_Sky
+#if defined(_ENTRY_POINT_PS_Shaded) && !defined(_ENTRY_POINT_PS_Shaded_ATTACHMENTS)
+#define _ENTRY_POINT_PS_Shaded_ATTACHMENTS
+layout(location = 0) out vec4 outColor;
+#endif // _ENTRY_POINT_PS_Shaded
 #if defined(_ENTRY_POINT_PS_Shaded) && !defined(_ENTRY_POINT_PS_Shaded_ATTACHMENTS)
 #define _ENTRY_POINT_PS_Shaded_ATTACHMENTS
 layout(location = 0) out vec4 outColor;
@@ -168,6 +190,9 @@ void main() { CS_UpdateCamera(); }
 #ifdef _ENTRY_POINT_VS_ShadowSphere
 void main() { VS_ShadowSphere(); }
 #endif // _ENTRY_POINT_VS_ShadowSphere
+#ifdef _ENTRY_POINT_VS_ShadowWayPoint
+void main() { VS_ShadowWayPoint(); }
+#endif // _ENTRY_POINT_VS_ShadowWayPoint
 #ifdef _ENTRY_POINT_VS_ShadowGizmo
 void main() { VS_ShadowGizmo(); }
 #endif // _ENTRY_POINT_VS_ShadowGizmo
@@ -187,6 +212,10 @@ void main() { _VERTEX_OUTPUT = VS_Sphere(); }
 layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
 void main() { _VERTEX_OUTPUT = VS_Gizmo(); }
 #endif // _ENTRY_POINT_VS_Gizmo
+#ifdef _ENTRY_POINT_VS_WayPoint
+layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
+void main() { _VERTEX_OUTPUT = VS_WayPoint(); }
+#endif // _ENTRY_POINT_VS_WayPoint
 #ifdef _ENTRY_POINT_VS_Overlay
 layout(location = 0) out SimpleVertexOutput _VERTEX_OUTPUT;
 void main() { _VERTEX_OUTPUT = VS_Overlay(); }
@@ -203,11 +232,20 @@ void main() { PS_Shadow(); }
 #define _ENTRY_POINT_PS_Shadow_INTERPOLANTS
 void main() { PS_Shadow(); }
 #endif // _ENTRY_POINT_PS_Shadow
+#if defined(_ENTRY_POINT_PS_Shadow) && !defined(_ENTRY_POINT_PS_Shadow_INTERPOLANTS)
+#define _ENTRY_POINT_PS_Shadow_INTERPOLANTS
+void main() { PS_Shadow(); }
+#endif // _ENTRY_POINT_PS_Shadow
 #if defined(_ENTRY_POINT_PS_Sky) && !defined(_ENTRY_POINT_PS_Sky_INTERPOLANTS)
 #define _ENTRY_POINT_PS_Sky_INTERPOLANTS
 layout(location = 0) in SimpleVertexOutput _VERTEX_INPUT;
 void main() { PS_Sky(_VERTEX_INPUT); }
 #endif // _ENTRY_POINT_PS_Sky
+#if defined(_ENTRY_POINT_PS_Shaded) && !defined(_ENTRY_POINT_PS_Shaded_INTERPOLANTS)
+#define _ENTRY_POINT_PS_Shaded_INTERPOLANTS
+layout(location = 0) in VertexOutput _VERTEX_INPUT;
+void main() { PS_Shaded(_VERTEX_INPUT); }
+#endif // _ENTRY_POINT_PS_Shaded
 #if defined(_ENTRY_POINT_PS_Shaded) && !defined(_ENTRY_POINT_PS_Shaded_INTERPOLANTS)
 #define _ENTRY_POINT_PS_Shaded_INTERPOLANTS
 layout(location = 0) in VertexOutput _VERTEX_INPUT;
