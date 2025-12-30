@@ -27,14 +27,17 @@ class PidController:
 
 class QuadcopterController:
   def __init__(self, flr : flrlib.FlrScriptInterface):
-    self.targetPos = [
+    self.targetPosHandles = [
         flr.getSliderFloatHandle("TARGET_POS_X"),
         flr.getSliderFloatHandle("TARGET_POS_Y"),
         flr.getSliderFloatHandle("TARGET_POS_Z")]
+    self.targetPos = None
     self.tiltLimit = flr.getSliderFloatHandle("TILT_LIMIT")
     self.targetCruiseSpeed = flr.getSliderFloatHandle("CRUISE_VEL")
     self.targetDeadband = flr.getSliderFloatHandle("TARGET_DEADBAND")
     self.altThrustLimit = flr.getSliderFloatHandle("ALT_THRUST_LIMIT")
+
+    self.composeMode = flr.getSliderUintHandle("COMPOSE_MODE")
     
     self.prevTransformValid = False
     self.prevTranslation = np.zeros(3)
@@ -73,7 +76,10 @@ class QuadcopterController:
     
     linearVelocity = (translation - self.prevTranslation) / dt
     currentTilt = rotationMatrix[:][1]
-    targetPos = np.array([x.get() for x in self.targetPos])
+    targetPos = self.targetPos
+    # if targetPos == None:
+      # targetPos = np.array([x.get() for x in self.targetPosHandles])
+    
     posErr = targetPos - translation
     bInverted = currentTilt[1] < -0.2
 
@@ -121,17 +127,17 @@ class QuadcopterController:
     roll = self.rollController.evaluate(tiltCrs[0], angVelocity[0])
     yaw = self.yawController.evaluate(tiltCrs[1], angVelocity[1])
     
-    # solution[0] = thrust - pitch + roll - yaw
-    # solution[1] = thrust - pitch - roll + yaw
-    # solution[2] = thrust + pitch - roll - yaw 
-    # solution[3] = thrust + pitch + roll - yaw
-    
-    solution[0] = -pitch + roll - yaw
-    solution[1] = -pitch - roll + yaw
-    solution[2] = pitch - roll - yaw 
-    solution[3] = pitch + roll + yaw
-
-    solution += thrust - np.average(solution)
+    if self.composeMode.get() == 0:
+      solution[0] = thrust - pitch + roll - yaw
+      solution[1] = thrust - pitch - roll + yaw
+      solution[2] = thrust + pitch - roll - yaw 
+      solution[3] = thrust + pitch + roll - yaw
+    else: #elif self.composeMode.get() == 1
+      solution[0] = -pitch + roll - yaw
+      solution[1] = -pitch - roll + yaw
+      solution[2] = pitch - roll - yaw 
+      solution[3] = pitch + roll + yaw
+      solution += thrust - np.average(solution)
 
     solution = np.clip(solution / 10.0, -1.0, 1.0)
 

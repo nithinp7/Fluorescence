@@ -9,7 +9,7 @@
 #define FLT_LOWEST (-FLT_MAX)
 
 float getWayPointRadius() {
-  return 2.5 * (0.5 * sin(2.0 * uniforms.time) + 1.5);
+  return 1.5 * (0.5 * sin(2.0 * uniforms.time) + 1.5);
 }
 
 mat4 getGizmoTransform(uint instanceIdx) {
@@ -116,7 +116,8 @@ VertexOutput VS_Sphere() {
 
 VertexOutput VS_WayPoint() {
   VertexOutput OUT;
-  vec3 particlePos = vec3(TARGET_POS_X, TARGET_POS_Y, TARGET_POS_Z);
+  // vec3 particlePos = vec3(TARGET_POS_X, TARGET_POS_Y, TARGET_POS_Z);
+  vec3 particlePos = wayPointPositions[gl_InstanceIndex].xyz;
   vec3 vpos = sphereVertexBuffer[gl_VertexIndex].xyz;
   vec3 worldPos = particlePos + getWayPointRadius() * vpos;
   vec4 spos = getProjection() * getView() * vec4(worldPos, 1.0);
@@ -162,7 +163,8 @@ void VS_ShadowSphere() {
 }
 
 void VS_ShadowWayPoint() {
-  vec3 particlePos = vec3(TARGET_POS_X, TARGET_POS_Y, TARGET_POS_Z);
+  // vec3 particlePos = vec3(TARGET_POS_X, TARGET_POS_Y, TARGET_POS_Z);
+  vec3 particlePos = wayPointPositions[gl_InstanceIndex].xyz;
   vec3 vpos = sphereVertexBuffer[gl_VertexIndex].xyz;
   vec3 worldPos = particlePos + getWayPointRadius() * vpos;
   gl_Position = worldToShadowSpace(worldPos);
@@ -241,7 +243,15 @@ void PS_Shaded(VertexOutput IN) {
     } else {
       mat.diffuse = mix(mat.diffuse, red, -throttle);
     }
+  } else if (matIdx == MATERIAL_SLOT_GROUND) {
+    float gridSpacing = 100.0;
+    float gridLineWidth = 1.0;
+    vec2 g = fract(abs(IN.pos.xz / gridSpacing)) * gridSpacing;
+    if (g.x < gridLineWidth || g.y < gridLineWidth) {
+      mat.diffuse = 0.9.xxx;
+    }
   }
+
   vec3 viewDir = normalize(IN.pos - camera.inverseView[3].xyz);
   vec3 color = computeSurfaceLighting(mat, IN.pos, IN.normal, viewDir);
   color = linearToSdr(color);

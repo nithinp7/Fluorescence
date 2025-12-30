@@ -5,6 +5,7 @@ import pbd
 import pid
 import numpy as np
 import math
+import random
 
 gizmoViewStart = 0
 gizmoViewEnd = 0
@@ -66,6 +67,7 @@ flr = flrlib.FlrScriptInterface("FlrProject/Sandbox.flr", params, flrDebugEnable
 
 # buffer handles
 positionsHandle = flr.getBufferHandle("positions")
+wayPointsHandle = flr.getBufferHandle("wayPointPositions")
 nodeMaterialsHandle = flr.getBufferHandle("nodeMaterials")
 throttlesBufferHandle = flr.getBufferHandle("throttleData")
 gizmoViewHandle = flr.getBufferHandle("gizmoView")
@@ -73,6 +75,7 @@ gizmoBufferHandle = flr.getBufferHandle("gizmoBuffer")
 
 pbd.floorHeight = flr.getConstFloat("FLOOR_HEIGHT")
 maxGizmoCount = flr.getConstUint("MAX_GIZMOS")
+wayPointCount = flr.getConstUint("WAYPOINT_COUNT")
 
 # ui handles
 simulateCheckbox = flr.getCheckboxHandle("ENABLE_SIM")
@@ -89,7 +92,22 @@ throttle3 = flr.getSliderFloatHandle("THROTTLE3")
 
 quadcopterController = None
 
+wayPoints = None
 def initResources():
+  global wayPoints
+  wayPoints = []
+  for i in range(wayPointCount):
+    wayPoints.append(np.array([
+      600.0 * random.random() - 300.0, 
+      300.0 * random.random() + 100.0, 
+      600.0 * random.random() - 300.0]))
+
+  buf = bytearray(wayPointCount * 16)
+  for i in range(wayPointCount):
+    wp = wayPoints[i]
+    buf[16*i:16*i+16] = struct.pack("<ffff", wp[0], wp[1], wp[2], 1.0)
+  flr.cmdBufferStagedUpload(wayPointsHandle, 0, buf)
+
   defaultNodeMaterial = flr.getConstUint("MATERIAL_SLOT_NODES")
   motorMaterialStart = flr.getConstUint("MATERIAL_SLOT_MOTOR0")
   buf = bytearray(pbd.nodeCount * 4)
@@ -147,11 +165,20 @@ def updateGizmos():
     gizmoViewStart += 1
 
 frame = 0
+wpIdx = 0
 while True:  
   if enableFlightController.get():
+    quadcopterController.targetPos = wayPoints[wpIdx]
+    diff = pbd.nodePositions[0] - quadcopterController.targetPos
+    dist = np.linalg.norm(diff)
+    if dist < 10.0:
+      wpIdx = (wpIdx + 1) % wayPointCount
+      quadcopterController.targetPos = wayPoints[wpIdx]
+    
     throttleSolution = quadcopterController.evaluate(body.centerOfMass, body.rotation, pbd.DT)
     for i in range(4):
       motorInputs[i].setThrottle(throttleSolution[i])
+    
   elif testMotorsCheckbox.get():
     quadcopterController.reset()
     motorInputs[0].setThrottle(0.1 + 0.1 * math.sin(pbd.time))
