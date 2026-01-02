@@ -1,8 +1,8 @@
 #version 460 core
 
 #define VERT_COUNT 57
-#define SCREEN_WIDTH 1920
-#define SCREEN_HEIGHT 1009
+#define SCREEN_WIDTH 1440
+#define SCREEN_HEIGHT 1280
 #define POS_FLOATS_COUNT 171
 #define SPHERE_RES 12
 #define SPHERE_VERT_COUNT 864
@@ -132,6 +132,7 @@ layout(set=1, binding=12) uniform _UserUniforms {
 	bool ENABLE_SHADOWS;
 	bool SHOW_SHADOWMAP;
 	bool SHOW_NORMALS;
+	bool RESET;
 };
 
 #include <FlrLib/Fluorescence.glsl>

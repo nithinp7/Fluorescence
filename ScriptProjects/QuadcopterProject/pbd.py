@@ -7,6 +7,7 @@ nodePositions = np.array([])
 shapes = []
 fixedNodes = []
 motors = []
+rotors = []
 
 disableFloorCollisions = False
 
@@ -16,11 +17,13 @@ def resetScene():
   global shapes
   global fixedNodes
   global motors
+  global rotors
   nodeCount = 0  
   nodePositions = np.array([])
   shapes = []
   fixedNodes = []
   motors = []
+  rotors = []
 
 def createNode(pos):
   global nodeCount
@@ -49,6 +52,23 @@ class FixedNode:
   def __init__(self, idx, fixedPos):
     self.nodeIdx = idx
     self.fixedPos = fixedPos
+
+class Rotor:
+  def __init__(self, shape : Shape, nodeIdx, dir, power, clockwise):
+    for i in range(len(shape.nodeIndices)):
+      if nodeIdx == shape.nodeIndices[i]:
+        self.localNodeIdx = i
+        break
+    else:
+      assert(False)
+    self.shape = shape
+    self.dir = dir
+    self.power = power
+    self.clockwise = clockwise
+    self.throttle = 0.0
+  
+  def setThrottle(self, throttle : float):
+    self.throttle = throttle
 
 class Motor:
   def __init__(self, originIdx, upIdx, leftIdx, rightIdx, power, clockwise):
@@ -85,6 +105,11 @@ def createMotor(originIdx : int, upIdx : int, leftIdx : int, rightIdx : int, pow
   m = Motor(originIdx, upIdx, leftIdx, rightIdx, power, clockwise)
   motors.append(m)
   return m
+
+def createRotor(shape : Shape, nodeIdx : int, dir, power : float, clockwise : bool):
+  r = Rotor(shape, nodeIdx, dir, power, clockwise)
+  rotors.append(r)
+  return r
 
 def addFixedNode(idx : int):
   fn = FixedNode(idx, nodePositions[idx])
@@ -161,6 +186,20 @@ def stepSimulation():
     perpVel = m.power * m.throttle * perpDir * DT
     nodeVelocities[m.leftIdx] += perpVel
     nodeVelocities[m.rightIdx] -= perpVel
+  
+  for r in rotors:
+    nodeIdx = r.shape.nodeIndices[r.localNodeIdx]
+    localPos = r.shape.nodeLocalPositions[r.localNodeIdx]
+    rotorPos = (r.shape.rotation @ localPos) + r.shape.centerOfMass
+    rotorDir = r.shape.rotation @ r.dir
+    p = r.power * r.throttle * rotorDir * DT
+    for idx in r.shape.nodeIndices:
+      diff = nodePositions[idx] - rotorPos
+      perp = diff - rotorDir * np.dot(rotorDir, diff)
+      # TODO cross product probably already does this above line...
+      nodeVelocities[idx] += (-1.0 if r.clockwise else 1.0) * np.cross(perp, p)
+      # nodeVelocities[idx] += p
+    nodeVelocities[nodeIdx] += p
     
   nodePrevPositions[:] = nodePositions[:]
   # prediction

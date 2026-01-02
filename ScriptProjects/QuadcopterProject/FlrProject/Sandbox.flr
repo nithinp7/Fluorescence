@@ -52,6 +52,8 @@ struct Material {
 struct_size: 48
 
 # ------ UI -------
+button RESET
+ui_separator
 checkbox ENABLE_SIM: true
 checkbox USE_CONTROLLER: false
 checkbox PIN_TO_ORIGIN: false

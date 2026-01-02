@@ -44,6 +44,7 @@ def initScene():
     motorShapes[i] = motor
     motorInputs[i] = pbd.createMotor(
         mountNodeMidIdx, mountNodeTopIdx, mountNodeLeftIdx, mountNodeRightIdx, 1000.0, (i%2) == 0)
+    # motorInputs[i] = pbd.createRotor(motor, mountNodeTopIdx, np.array([0.0, 1.0, 0.0]), 500.0, (i%2) == 0)
   
   pbd.finalizeScene()
 
@@ -90,6 +91,8 @@ throttle1 = flr.getSliderFloatHandle("THROTTLE1")
 throttle2 = flr.getSliderFloatHandle("THROTTLE2")
 throttle3 = flr.getSliderFloatHandle("THROTTLE3")
 
+resetButton = flr.getButtonHandle("RESET")
+
 quadcopterController = None
 
 wayPoints = None
@@ -127,7 +130,7 @@ def initResources():
 initResources()
 
 def uploadPositions():
-  posOffs = pbd.getGlobalCenterOfMass() if flr.getCheckbox(pinToOrigin) else np.zeros(3)
+  posOffs = pbd.getGlobalCenterOfMass() if pinToOrigin.get() else np.zeros(3)
   buf = bytearray(pbd.nodeCount * 4 * 3)
   for i in range(pbd.nodeCount):
     pos = pbd.nodePositions[i] - posOffs
@@ -167,6 +170,11 @@ def updateGizmos():
 frame = 0
 wpIdx = 0
 while True:  
+  if resetButton.get():
+    initScene()
+    gizmoViewStart = gizmoViewEnd
+    quadcopterController = pid.QuadcopterController(flr)
+
   if enableFlightController.get():
     quadcopterController.targetPos = wayPoints[wpIdx]
     diff = pbd.nodePositions[0] - quadcopterController.targetPos
@@ -181,10 +189,10 @@ while True:
     
   elif testMotorsCheckbox.get():
     quadcopterController.reset()
-    motorInputs[0].setThrottle(0.1 + 0.1 * math.sin(pbd.time))
-    motorInputs[1].setThrottle(0.1 + 0.1 * math.sin(1.3 * pbd.time + 2))
-    motorInputs[2].setThrottle(0.1 + 0.1 * math.sin(2.12 * pbd.time + 1))
-    motorInputs[3].setThrottle(0.1 + 0.1 * math.sin(0.9 * pbd.time + 3.1))
+    motorInputs[0].setThrottle(0.1 * math.sin(pbd.time))
+    motorInputs[1].setThrottle(0.1 * math.sin(1.3 * pbd.time + 2))
+    motorInputs[2].setThrottle(0.1 * math.sin(2.12 * pbd.time + 1))
+    motorInputs[3].setThrottle(0.1 * math.sin(0.9 * pbd.time + 3.1))
   else:    
     quadcopterController.reset()
     motorInputs[0].setThrottle(throttle0.get())
@@ -198,6 +206,8 @@ while True:
   if trailFrequency.get() == 0:
     gizmoViewStart = gizmoViewEnd
   elif frame%(3*trailFrequency.get()) == 0:
+    # for s in pbd.shapes:
+    #   addGizmo(s.centerOfMass, s.rotation)
     addGizmo(body.centerOfMass, body.rotation)
   
   # if flr.getCheckbox(pinToOrigin):
