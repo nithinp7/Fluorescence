@@ -88,6 +88,7 @@ class FlrHandleType(IntEnum):
   HT_INT_SLIDER = 5
   HT_FLOAT_SLIDER = 6
   HT_CHECKBOX = 7
+  HT_BUTTON = 8
 
 class FlrHandle:
   def __init__(self, htype : int = FlrHandleType.HT_INVALID, idx : int = INVALID_HANDLE, name : int = INVALID_HANDLE, value = None):
@@ -216,7 +217,7 @@ class FlrScriptInterface:
     self.uintSliders = []
     self.intSliders = []
     self.floatSliders = []
-    self.checkboxes = []
+    self.uiBools = []
     self.bReinitProject = False
 
   def __processMessage(self, cmd : int, offs : int):
@@ -252,8 +253,8 @@ class FlrScriptInterface:
             # float slider
             self.floatSliders.append(FlrUiElem(name, uiBufOffset))
           elif uiType == 4:
-            # checkbox
-            self.checkboxes.append(FlrUiElem(name, uiBufOffset))
+            # checkbox / buttons
+            self.uiBools.append(FlrUiElem(name, uiBufOffset))
 
       case FlrMessageType.FMT_UI_UPDATE:
         allocOffs, offs = self.__parseU32(offs)
@@ -340,7 +341,9 @@ class FlrScriptInterface:
         case FlrHandleType.HT_FLOAT_SLIDER:
           self.__rectifyHandle(self.floatSliders, h)
         case FlrHandleType.HT_CHECKBOX:
-          self.__rectifyHandle(self.checkboxes, h)
+          self.__rectifyHandle(self.uiBools, h)
+        case FlrHandleType.HT_BUTTON:
+          self.__rectifyHandle(self.uiBools, h)
         case _:
           assert(False)
   
@@ -349,13 +352,15 @@ class FlrScriptInterface:
       assert(h.isValid())
       match h.htype:
         case FlrHandleType.HT_UINT_SLIDER:
-          h.value = self.getSliderUint(h)
+          h.value = self.__getSliderUint(h)
         case FlrHandleType.HT_INT_SLIDER:
-          h.vaue = self.getSliderInt(h)
+          h.vaue = self.__getSliderInt(h)
         case FlrHandleType.HT_FLOAT_SLIDER:
-          h.value = self.getSliderFloat(h)
+          h.value = self.__getSliderFloat(h)
         case FlrHandleType.HT_CHECKBOX:
-          h.value = self.getCheckbox(h)
+          h.value = self.__getCheckbox(h)
+        case FlrHandleType.HT_BUTTON:
+          h.value = self.__getButton(h)
 
   def __resetPerFrameData(self):
     self.perFrameOffset = 0
@@ -405,24 +410,29 @@ class FlrScriptInterface:
           return self.__createHandle(FlrHandleType.HT_TASK, tidx, nameId)
     return FlrHandle()
   
-  def getSliderFloat(self, handle : FlrHandle) -> float:
+  def __getSliderFloat(self, handle : FlrHandle) -> float:
     assert(handle.htype == FlrHandleType.HT_FLOAT_SLIDER)
     offs = self.floatSliders[handle.idx].offset
     return struct.unpack("<f", self.uiBuffer[offs:offs+4])[0]
   
-  def getSliderUint(self, handle : FlrHandle) -> int:
+  def __getSliderUint(self, handle : FlrHandle) -> int:
     assert(handle.htype == FlrHandleType.HT_UINT_SLIDER)
     offs = self.uintSliders[handle.idx].offset
     return int.from_bytes(self.uiBuffer[offs:offs+4], byteorder='little', signed=False)
     
-  def getSliderInt(self, handle : FlrHandle) -> int:
+  def __getSliderInt(self, handle : FlrHandle) -> int:
     assert(handle.htype == FlrHandleType.HT_INT_SLIDER)
     offs = self.intSliders[handle.idx].offset
     return int.from_bytes(self.uiBuffer[offs:offs+4], byteorder='little', signed=True)
     
-  def getCheckbox(self, handle : FlrHandle) -> int:
+  def __getCheckbox(self, handle : FlrHandle) -> int:
     assert(handle.htype == FlrHandleType.HT_CHECKBOX)
-    offs = self.checkboxes[handle.idx].offset
+    offs = self.uiBools[handle.idx].offset
+    return int.from_bytes(self.uiBuffer[offs:offs+4], byteorder='little', signed=False)
+  
+  def __getButton(self, handle : FlrHandle) -> int:
+    assert(handle.htype == FlrHandleType.HT_BUTTON)
+    offs = self.uiBools[handle.idx].offset
     return int.from_bytes(self.uiBuffer[offs:offs+4], byteorder='little', signed=False)
   
   def __createUiHandle(self, htype : int, name : str, arr):
@@ -436,19 +446,23 @@ class FlrScriptInterface:
   
   def getSliderFloatHandle(self, name : str):
     h = self.__createUiHandle(FlrHandleType.HT_FLOAT_SLIDER, name, self.floatSliders)
-    h.value = self.getSliderFloat(h)
+    h.value = self.__getSliderFloat(h)
     return h
   def getSliderUintHandle(self, name : str):
     h = self.__createUiHandle(FlrHandleType.HT_UINT_SLIDER, name, self.uintSliders)
-    h.value = self.getSliderUint(h)
+    h.value = self.__getSliderUint(h)
     return h
   def getSliderIntHandle(self, name : str):
     h = self.__createUiHandle(FlrHandleType.HT_INT_SLIDER, name, self.intSliders)
-    h.value = self.getSliderInt(h)
+    h.value = self.__getSliderInt(h)
     return h
   def getCheckboxHandle(self, name : str):
-    h = self.__createUiHandle(FlrHandleType.HT_CHECKBOX, name, self.checkboxes)
-    h.value = self.getCheckbox(h)
+    h = self.__createUiHandle(FlrHandleType.HT_CHECKBOX, name, self.uiBools)
+    h.value = self.__getCheckbox(h)
+    return h
+  def getButtonHandle(self, name : str):
+    h = self.__createUiHandle(FlrHandleType.HT_BUTTON, name, self.uiBools)
+    h.value = self.__getButton(h)
     return h
   
   def getConstFloat(self, name : str) -> float:

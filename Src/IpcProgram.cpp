@@ -356,6 +356,14 @@ void assembleEstablishmentPacket(Project* project, char* outStream, size_t strea
     writer.serialize(checkbox.name);
   }
 
+  for (const ParsedFlr::Button& button : parsed.m_buttons) {
+    uint32_t uiCmdType = 4; // treat identical to checkboxes for now...
+    uint32_t ptrdif = static_cast<uint32_t>(((char*)button.pValue) - pDynamicData);
+    uint32_t cmd[] = { FMT_UI, uiCmdType, ptrdif };
+    writer.serialize(&cmd, 12);
+    writer.serialize(button.name);
+  }
+
   if (auto allocOffs = writer.allocate(pDynamicData, dynamicDataSize)) {
     uint32_t cmd[] = { FMT_UI_UPDATE, *allocOffs, dynamicDataSize };
     writer.serialize(cmd, 12);

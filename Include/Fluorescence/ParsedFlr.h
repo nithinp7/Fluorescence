@@ -45,6 +45,7 @@ struct ParsedFlr {
     UET_SAVE_IMAGE_BUTTON,
     UET_SAVE_BUFFER_BUTTON,
     UET_TASK_BUTTON,
+    UET_BUTTON,
     UET_SEPARATOR,
     UET_DROPDOWN_START,
     UET_DROPDOWN_END
@@ -105,6 +106,13 @@ struct ParsedFlr {
     uint32_t* pValue; // glsl bools are 32bit
   };
   std::vector<Checkbox> m_checkboxes;
+
+  struct Button {
+    std::string name;
+    uint32_t uiIdx;
+    uint32_t* pValue; // glsl bools are 32bit
+  };
+  std::vector<Button> m_buttons;
 
   struct SaveImageButton {
     uint32_t imageIdx;
@@ -321,6 +329,7 @@ struct ParsedFlr {
     I_SAVE_IMAGE_BUTTON,
     I_SAVE_BUFFER_BUTTON,
     I_TASK_BUTTON,
+    I_BUTTON,
     I_SEPARATOR,
     I_DROPDOWN_START,
     I_DROPDOWN_END,
@@ -379,6 +388,7 @@ struct ParsedFlr {
       "save_image_button",
       "save_buffer_button",
       "task_button",
+      "button",
       "ui_separator",
       "ui_dropdown_start",
       "ui_dropdown_end",

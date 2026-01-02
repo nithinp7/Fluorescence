@@ -479,6 +479,13 @@ ParsedFlr::ParsedFlr(
       m_taskButtons.push_back({*taskIdx, uiIdx++});
       break;
     }
+    case I_BUTTON: {
+      PARSER_VERIFY(name, "Missing name for button command");
+
+      m_uiElements.push_back({ UET_BUTTON, (uint32_t)m_buttons.size() });
+      m_buttons.push_back({ std::string(*name), uiIdx++, nullptr });
+      break;
+    }
     case I_SEPARATOR: {
       m_uiElements.push_back({UET_SEPARATOR, ~0ul});
       break;

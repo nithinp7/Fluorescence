@@ -162,7 +162,7 @@ Project::Project(
   m_bHasDynamicData =
       !m_parsed.m_sliderUints.empty() || !m_parsed.m_sliderInts.empty() ||
       !m_parsed.m_sliderFloats.empty() || !m_parsed.m_colorPickers.empty() ||
-      !m_parsed.m_checkboxes.empty();
+      !m_parsed.m_checkboxes.empty() || !m_parsed.m_buttons.empty();
   if (m_bHasDynamicData) {
     size_t size = 0;
     size += 16 * m_parsed.m_colorPickers.size();
@@ -170,6 +170,7 @@ Project::Project(
     size += 4 * m_parsed.m_sliderInts.size();
     size += 4 * m_parsed.m_sliderFloats.size();
     size += 4 * m_parsed.m_checkboxes.size();
+    size += 4 * m_parsed.m_buttons.size();
     if (size % 64) {
       size += 64 - (size % 64);
     }
@@ -208,6 +209,11 @@ Project::Project(
       checkbox.pValue =
           reinterpret_cast<uint32_t*>(m_dynamicDataBuffer.data() + offset);
       *checkbox.pValue = (uint32_t)checkbox.defaultValue;
+      offset += 4; // bools are 32bit in glsl
+    }
+    for (auto& button : m_parsed.m_buttons) {
+      button.pValue = reinterpret_cast<uint32_t*>(m_dynamicDataBuffer.data() + offset);
+      *button.pValue = 0u;
       offset += 4; // bools are 32bit in glsl
     }
 
@@ -535,10 +541,12 @@ void Project::tick(const FrameContext& frame) {
                 ImGui::CollapsingHeader(name.c_str()))
               highestLayerOpen++;
             currentLayer++;
+            ImGui::Indent();
           } else if (ui.type == ParsedFlr::UET_DROPDOWN_END) {
             if (highestLayerOpen == currentLayer)
               highestLayerOpen--;
             currentLayer--;
+            ImGui::Unindent();
           }
 
           if (currentLayer > highestLayerOpen)
@@ -668,6 +676,12 @@ void Project::tick(const FrameContext& frame) {
             if (ImGui::Button(buf))
               m_pendingTaskBlockExecs.push_back(taskButton.taskBlockIdx);
 
+            break;
+          }
+          case ParsedFlr::UET_BUTTON: {
+            const auto& button = m_parsed.m_buttons[ui.idx];
+            sprintf(nameBuf, "%s##%s_%u", button.name.c_str(), button.name.c_str(), ui.idx);
+            *button.pValue = ImGui::Button(nameBuf);
             break;
           }
           case ParsedFlr::UET_SEPARATOR: {
@@ -1303,6 +1317,9 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
       for (const auto& checkbox : m_parsed.m_checkboxes) {
         CODE_APPEND("\tbool %s;\n", checkbox.name.c_str());
       }
+      for (const auto& button : m_parsed.m_buttons) {
+        CODE_APPEND("\tbool %s;\n", button.name.c_str());
+      }
 
       CODE_APPEND("};\n\n");
     }
@@ -1543,6 +1560,9 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
       }
       for (const auto& checkbox : m_parsed.m_checkboxes) {
         CODE_APPEND("\tbool %s;\n", checkbox.name.c_str());
+      }
+      for (const auto& button : m_parsed.m_buttons) {
+        CODE_APPEND("\tbool %s;\n", button.name.c_str());
       }
 
       CODE_APPEND("};\n\n");
