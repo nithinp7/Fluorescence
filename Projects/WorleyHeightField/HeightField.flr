@@ -1,0 +1,130 @@
+enable_feature: perspective_camera
+
+uint GRID_LEN: 1024
+uint GRID_CELLS: GRID_LEN*GRID_LEN
+# TODO generate grid index buffer...
+uint GRID_VERT_COUNT: (GRID_LEN-1)*(GRID_LEN-1)*6
+float GRID_SPACING: 0.1
+uint SKIRT_VERT_COUNT: (GRID_LEN-1)*6*4
+
+struct GlobalState {
+  vec2 uvOffset;
+  float phaseOffset;
+  float lastTime;
+}
+struct_size: 16
+structured_buffer globalState: GlobalState 1
+
+structured_buffer cellBuffer: float GRID_CELLS
+structured_buffer cellNormals: vec4 GRID_CELLS
+structured_buffer shadowCamera: mat4 1
+
+depth_image shadowMap: 2048 2048
+  texture_alias shadowMapTexture
+
+compute_shader CS_Update: 8 8 1
+compute_shader CS_GenNormals: 8 8 1
+compute_shader CS_UpdateShadowCamera: 1 1 1
+
+# TODO 8x8 and 16x16 do not need to be 1k size! 
+# even 32x32 can be a bit smaller without issue...
+texture_file Worley8x8: "C:/Users/nithi/Documents/Code/Fluorescence/Projects/Worley/Out/worley_8x8.png"
+texture_file Worley16x16: "C:/Users/nithi/Documents/Code/Fluorescence/Projects/Worley/Out/worley_16x16.png"
+texture_file Worley32x32: "C:/Users/nithi/Documents/Code/Fluorescence/Projects/Worley/Out/worley_32x32.png"
+
+task_block_start UPDATE:
+  dispatch_threads: CS_Update GRID_LEN GRID_LEN 1
+  barrier: cellBuffer
+  dispatch_threads: CS_GenNormals GRID_LEN GRID_LEN 1
+  barrier: cellNormals globalState
+task_block_end
+
+run_task: UPDATE
+ui_separator
+slider_float NOISE_SCALE: 1.0 0.1 4.0
+slider_float NOISE_LEVEL0: 0.5 -1.0 1.0
+slider_float NOISE_LEVEL1: 0.5 -1.0 1.0
+slider_float NOISE_LEVEL2: 0.25 -1.0 1.0
+ui_separator
+
+ui_dropdown_start TURBULENCE_OPTIONS:
+  slider_float MEAN_FLOW_X: 0.0 -1.0 1.0
+  slider_float MEAN_FLOW_Y: 0.0 -1.0 1.0
+  ui_separator
+  slider_float TURB_AMP: 0.1 0.01 1.0
+  slider_float TURB_FREQ: 1.0 0.1 100.0
+  slider_float TURB_SPEED: 1.0 0.1 10.0
+  slider_float TURB_ROT: 1.0 0.0 4.0
+  slider_float TURB_EXP: 1.3 1.0 4.0
+ui_dropdown_end
+ui_separator
+ui_dropdown_start RENDERING:
+  ui_dropdown_start VOLUMETRICS:
+    slider_float POWDER: 0.0 0.0 1.0
+    slider_float DENSITY: 1.0 0.0001 0.5
+    slider_float G: 0.3 -1.0 1.0
+    ui_separator
+    slider_float JITTER: 1.0 0.0 1.0
+    slider_float STEP_SIZE: 0.01 0.001 2.0
+    slider_uint STEP_COUNT: 10 1 40
+    ui_dropdown_start SCATTER_PICKER:
+      color_picker SCATTER: 0.5 0.5 0.5 1.0
+    ui_dropdown_end
+  ui_dropdown_end
+  ui_separator
+  ui_dropdown_start SKY:
+    slider_float SUN_INT: 1.0 1.0 100.0
+    slider_float SUN_ELEV: 0.5 0.0 1.0
+    slider_float SUN_ROT: 0.5 0.0 1.0
+    ui_separator
+    color_picker SKY_COLOR: 0.5 0.4 0.8 1.0
+    slider_float SKY_INT: 10.0 0.001 20.0
+    slider_float HORIZON_WHITENESS: 0.758 0.0 1.0
+    slider_float HORIZON_WHITENESS_FALLOFF: 0.842 0.0 4.0
+  ui_dropdown_end
+  ui_separator
+  ui_dropdown_start CAMERA:
+    slider_float EXPOSURE: 0.3 0.0001 1.0
+  ui_dropdown_end
+  ui_separator
+  ui_dropdown_start DEBUG_RENDER:
+    slider_uint DEBUG_MODE: 0 0 3
+  ui_dropdown_end
+  ui_separator
+ui_dropdown_end
+
+struct VertexOutput {
+  vec3 pos;
+  vec3 normal;
+  vec2 uv;
+}
+
+dispatch_threads: CS_UpdateShadowCamera 1 1 1
+barrier: shadowCamera
+
+# TODO needed .. ?
+#transition_layout: shadowMap attachment
+
+render_pass SHADOW_PASS:
+  store_depth: shadowMap
+  draw: VS_ShadowHeightField PS_Shadow GRID_VERT_COUNT 1
+    disable_backface_culling
+  draw: VS_ShadowSkirts PS_Shadow SKIRT_VERT_COUNT 1
+    disable_backface_culling
+
+transition_layout: shadowMap texture
+
+display_image DisplayImage
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+
+  draw: VS_Background PS_Background 3 1
+    vertex_output: VertexOutput
+    disable_depth
+  
+  draw: VS_HeightField PS_HeightField GRID_VERT_COUNT 1
+    vertex_output: VertexOutput
+  draw: VS_Skirts PS_HeightField SKIRT_VERT_COUNT 1
+    disable_backface_culling
+    vertex_output: VertexOutput
+
