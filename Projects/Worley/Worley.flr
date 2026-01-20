@@ -1,0 +1,41 @@
+
+uint OUT_IMAGE_WIDTH: 128
+uint MAX_WORLEY_GRID_DIM: 256
+uint MAX_WORLEY_GRID_CELLS: MAX_WORLEY_GRID_DIM * MAX_WORLEY_GRID_DIM
+
+struct VertexOutput {
+  vec2 uv;
+}
+
+structured_buffer worleySeeds: vec2 MAX_WORLEY_GRID_CELLS
+
+display_image DisplayImage
+image WorleyImage: OUT_IMAGE_WIDTH OUT_IMAGE_WIDTH rgba8
+  texture_alias WorleyTexture
+
+compute_shader CS_InitSeeds: 8 8 1
+compute_shader CS_Worley: 8 8 1
+
+task_block_start REGEN:
+  dispatch_threads: CS_InitSeeds MAX_WORLEY_GRID_DIM MAX_WORLEY_GRID_DIM 1
+  barrier: worleySeeds
+  transition_layout: WorleyImage image
+  dispatch_threads: CS_Worley OUT_IMAGE_WIDTH OUT_IMAGE_WIDTH 1
+  transition_layout: WorleyImage texture
+task_block_end
+
+initialization_task: REGEN
+
+slider_uint WORLEY_GRID_DIM: 40 1 MAX_WORLEY_GRID_DIM
+slider_uint GEN_SEED: 1 1 128
+ui_separator
+task_button: REGEN
+ui_separator
+save_image_button: WorleyImage
+
+
+render_pass DISPLAY_PASS:
+  store_attachments: outColor=DisplayImage
+  draw: VS_Worley PS_Worley 3 1
+    vertex_output: VertexOutput
+    disable_depth
