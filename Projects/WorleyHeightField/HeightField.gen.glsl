@@ -1,11 +1,12 @@
 #version 460 core
 
-#define SCREEN_WIDTH 1440
-#define SCREEN_HEIGHT 1280
+#define SCREEN_WIDTH 4096
+#define SCREEN_HEIGHT 2036
 #define GRID_LEN 1024
 #define GRID_CELLS 1048576
 #define GRID_VERT_COUNT 6279174
 #define SKIRT_VERT_COUNT 24552
+#define MAX_POSTFX_SAMPLES 25
 #define GRID_SPACING 0.100000
 
 struct IndexedIndirectArgs {
@@ -41,19 +42,26 @@ struct VertexOutput {
   vec2 uv;
 };
 
+struct PostFxVertex {
+  vec2 uv;
+};
+
 layout(set=1,binding=1) buffer BUFFER_globalState {  GlobalState globalState[]; };
 layout(set=1,binding=2) buffer BUFFER_cellBuffer {  float cellBuffer[]; };
 layout(set=1,binding=3) buffer BUFFER_cellNormals {  vec4 cellNormals[]; };
 layout(set=1,binding=4) buffer BUFFER_shadowCamera {  mat4 shadowCamera[]; };
-layout(set=1,binding=5) uniform sampler2D shadowMapTexture;
-layout(set=1,binding=6) uniform sampler2D Worley8x8;
-layout(set=1,binding=7) uniform sampler2D Worley16x16;
-layout(set=1,binding=8) uniform sampler2D Worley32x32;
+layout(set=1,binding=5, rgba32f) uniform image2D ColorBuffer;
+layout(set=1,binding=6) uniform sampler2D shadowMapTexture;
+layout(set=1,binding=7) uniform sampler2D Worley8x8;
+layout(set=1,binding=8) uniform sampler2D Worley16x16;
+layout(set=1,binding=9) uniform sampler2D Worley32x32;
+layout(set=1,binding=10) uniform sampler2D ColorTexture;
 
-layout(set=1, binding=9) uniform _UserUniforms {
+layout(set=1, binding=11) uniform _UserUniforms {
 	vec4 SCATTER;
 	vec4 SKY_COLOR;
 	uint STEP_COUNT;
+	uint POSTFX_SAMPLES;
 	uint DEBUG_MODE;
 	float NOISE_SCALE;
 	float NOISE_LEVEL0;
@@ -78,11 +86,15 @@ layout(set=1, binding=9) uniform _UserUniforms {
 	float HORIZON_WHITENESS;
 	float HORIZON_WHITENESS_FALLOFF;
 	float EXPOSURE;
+	float POSTFX_R;
+	float POSTFX_STDEV;
+	bool ENABLE_POSTFX;
+	bool VARY_POSTFX_NOISE;
 };
 
 #include <FlrLib/Fluorescence.glsl>
 
-layout(set=1, binding=10) uniform _CameraUniforms { PerspectiveCamera camera; };
+layout(set=1, binding=12) uniform _CameraUniforms { PerspectiveCamera camera; };
 
 
 
@@ -105,6 +117,10 @@ layout(location = 0) out vec4 outColor;
 #define _ENTRY_POINT_PS_HeightField_ATTACHMENTS
 layout(location = 0) out vec4 outColor;
 #endif // _ENTRY_POINT_PS_HeightField
+#if defined(_ENTRY_POINT_PS_PostFX) && !defined(_ENTRY_POINT_PS_PostFX_ATTACHMENTS)
+#define _ENTRY_POINT_PS_PostFX_ATTACHMENTS
+layout(location = 0) out vec4 outColor;
+#endif // _ENTRY_POINT_PS_PostFX
 #endif // IS_PIXEL_SHADER
 #include "HeightField.glsl"
 
@@ -143,6 +159,10 @@ void main() { _VERTEX_OUTPUT = VS_HeightField(); }
 layout(location = 0) out VertexOutput _VERTEX_OUTPUT;
 void main() { _VERTEX_OUTPUT = VS_Skirts(); }
 #endif // _ENTRY_POINT_VS_Skirts
+#ifdef _ENTRY_POINT_VS_PostFX
+layout(location = 0) out PostFxVertex _VERTEX_OUTPUT;
+void main() { _VERTEX_OUTPUT = VS_PostFX(); }
+#endif // _ENTRY_POINT_VS_PostFX
 #endif // IS_VERTEX_SHADER
 
 
@@ -170,4 +190,9 @@ void main() { PS_HeightField(_VERTEX_INPUT); }
 layout(location = 0) in VertexOutput _VERTEX_INPUT;
 void main() { PS_HeightField(_VERTEX_INPUT); }
 #endif // _ENTRY_POINT_PS_HeightField
+#if defined(_ENTRY_POINT_PS_PostFX) && !defined(_ENTRY_POINT_PS_PostFX_INTERPOLANTS)
+#define _ENTRY_POINT_PS_PostFX_INTERPOLANTS
+layout(location = 0) in PostFxVertex _VERTEX_INPUT;
+void main() { PS_PostFX(_VERTEX_INPUT); }
+#endif // _ENTRY_POINT_PS_PostFX
 #endif // IS_PIXEL_SHADER

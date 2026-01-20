@@ -87,6 +87,15 @@ ui_dropdown_start RENDERING:
     slider_float EXPOSURE: 0.3 0.0001 1.0
   ui_dropdown_end
   ui_separator
+  ui_dropdown_start POSTFX:
+    checkbox ENABLE_POSTFX: true
+    checkbox VARY_POSTFX_NOISE: false
+    slider_float POSTFX_R: 1.0 0.01 15.0
+    slider_float POSTFX_STDEV: 1.0 0.01 15.0
+    uint MAX_POSTFX_SAMPLES: 25
+    slider_uint POSTFX_SAMPLES: 1 1 MAX_POSTFX_SAMPLES
+  ui_dropdown_end
+  ui_separator
   ui_dropdown_start DEBUG_RENDER:
     slider_uint DEBUG_MODE: 0 0 3
   ui_dropdown_end
@@ -114,9 +123,10 @@ render_pass SHADOW_PASS:
 
 transition_layout: shadowMap texture
 
-display_image DisplayImage
+image ColorBuffer: SCREEN_WIDTH SCREEN_HEIGHT rgba32f
+  texture_alias ColorTexture
 render_pass DISPLAY_PASS:
-  store_attachments: outColor=DisplayImage
+  store_attachments: outColor=ColorBuffer
 
   draw: VS_Background PS_Background 3 1
     vertex_output: VertexOutput
@@ -128,3 +138,17 @@ render_pass DISPLAY_PASS:
     disable_backface_culling
     vertex_output: VertexOutput
 
+
+transition_layout: ColorBuffer texture
+
+struct PostFxVertex {
+  vec2 uv;
+}
+
+display_image DisplayImage
+render_pass POSTFX_PASS:
+  store_attachments: outColor=DisplayImage
+
+  draw: VS_PostFX PS_PostFX 3 1
+    vertex_output: PostFxVertex
+    disable_depth

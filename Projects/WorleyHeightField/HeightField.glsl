@@ -89,6 +89,10 @@ void CS_GenNormals() {
 #endif // IS_COMP_SHADER
 
 #ifdef IS_VERTEX_SHADER
+PostFxVertex VS_PostFX() {
+  return PostFxVertex(VS_FullScreen());
+}
+
 VertexOutput VS_Background() {
   VertexOutput OUT;
   OUT.pos = 0.0.xxx;
@@ -169,7 +173,6 @@ void PS_Shadow() {}
 void PS_Background(VertexOutput IN) {
   vec3 dir = computeDir(IN.uv);
   vec3 col = sampleSky(dir);
-  col = linearToSdr(col);
 
   if (DEBUG_MODE == 3)
   {
@@ -194,13 +197,44 @@ void PS_HeightField(VertexOutput IN) {
   uvec2 seed = uvec2(IN.uv * vec2(GRID_LEN.xx)) * uvec2(uniforms.frameCount, uniforms.frameCount+1);
   vec3 viewDir = normalize(IN.pos - camera.inverseView[3].xyz);
   vec3 Li = computeSurfaceLighting(seed, mat, IN.pos, IN.normal, viewDir);
-  outColor = vec4(linearToSdr(Li), 1.0);
+  outColor = vec4(Li, 1.0);
   
   if (DEBUG_MODE == 1) {
     outColor = vec4(IN.normal * 0.5 + 0.5.xxx, 1.0);
   } else if (DEBUG_MODE == 2) {
     outColor = vec4(fract(IN.pos), 1.0);
   }
+}
+
+void PS_PostFX(PostFxVertex IN) {
+  if (!ENABLE_POSTFX) {
+    vec3 col = texture(ColorTexture, IN.uv).rgb;
+    outColor = vec4(linearToSdr(col), 1.0);
+    return;
+  }
+
+  vec2 dims = vec2(SCREEN_WIDTH, SCREEN_HEIGHT);
+  uvec2 seed = uvec2(IN.uv * dims);
+  if (VARY_POSTFX_NOISE) 
+    seed *= uvec2(uniforms.frameCount, uniforms.frameCount + 1);
+  else
+    seed *= uvec2(23, 27);
+
+  uint postFxSampleCount = min(POSTFX_SAMPLES, MAX_POSTFX_SAMPLES);
+
+  vec3 col = 0.0.xxx;
+  for (int i=0; i<postFxSampleCount; i++) {
+    float R = POSTFX_R;
+    vec2 x = randVec2(seed);
+    vec2 r = R * (x - 0.5.xx);
+    float invStdDev = 1.0 / POSTFX_STDEV;
+    float pdf = R * R * invStdDev * exp(-0.5 * dot(r, r) * invStdDev * invStdDev) / sqrt(2.0 * PI); // todo correct ??
+    // TODO importance sample...
+    vec2 uv = IN.uv + (r + 0.5.xx) / dims;
+    col += texture(ColorTexture, uv).rgb / pdf / postFxSampleCount;
+  }
+  
+  outColor = vec4(linearToSdr(col), 1.0);
 }
 #endif // !shadow
 #endif // IS_PIXEL_SHADER
