@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "SimpleObjLoader.h"
+
 using namespace AltheaEngine;
 
 namespace flr {
@@ -212,6 +214,7 @@ struct ParsedFlr {
   struct ObjMesh {
     std::string name;
     std::string path;
+    SimpleObjLoader::ParsedObj parsedObj;
   };
   std::vector<ObjMesh> m_objModels;
 

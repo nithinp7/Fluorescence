@@ -1,6 +1,7 @@
 #include "Project.h"
 
 #include "Audio.h"
+#include "Shared/CommonStructures.h"
 
 #include <Althea/BufferUtilities.h>
 #include <Althea/DescriptorSet.h>
@@ -151,7 +152,7 @@ Project::Project(
     if (!SimpleObjLoader::loadObj(
             *GApplication,
             commandBuffer,
-            m.path.c_str(),
+            m.parsedObj,
             obj)) {
       m_parsed.m_failed = true;
       sprintf(m_parsed.m_errMsg, "Failed to load obj mesh %s", m.path.c_str());
@@ -212,7 +213,8 @@ Project::Project(
       offset += 4; // bools are 32bit in glsl
     }
     for (auto& button : m_parsed.m_buttons) {
-      button.pValue = reinterpret_cast<uint32_t*>(m_dynamicDataBuffer.data() + offset);
+      button.pValue =
+          reinterpret_cast<uint32_t*>(m_dynamicDataBuffer.data() + offset);
       *button.pValue = 0u;
       offset += 4; // bools are 32bit in glsl
     }
@@ -261,6 +263,14 @@ Project::Project(
   }
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT)) {
     dsBuilder.addUniformBufferBinding();
+  }
+
+  // TODO hammer out a formal way to surface obj resources for generic access..
+  // this is a bit hacky / undocumentable
+  // for now, we only support one generic VB and IB per objModel
+  for (const auto& obj : m_objModels) {
+    dsBuilder.addStorageBufferBinding(VK_SHADER_STAGE_ALL);
+    dsBuilder.addStorageBufferBinding(VK_SHADER_STAGE_ALL);
   }
 
   m_descriptorSets = PerFrameResources(*GApplication, dsBuilder);
@@ -334,6 +344,15 @@ Project::Project(
 
     if (m_parsed.isFeatureEnabled(ParsedFlr::FF_SYSTEM_AUDIO_INPUT))
       assign.bindTransientUniforms(m_audioInput);
+
+    for (const auto& obj : m_objModels) {
+      // TODO - for now we only expose the index buffer in the first mesh
+      // automatically
+      const auto& VB = obj.m_vertices;
+      const auto& IB = obj.m_meshes[0].m_indices;
+      assign.bindStorageBuffer(VB.getAllocation(), VB.getSize(), false);
+      assign.bindStorageBuffer(IB.getAllocation(), IB.getSize(), false);
+    }
   }
 
   std::filesystem::path autoGenFileName = m_projPath;
@@ -435,16 +454,16 @@ Project::Project(
 
       if (draw.drawMode == ParsedFlr::DM_DRAW_OBJ) {
         assert(draw.param0 >= 0);
-        builder.addVertexInputBinding<SimpleObjLoader::ObjVert>();
+        builder.addVertexInputBinding<ObjVertex>();
         builder.addVertexAttribute(
             VertexAttributeType::VEC3,
-            offsetof(SimpleObjLoader::ObjVert, position));
+            offsetof(ObjVertex, position));
         builder.addVertexAttribute(
             VertexAttributeType::VEC3,
-            offsetof(SimpleObjLoader::ObjVert, normal));
+            offsetof(ObjVertex, normal));
         builder.addVertexAttribute(
             VertexAttributeType::VEC2,
-            offsetof(SimpleObjLoader::ObjVert, uv));
+            offsetof(ObjVertex, uvs));
       }
 
       {
@@ -682,7 +701,12 @@ void Project::tick(const FrameContext& frame) {
           }
           case ParsedFlr::UET_BUTTON: {
             const auto& button = m_parsed.m_buttons[ui.idx];
-            sprintf(nameBuf, "%s##%s_%u", button.name.c_str(), button.name.c_str(), ui.idx);
+            sprintf(
+                nameBuf,
+                "%s##%s_%u",
+                button.name.c_str(),
+                button.name.c_str(),
+                ui.idx);
             *button.pValue = ImGui::Button(nameBuf);
             break;
           }
@@ -895,7 +919,7 @@ void Project::executeTaskList(
           }
           case ParsedFlr::DM_DRAW_OBJ: {
             SimpleObjLoader::LoadedObj& obj = m_objModels[draw.param0];
-            for (SimpleObjLoader::ObjMesh& mesh : obj.m_meshes) {
+            for (SimpleObjLoader::LoadedObjMesh& mesh : obj.m_meshes) {
               pass.getDrawContext().bindIndexBuffer(mesh.m_indices);
               pass.getDrawContext().bindVertexBuffer(obj.m_vertices);
               pass.getDrawContext().drawIndexed(
@@ -1346,6 +1370,23 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
         slot++);
   }
 
+  for (int i = 0; i < m_objModels.size(); ++i) {
+    const auto& objName = m_parsed.m_objModels[i].name;
+    const auto& obj = m_objModels[i];
+    CODE_APPEND(
+        "layout(set=1,binding=%u) readonly buffer BUFFER_%s_VB { ObjVertex "
+        "%s_vertices[]; };\n",
+        slot++,
+        objName.c_str(),
+        objName.c_str());
+    CODE_APPEND(
+        "layout(set=1,binding=%u) readonly buffer BUFFER_%s_IB { uint "
+        "%s_indices[]; };\n",
+        slot++,
+        objName.c_str(),
+        objName.c_str());
+  }
+
   // auto-gen pixel shader block, pre-include of user-file
   {
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
@@ -1616,6 +1657,21 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
         "[[vk::binding(%u, 1)]] cbuffer _AudioUniforms { AudioInput audio; "
         "};\n\n",
         slot++);
+  }
+
+  for (int i = 0; i < m_objModels.size(); ++i) {
+    const auto& objName = m_parsed.m_objModels[i].name;
+    const auto& obj = m_objModels[i];
+    CODE_APPEND(
+        "[[vk::binding(%u, 1)]] StructuredBuffer<ObjVertex> %s_vertices;\n",
+        slot++,
+        objName.c_str(),
+        objName.c_str());
+    CODE_APPEND(
+        "[[vk::binding(%u, 1)]] Buffer<uint> %s_indices;\n",
+        slot++,
+        objName.c_str(),
+        objName.c_str());
   }
 
   // auto-gen pixel shader block, pre-include of user-file

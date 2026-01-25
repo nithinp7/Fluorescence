@@ -35,4 +35,10 @@ struct FlrPush {
   uint push6;
   uint push7;
 };
+
+struct ObjVertex {
+  vec4 position;
+  vec4 normal;
+  vec4 uvs;
+};
 #endif // _FLR_COMMON_STRUCTURES_

@@ -1508,8 +1508,27 @@ ParsedFlr::ParsedFlr(
       auto path = p.parseStringLiteral();
       PARSER_VERIFY(path, "Could not parse obj model path");
 
-      m_objModels.push_back({std::string(*name), std::string(*path)});
+      auto& obj = m_objModels.emplace_back(); 
+      obj.name = std::string(*name);
+      obj.path = std::string(*path);
+      bool objResult = SimpleObjLoader::parseObj(obj.path.c_str(), obj.parsedObj);
+      PARSER_VERIFY(objResult, "Failed to parse OBJ file");
 
+      // TODO would be good to create Flr placeholder buffers that can be used to alias
+      // these pending obj resources. E.g., would fix the fact that the below index buffer
+      // can't be directly referenced in a draw_indexed instruction currently
+      // Read-only semantics for buffers needs to be hammered out first...
+      // TODO for now we are only exposing the VB and the IB from the first mesh
+      // might be okay to just glue all the index buffers together...
+      char varName[1024];
+      snprintf(varName, 1024, "%s_vertexCount", obj.name.c_str());
+      m_constUints.push_back(
+        { std::string(varName),
+         static_cast<uint32_t>(obj.parsedObj.m_vertices.size()) });
+      snprintf(varName, 1024, "%s_indexCount", obj.name.c_str());
+      m_constUints.push_back(
+        { std::string(varName),
+         static_cast<uint32_t>(obj.parsedObj.m_meshes[0].m_indices.size()) });
       break;
     };
     case I_TASK_BLOCK_START: {

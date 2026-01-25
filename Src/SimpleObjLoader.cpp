@@ -10,11 +10,7 @@
 namespace flr {
 namespace SimpleObjLoader {
 
-bool loadObj(
-    Application& app,
-    VkCommandBuffer commandBuffer,
-    const char* fileName,
-    LoadedObj& result) {
+bool parseObj(const char* fileName, ParsedObj& result) {
   std::ifstream file(fileName, std::ios::ate | std::ios::binary);
 
   if (!file.is_open()) {
@@ -34,17 +30,16 @@ bool loadObj(
   std::vector<glm::vec3> normals;
   normals.reserve(CAPACITY);
 
-  ObjMesh* mesh = &result.m_meshes.emplace_back();
+  ParsedObjMesh* mesh = &result.m_meshes.emplace_back();
   uint32_t indexCounter = 0;
-  std::vector<ObjVert> vertices;
+  std::vector<ObjVertex> vertices;
   vertices.reserve(CAPACITY);
   std::vector<uint32_t> indices;
   indices.reserve(CAPACITY);
 
   bool bHasNormals = false;
 
-  auto parseUint = [](char*& pBuf)
-  {
+  auto parseUint = [](char*& pBuf) {
     uint32_t res = 0u;
     while (*pBuf >= '0' && *pBuf <= '9') {
       res = 10u * res + (uint32_t)(*pBuf - '0');
@@ -74,29 +69,33 @@ bool loadObj(
     indices.push_back(v1 - 1);
     indices.push_back(v2 - 1);
 
-    ObjVert& vert0 = vertices[v0 - 1];
-    vert0.position = positions[v0 - 1];
-    vert0.uv = (vt0 > 0) ? uvs[vt0 - 1] : glm::vec2(0.0f);
+    // TODO support multiple sets of uvs...
+    ObjVertex& vert0 = vertices[v0 - 1];
+    vert0.position = glm::vec4(positions[v0 - 1], 1.0f);
+    vert0.uvs =
+        glm::vec4((vt0 > 0) ? uvs[vt0 - 1] : glm::vec2(0.0f), glm::vec2(0.0f));
 
-    ObjVert& vert1 = vertices[v1 - 1];
-    vert1.position = positions[v1 - 1];
-    vert1.uv = (vt1 > 0) ? uvs[vt1 - 1] : glm::vec2(0.0f);
+    ObjVertex& vert1 = vertices[v1 - 1];
+    vert1.position = glm::vec4(positions[v1 - 1], 1.0f);
+    vert1.uvs =
+        glm::vec4((vt1 > 0) ? uvs[vt1 - 1] : glm::vec2(0.0f), glm::vec2(0.0f));
 
-    ObjVert& vert2 = vertices[v2 - 1];
-    vert2.position = positions[v2 - 1];
-    vert2.uv = (vt2 > 0) ? uvs[vt2 - 1] : glm::vec2(0.0f);
+    ObjVertex& vert2 = vertices[v2 - 1];
+    vert2.position = glm::vec4(positions[v2 - 1], 1.0f);
+    vert2.uvs =
+        glm::vec4((vt2 > 0) ? uvs[vt2 - 1] : glm::vec2(0.0f), glm::vec2(0.0f));
 
     if (!bHasNormals) {
       glm::vec3 normal = glm::cross(
-          vert1.position - vert0.position,
-          vert2.position - vert0.position);
-      vert0.normal += normal;
-      vert1.normal += normal;
-      vert2.normal += normal;
+          glm::vec3(vert1.position - vert0.position),
+          glm::vec3(vert2.position - vert0.position));
+      vert0.normal += glm::vec4(normal, 0.0f);
+      vert1.normal += glm::vec4(normal, 0.0f);
+      vert2.normal += glm::vec4(normal, 0.0f);
     } else {
-      vert0.normal = normals[vn0 - 1];
-      vert1.normal = normals[vn1 - 1];
-      vert2.normal = normals[vn2 - 1];
+      vert0.normal = glm::vec4(normals[vn0 - 1], 0.0f);
+      vert1.normal = glm::vec4(normals[vn1 - 1], 0.0f);
+      vert2.normal = glm::vec4(normals[vn2 - 1], 0.0f);
     }
   };
 
@@ -113,7 +112,8 @@ bool loadObj(
         // position
         {
           glm::vec3& pos = positions.emplace_back();
-          int ret = std::sscanf(&lineBuf[2], "%f %f %f", &pos.x, &pos.y, &pos.z);
+          int ret =
+              std::sscanf(&lineBuf[2], "%f %f %f", &pos.x, &pos.y, &pos.z);
           assert(ret == 3);
         }
         break;
@@ -129,7 +129,12 @@ bool loadObj(
         // normal
         {
           glm::vec3& normal = normals.emplace_back();
-          int ret = std::sscanf(&lineBuf[3], "%f %f %f", &normal.x, &normal.y, &normal.z);
+          int ret = std::sscanf(
+              &lineBuf[3],
+              "%f %f %f",
+              &normal.x,
+              &normal.y,
+              &normal.z);
           assert(ret == 3);
           bHasNormals = true;
         }
@@ -141,7 +146,7 @@ bool loadObj(
       {
         if (indices.size() > 0) {
           // The last mesh was valid so finalize it and start a new one
-          mesh->m_indices = IndexBuffer(app, commandBuffer, std::move(indices));
+          mesh->m_indices = std::move(indices);
           indices.clear();
 
           mesh = &result.m_meshes.emplace_back();
@@ -154,7 +159,7 @@ bool loadObj(
       // face
       {
         // 3 or 4 verts - pos0, uv0, normal0, pos1, uv1, ... etc
-        uint32_t vi[12] = { 0u };
+        uint32_t vi[12] = {0u};
         uint32_t offs = 2;
         char* pBuf = lineBuf + 2;
         for (int i = 0; i < 4; i++) {
@@ -170,11 +175,38 @@ bool loadObj(
         assert(vi[0] > 0u && vi[3] > 0u && vi[6] > 0u);
         if (vi[9] > 0u) {
           // quad
-          createTriangle(vi[0], vi[1], vi[2], vi[3], vi[4], vi[5], vi[6], vi[7], vi[8]);
-          createTriangle(vi[0], vi[1], vi[2], vi[6], vi[7], vi[8], vi[9], vi[10], vi[11]);
+          createTriangle(
+              vi[0],
+              vi[1],
+              vi[2],
+              vi[3],
+              vi[4],
+              vi[5],
+              vi[6],
+              vi[7],
+              vi[8]);
+          createTriangle(
+              vi[0],
+              vi[1],
+              vi[2],
+              vi[6],
+              vi[7],
+              vi[8],
+              vi[9],
+              vi[10],
+              vi[11]);
         } else {
           // tri
-          createTriangle(vi[0], vi[1], vi[2], vi[3], vi[4], vi[5], vi[6], vi[7], vi[8]);
+          createTriangle(
+              vi[0],
+              vi[1],
+              vi[2],
+              vi[3],
+              vi[4],
+              vi[5],
+              vi[6],
+              vi[7],
+              vi[8]);
         }
       }
       break;
@@ -184,17 +216,16 @@ bool loadObj(
     }
   }
 
-  for (ObjVert& vert : vertices) {
-    vert.normal = glm::normalize(vert.normal);
+  for (ObjVertex& vert : vertices) {
+    vert.normal = glm::vec4(glm::normalize(glm::vec3(vert.normal)), 0.0f);
   }
 
   if (vertices.size() > 0) {
-    result.m_vertices =
-        VertexBuffer<ObjVert>(app, commandBuffer, std::move(vertices));
+    result.m_vertices = std::move(vertices);
   }
 
   if (indices.size() > 0) {
-    mesh->m_indices = IndexBuffer(app, commandBuffer, std::move(indices));
+    mesh->m_indices = std::move(indices);
   }
 
   file.close();
@@ -202,5 +233,24 @@ bool loadObj(
   return true;
 }
 
+bool loadObj(
+    Application& app,
+    VkCommandBuffer commandBuffer,
+    const ParsedObj& parsed,
+    LoadedObj& result) {
+
+  result.m_vertices = VertexBuffer<ObjVertex>(
+      app,
+      commandBuffer,
+      std::vector(parsed.m_vertices));
+  result.m_meshes.resize(parsed.m_meshes.size());
+  for (int i = 0; i < parsed.m_meshes.size(); i++)
+    result.m_meshes[i].m_indices = IndexBuffer(
+        app,
+        commandBuffer,
+        std::vector(parsed.m_meshes[i].m_indices));
+
+  return true;
+}
 } // namespace SimpleObjLoader
 } // namespace flr
