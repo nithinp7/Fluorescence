@@ -239,6 +239,12 @@ struct ParsedFlr {
     //DM_DRAW_INDEXED_INDIRECT
   };
 
+  enum DrawFlags : uint32_t {
+    DF_NONE = 0,
+    DF_DISABLE_DEPTH = 1 << 0,
+    DF_DISABLE_BACKFACECULL = 1 << 1,
+    DF_FRONTFACECULL = 1 << 2
+  };
   struct Draw {
     // TODO: re-usable subpasses that can be used multiple times...
     std::string vertexShader;
@@ -254,9 +260,12 @@ struct ParsedFlr {
     int vertexOutputStructIdx;
     DrawMode drawMode;
     AltheaEngine::PrimitiveType primType;
-    float lineWidth; 
-    bool bDisableDepth;
-    bool bDisableBackfaceCull;
+    float lineWidth;
+    uint32_t flags;
+
+    bool isDepthDisabled() const { return flags & DF_DISABLE_DEPTH; }
+    bool isBackFaceCullingDisabled() const { return flags & DF_DISABLE_BACKFACECULL; }
+    bool isFrontFaceCullingEnabled() const { return flags & DF_FRONTFACECULL; }
   };
 
   struct AttachmentRef {
@@ -349,6 +358,7 @@ struct ParsedFlr {
     I_RENDER_PASS,
     I_DISABLE_DEPTH,
     I_DISABLE_BACKFACE_CULLING,
+    I_FRONTFACE_CULLING,
     I_LOAD_ATTACHMENTS,
     I_STORE_ATTACHMENTS,
     I_LOADSTORE_ATTACHMENTS,
@@ -408,6 +418,7 @@ struct ParsedFlr {
       "render_pass",
       "disable_depth",
       "disable_backface_culling",
+      "frontface_culling",
       "load_attachments",
       "store_attachments",
       "loadstore_attachments",

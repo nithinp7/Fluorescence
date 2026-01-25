@@ -888,7 +888,7 @@ ParsedFlr::ParsedFlr(
       PARSER_VERIFY(
           m_renderPasses.back().draws.size() > 0,
           "Expected draw-call to precede disable-depth");
-      m_renderPasses.back().draws.back().bDisableDepth = true;
+      m_renderPasses.back().draws.back().flags |= DF_DISABLE_DEPTH;
       break;
     }
     case I_DISABLE_BACKFACE_CULLING: {
@@ -899,7 +899,18 @@ ParsedFlr::ParsedFlr(
       PARSER_VERIFY(
           m_renderPasses.back().draws.size() > 0,
           "Expected draw-call to precede disable_backface_culling");
-      m_renderPasses.back().draws.back().bDisableBackfaceCull = true;
+      m_renderPasses.back().draws.back().flags |= DF_DISABLE_BACKFACECULL;
+      break;
+    }
+    case I_FRONTFACE_CULLING: {
+      PARSER_VERIFY(
+        m_renderPasses.size() > 0,
+        "Expected render-pass or display-pass declaration to precede "
+        "frontface_culling.");
+      PARSER_VERIFY(
+        m_renderPasses.back().draws.size() > 0,
+        "Expected draw-call to precede frontface_culling");
+      m_renderPasses.back().draws.back().flags |= DF_FRONTFACECULL;
       break;
     }
     case I_LOAD_ATTACHMENTS: {
@@ -1105,8 +1116,7 @@ ParsedFlr::ParsedFlr(
            DM_DRAW,
            AltheaEngine::PrimitiveType::TRIANGLES,
            0.0f,
-           false,
-           false});
+           DF_NONE});
       break;
     }
     case I_DRAW_INDEXED: {
@@ -1163,8 +1173,7 @@ ParsedFlr::ParsedFlr(
            DM_DRAW_INDEXED,
            AltheaEngine::PrimitiveType::TRIANGLES,
            0.0f,
-           false,
-           false});
+           DF_NONE});
       break;
     }
     case I_DRAW_INDIRECT: {
@@ -1220,8 +1229,7 @@ ParsedFlr::ParsedFlr(
            DM_DRAW_INDIRECT,
            AltheaEngine::PrimitiveType::TRIANGLES,
            0.0f,
-           false,
-           false});
+           DF_NONE});
       break;
     }
     case I_DRAW_OBJ: {
@@ -1265,8 +1273,7 @@ ParsedFlr::ParsedFlr(
            DM_DRAW_OBJ,
            AltheaEngine::PrimitiveType::TRIANGLES,
            0.0f,
-           false,
-           false});
+           DF_NONE });
       break;
     }
     case I_PRIM_TYPE: {
@@ -1625,7 +1632,7 @@ ParsedFlr::ParsedFlr(
   for (auto& pass : m_renderPasses) {
     bool bNeedDepth = false;
     for (const auto& draw : pass.draws) {
-      if (!draw.bDisableDepth) {
+      if (!draw.isDepthDisabled()) {
         bNeedDepth = true;
         break;
       }

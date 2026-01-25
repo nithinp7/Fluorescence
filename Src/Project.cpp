@@ -423,12 +423,14 @@ Project::Project(
 
       GraphicsPipelineBuilder& builder = subpass.pipelineBuilder;
 
-      if (!draw.bDisableDepth && depthAttachment)
+      if (!draw.isDepthDisabled() && depthAttachment)
         subpass.depthAttachment = *depthAttachment;
       else
         builder.setDepthTesting(false);
 
-      if (draw.bDisableBackfaceCull)
+      if (draw.isFrontFaceCullingEnabled())
+        subpass.pipelineBuilder.setCullMode(VK_CULL_MODE_FRONT_BIT);
+      else if (draw.isBackFaceCullingDisabled())
         subpass.pipelineBuilder.setCullMode(VK_CULL_MODE_NONE);
 
       if (draw.drawMode == ParsedFlr::DM_DRAW_OBJ) {
