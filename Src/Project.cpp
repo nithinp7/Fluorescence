@@ -526,7 +526,7 @@ void Project::tick(const FrameContext& frame) {
     m_audioInput.updateUniforms(audioInput, frame);
   }
 
-  if (m_bHasDynamicData) {
+  if (m_parsed.m_uiElements.size()) {
     if (!GInputManager->getMouseCursorHidden()) {
       if (ImGui::Begin("Options", false)) {
         char nameBuf[128];

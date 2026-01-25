@@ -43,6 +43,21 @@ bool loadObj(
 
   bool bHasNormals = false;
 
+  auto parseUint = [](char*& pBuf)
+  {
+    uint32_t res = 0u;
+    while (*pBuf >= '0' && *pBuf <= '9') {
+      res = 10u * res + (uint32_t)(*pBuf - '0');
+      pBuf++;
+    }
+    return res;
+  };
+
+  auto consumeChar = [](char*& pBuf, char c) {
+    if (*pBuf == c)
+      pBuf++;
+  };
+
   auto createTriangle = [&](uint32_t v0,
                             uint32_t vt0,
                             uint32_t vn0,
@@ -64,7 +79,6 @@ bool loadObj(
     vert0.uv = (vt0 > 0) ? uvs[vt0 - 1] : glm::vec2(0.0f);
 
     ObjVert& vert1 = vertices[v1 - 1];
-    ;
     vert1.position = positions[v1 - 1];
     vert1.uv = (vt1 > 0) ? uvs[vt1 - 1] : glm::vec2(0.0f);
 
@@ -99,21 +113,24 @@ bool loadObj(
         // position
         {
           glm::vec3& pos = positions.emplace_back();
-          std::sscanf(&lineBuf[2], "%f %f %f", &pos.x, &pos.y, &pos.z);
+          int ret = std::sscanf(&lineBuf[2], "%f %f %f", &pos.x, &pos.y, &pos.z);
+          assert(ret == 3);
         }
         break;
       case 't':
         // uv
         {
           glm::vec2& uv = uvs.emplace_back();
-          std::sscanf(&lineBuf[2], "%f %f", &uv.x, &uv.y);
+          int ret = std::sscanf(&lineBuf[2], "%f %f", &uv.x, &uv.y);
+          assert(ret == 2);
         }
         break;
       case 'n':
         // normal
         {
           glm::vec3& normal = normals.emplace_back();
-          std::sscanf(&lineBuf[3], "%f %f %f", &normal.x, &normal.y, &normal.z);
+          int ret = std::sscanf(&lineBuf[3], "%f %f %f", &normal.x, &normal.y, &normal.z);
+          assert(ret == 3);
           bHasNormals = true;
         }
         break;
@@ -136,55 +153,28 @@ bool loadObj(
     case 'f':
       // face
       {
-        uint32_t v0, vt0, vn0, v1, vt1, vn1, v2, vt2, vn2, v3, vt3, vn3;
-        int ret = sscanf(
-            &lineBuf[2],
-            "%u/%u/%u %u/%u/%u %u/%u/%u %u/%u/%u",
-            &v0,
-            &vt0,
-            &vn0,
-            &v1,
-            &vt1,
-            &vn1,
-            &v2,
-            &vt2,
-            &vn2,
-            &v3,
-            &vt3,
-            &vn3);
-
-        // assumes the references verts have all been
-        // specified earlier in the file
-        if (ret == 9) {
-          // triangle
-          createTriangle(v0, vt0, vn0, v1, vt1, vn1, v2, vt2, vn2);
-        } else if (ret == 12) {
-          // quad
-          createTriangle(v0, vt0, vn0, v1, vt1, vn1, v2, vt2, vn2);
-          createTriangle(v0, vt0, vn0, v2, vt2, vn2, v3, vt3, vn3);
-        } else {
-          // try just vert / uv
-          ret = sscanf(
-              &lineBuf[2],
-              "%u/%u %u/%u %u/%u %u/%u",
-              &v0,
-              &vt0,
-              &v1,
-              &vt1,
-              &v2,
-              &vt2,
-              &v3,
-              &vt3);
-          if (ret == 6) {
-            // triangle
-            createTriangle(v0, vt0, 0, v1, vt1, 0, v2, vt2, 0);
-          } else if (ret == 8) {
-            // quad
-            createTriangle(v0, vt0, 0, v1, vt1, 0, v2, vt2, 0);
-            createTriangle(v0, vt0, 0, v2, vt2, 0, v3, vt3, 0);
-          } else {
-            assert(false);
+        // 3 or 4 verts - pos0, uv0, normal0, pos1, uv1, ... etc
+        uint32_t vi[12] = { 0u };
+        uint32_t offs = 2;
+        char* pBuf = lineBuf + 2;
+        for (int i = 0; i < 4; i++) {
+          for (int j = 0; j < 3; j++) {
+            vi[3 * i + j] = parseUint(pBuf);
+            consumeChar(pBuf, '/');
           }
+          consumeChar(pBuf, ' ');
+        }
+
+        // assumes the referenced verts have all been
+        // specified earlier in the file
+        assert(vi[0] > 0u && vi[3] > 0u && vi[6] > 0u);
+        if (vi[9] > 0u) {
+          // quad
+          createTriangle(vi[0], vi[1], vi[2], vi[3], vi[4], vi[5], vi[6], vi[7], vi[8]);
+          createTriangle(vi[0], vi[1], vi[2], vi[6], vi[7], vi[8], vi[9], vi[10], vi[11]);
+        } else {
+          // tri
+          createTriangle(vi[0], vi[1], vi[2], vi[3], vi[4], vi[5], vi[6], vi[7], vi[8]);
         }
       }
       break;
