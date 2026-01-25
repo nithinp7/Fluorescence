@@ -1,0 +1,9 @@
+
+slider_float SUN_INT: 1.0 1.0 100.0
+slider_float SUN_ELEV: 0.5 0.0 1.0
+slider_float SUN_ROT: 0.5 0.0 1.0
+ui_separator
+color_picker SKY_COLOR: 0.5 0.4 0.8 1.0
+slider_float SKY_INT: 10.0 0.001 20.0
+slider_float HORIZON_WHITENESS: 0.758 0.0 1.0
+slider_float HORIZON_WHITENESS_FALLOFF: 0.842 0.0 4.0

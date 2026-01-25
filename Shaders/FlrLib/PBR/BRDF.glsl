@@ -4,6 +4,20 @@
 #include <Misc/Constants.glsl>
 #include <Misc/Sampling.glsl>
 
+float phaseFunction(float cosTheta, float g) {
+  float g2 = g * g;
+  return  
+      3.0 * (1.0 - g2) * (1.0 + cosTheta * cosTheta) / 
+      (8 * PI * (2.0 + g2) * pow(1.0 + g2 - 2.0 * g * cosTheta, 1.5));
+}
+
+float phaseFunctionRayleigh(float cosTheta) {
+  return 3.0 * (1.0 + cosTheta * cosTheta) / (16.0 * PI);
+}
+
+vec3 beersLaw(vec3 depth) { return exp(-depth); }
+vec3 powder(vec3 depth) { return 1.0.xxx - exp(-depth * depth); }
+
 // Relative surface area of microfacets that are aligned to
 // the halfway vector.
 float ndfGgx(float NdotH, float a2) {
