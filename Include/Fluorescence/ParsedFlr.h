@@ -141,17 +141,37 @@ struct ParsedFlr {
   };
   std::vector<StructDef> m_structDefs;
 
+  enum BufferFlags : uint32_t {
+    BF_NONE = 0,
+    BF_CPU_VISIBLE = 1 << 0,
+    BF_TRANSFER_SRC = 1 << 1,
+    BF_INDIRECT_ARGS = 1 << 2,
+    BF_INDEX_BUFFER = 1 << 3,
+    BF_READONLY = 1 << 4,
+    BF_SKIP_ZERO_INIT = 1 << 5
+  };
   struct BufferDesc {
     std::string name;
     uint32_t structIdx;
     uint32_t elemCount;
     uint32_t bufferCount;
-    bool bCpuVisible;
-    bool bTransferSrc;
-    bool bIndirectArgs;
-    bool bIndexBuffer;
+    uint32_t flags;
+
+    bool isCpuVisible() const { return flags & BF_CPU_VISIBLE; }
+    bool isTransferSrc() const { return flags & BF_TRANSFER_SRC; }
+    bool isIndirectArgs() const { return flags & BF_INDIRECT_ARGS; }
+    bool isIndexBuffer() const { return flags & BF_INDEX_BUFFER; }
+    bool isReadOnly() const { return flags & BF_READONLY; }
+    bool shouldSkipZeroInit() const { return flags & BF_SKIP_ZERO_INIT; }
   };
   std::vector<BufferDesc> m_buffers;
+
+  struct BufferFile {
+    std::string path;
+    std::vector<char> data;
+    uint32_t bufferIdx;
+  };
+  std::vector<BufferFile> m_bufferFiles;
 
   struct ImageDesc {
     std::string name;
@@ -256,7 +276,7 @@ struct ParsedFlr {
     // if drawMode==DM_DRAW: vertexCount, instanceCount, UNUSED
     // if drawMode==DM_DRAW_INDEXED: instanceCount, indexBufferIdx, subBufferIdx(optional)
     // if drawMode==DM_DRAW_INDIRECT, indirectBufferIdx, drawCount, subBufferIdx(optional)
-    // if drawMode==DM_DRAW_OBJ, objIdx, UNUSED, UNUSED
+    // if drawMode==DM_DRAW_OBJ, objIdx, instanceCount, UNUSED
     uint32_t param0;
     uint32_t param1;
     uint32_t param2;
@@ -349,7 +369,9 @@ struct ParsedFlr {
     I_STRUCT_SIZE,
     I_STRUCTURED_BUFFER,
     I_INDEX_BUFFER,
+    I_BUFFER_FILE,
     I_ENABLE_CPU_ACCESS,
+    I_BUFFER_READONLY,
     I_COMPUTE_SHADER,
     I_COMPUTE_DISPATCH, // deprecated...
     I_DISPATCH_THREADS,
@@ -409,7 +431,9 @@ struct ParsedFlr {
       "struct_size",
       "structured_buffer",
       "index_buffer",
+      "buffer_file",
       "enable_cpu_access",
+      "buffer_readonly",
       "compute_shader",
       "compute_dispatch",
       "dispatch_threads",

@@ -457,7 +457,7 @@ ParsedFlr::ParsedFlr(
           "Could not find specified buffer in save_buffer_button "
           "instruction.");
 
-      m_buffers[*bufferIdx].bTransferSrc = true;
+      m_buffers[*bufferIdx].flags |= BF_TRANSFER_SRC;
 
       m_uiElements.push_back(
           {UET_SAVE_BUFFER_BUTTON, (uint32_t)m_saveBufferButtons.size()});
@@ -482,8 +482,8 @@ ParsedFlr::ParsedFlr(
     case I_BUTTON: {
       PARSER_VERIFY(name, "Missing name for button command");
 
-      m_uiElements.push_back({ UET_BUTTON, (uint32_t)m_buttons.size() });
-      m_buttons.push_back({ std::string(*name), uiIdx++, nullptr });
+      m_uiElements.push_back({UET_BUTTON, (uint32_t)m_buttons.size()});
+      m_buttons.push_back({std::string(*name), uiIdx++, nullptr});
       break;
     }
     case I_SEPARATOR: {
@@ -576,14 +576,13 @@ ParsedFlr::ParsedFlr(
           elemCount,
           "Could not parse element count in structured-buffer declaration.");
 
+      // TODO expose new readonly flag...
       m_buffers.push_back(
           {std::string(*name),
            *structIdx,
            *elemCount,
            arrayCount ? *arrayCount : 1,
-           false,
-           false,
-           bIndirectArgs});
+           bIndirectArgs ? BF_INDIRECT_ARGS : 0});
       arrayCount = std::nullopt;
 
       break;
@@ -601,12 +600,41 @@ ParsedFlr::ParsedFlr(
            uintDummyStructIdx,
            *elemCount,
            arrayCount ? *arrayCount : 1,
-           false,
-           false,
-           false,
-           true});
+           BF_INDEX_BUFFER});
       arrayCount = std::nullopt;
 
+      break;
+    }
+    case I_BUFFER_FILE: {
+      PARSER_VERIFY(
+          m_buffers.size(),
+          "Instruction buffer_file must be preceded by structured buffer "
+          "declaration.");
+      PARSER_VERIFY(
+          m_buffers.back().bufferCount == 1,
+          "Buffers with > 1 sub-buffers not compatible for buffer_file.");
+
+      auto path = p.parseStringLiteral();
+      PARSER_VERIFY(path, "Could not parse buffer_file path.");
+
+      std::string pathStr(*path);
+      PARSER_VERIFY(
+          Utilities::checkFileExists(pathStr),
+          "Could not find specified buffer_file.");
+
+      auto& bufferFile = m_bufferFiles.emplace_back();
+      bufferFile.bufferIdx = static_cast<uint32_t>(m_buffers.size() - 1);
+      bufferFile.path = pathStr;
+      bufferFile.data = Utilities::readFile(pathStr);
+      PARSER_VERIFY(
+          bufferFile.data.size() > 0,
+          "Could not load specified buffer file.");
+      const auto& structDef = m_structDefs[m_buffers.back().structIdx];
+      size_t bufSize = structDef.size * m_buffers.back().elemCount;
+      PARSER_VERIFY(
+          bufferFile.data.size() == bufSize,
+          "Unexpected size of loaded file in buffer_file instruction.");
+      m_buffers.back().flags |= BF_SKIP_ZERO_INIT;
       break;
     }
     case I_ENABLE_CPU_ACCESS: {
@@ -614,7 +642,15 @@ ParsedFlr::ParsedFlr(
           m_buffers.size(),
           "Instruction enable_cpu_access must be preceded by structured buffer "
           "declaration.");
-      m_buffers.back().bCpuVisible = true;
+      m_buffers.back().flags |= BF_CPU_VISIBLE;
+      break;
+    }
+    case I_BUFFER_READONLY: {
+      PARSER_VERIFY(
+        m_buffers.size(),
+        "Instruction buffer_readonly must be preceded by structured buffer "
+        "declaration.");
+      m_buffers.back().flags |= BF_READONLY;
       break;
     }
     case I_COMPUTE_SHADER: {
@@ -904,12 +940,12 @@ ParsedFlr::ParsedFlr(
     }
     case I_FRONTFACE_CULLING: {
       PARSER_VERIFY(
-        m_renderPasses.size() > 0,
-        "Expected render-pass or display-pass declaration to precede "
-        "frontface_culling.");
+          m_renderPasses.size() > 0,
+          "Expected render-pass or display-pass declaration to precede "
+          "frontface_culling.");
       PARSER_VERIFY(
-        m_renderPasses.back().draws.size() > 0,
-        "Expected draw-call to precede frontface_culling");
+          m_renderPasses.back().draws.size() > 0,
+          "Expected draw-call to precede frontface_culling");
       m_renderPasses.back().draws.back().flags |= DF_FRONTFACECULL;
       break;
     }
@@ -1150,7 +1186,7 @@ ParsedFlr::ParsedFlr(
           bufIdx,
           "Could not find specified index buffer in draw_indexed instruction.");
       PARSER_VERIFY(
-          m_buffers[*bufIdx].bIndexBuffer,
+          m_buffers[*bufIdx].isIndexBuffer(),
           "Specified buffer is not an index buffer in draw_indexed "
           "instruction.");
       p.parseWhitespace();
@@ -1262,18 +1298,21 @@ ParsedFlr::ParsedFlr(
           pixelShader,
           "Could not parse pixel shader name in draw-call declaration.");
 
+      p.parseWhitespace();
+      auto instanceCount = parseUintOrVar();
+
       uint32_t renderPassIdx = m_renderPasses.size() - 1;
       m_renderPasses.back().draws.push_back(
           {std::string(*vertShader),
            std::string(*pixelShader),
            *idx,
-           0,
+           instanceCount ? *instanceCount : 1,
            0,
            -1,
            DM_DRAW_OBJ,
            AltheaEngine::PrimitiveType::TRIANGLES,
            0.0f,
-           DF_NONE });
+           DF_NONE});
       break;
     }
     case I_PRIM_TYPE: {
@@ -1508,27 +1547,29 @@ ParsedFlr::ParsedFlr(
       auto path = p.parseStringLiteral();
       PARSER_VERIFY(path, "Could not parse obj model path");
 
-      auto& obj = m_objModels.emplace_back(); 
+      auto& obj = m_objModels.emplace_back();
       obj.name = std::string(*name);
       obj.path = std::string(*path);
-      bool objResult = SimpleObjLoader::parseObj(obj.path.c_str(), obj.parsedObj);
+      bool objResult =
+          SimpleObjLoader::parseObj(obj.path.c_str(), obj.parsedObj);
       PARSER_VERIFY(objResult, "Failed to parse OBJ file");
 
-      // TODO would be good to create Flr placeholder buffers that can be used to alias
-      // these pending obj resources. E.g., would fix the fact that the below index buffer
-      // can't be directly referenced in a draw_indexed instruction currently
-      // Read-only semantics for buffers needs to be hammered out first...
+      // TODO would be good to create Flr placeholder buffers that can be used
+      // to alias these pending obj resources. E.g., would fix the fact that the
+      // below index buffer can't be directly referenced in a draw_indexed
+      // instruction currently Read-only semantics for buffers needs to be
+      // hammered out first...
       // TODO for now we are only exposing the VB and the IB from the first mesh
       // might be okay to just glue all the index buffers together...
       char varName[1024];
       snprintf(varName, 1024, "%s_vertexCount", obj.name.c_str());
       m_constUints.push_back(
-        { std::string(varName),
-         static_cast<uint32_t>(obj.parsedObj.m_vertices.size()) });
+          {std::string(varName),
+           static_cast<uint32_t>(obj.parsedObj.m_vertices.size())});
       snprintf(varName, 1024, "%s_indexCount", obj.name.c_str());
       m_constUints.push_back(
-        { std::string(varName),
-         static_cast<uint32_t>(obj.parsedObj.m_meshes[0].m_indices.size()) });
+          {std::string(varName),
+           static_cast<uint32_t>(obj.parsedObj.m_meshes[0].m_indices.size())});
       break;
     };
     case I_TASK_BLOCK_START: {

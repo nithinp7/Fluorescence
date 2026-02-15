@@ -72,13 +72,13 @@ Project::Project(
     VmaAllocationCreateInfo allocInfo{};
     VkBufferUsageFlags usageFlags =
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    if (desc.bTransferSrc)
+    if (desc.isTransferSrc())
       usageFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    if (desc.bIndirectArgs)
+    if (desc.isIndirectArgs())
       usageFlags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-    if (desc.bIndexBuffer)
+    if (desc.isIndexBuffer())
       usageFlags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    if (desc.bCpuVisible) {
+    if (desc.isCpuVisible()) {
       allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
       allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
       usageFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
@@ -95,19 +95,54 @@ Project::Project(
           structdef.size * desc.elemCount,
           usageFlags,
           allocInfo));
-      if (desc.bCpuVisible) {
-        void* pMapped = bufCollection.back().mapMemory();
-        memset(pMapped, 0, structdef.size * desc.elemCount);
-        bufCollection.back().unmapMemory();
-      } else {
-        vkCmdFillBuffer(
-            commandBuffer,
-            bufCollection.back().getBuffer(),
-            0,
-            structdef.size * desc.elemCount,
-            0);
+      if (!desc.shouldSkipZeroInit()) {
+        if (desc.isCpuVisible()) {
+          void* pMapped = bufCollection.back().mapMemory();
+          memset(pMapped, 0, structdef.size * desc.elemCount);
+          bufCollection.back().unmapMemory();
+        } else {
+          vkCmdFillBuffer(
+              commandBuffer,
+              bufCollection.back().getBuffer(),
+              0,
+              structdef.size * desc.elemCount,
+              0);
+        }
       }
     }
+  }
+
+  for (ParsedFlr::BufferFile& bufferFile : m_parsed.m_bufferFiles) {
+    const ParsedFlr::BufferDesc& desc =
+        m_parsed.m_buffers[bufferFile.bufferIdx];
+    const ParsedFlr::StructDef& structdef =
+        m_parsed.m_structDefs[desc.structIdx];
+    auto& buf = m_buffers[bufferFile.bufferIdx][0];
+
+    size_t bufSize = structdef.size * desc.elemCount;
+    assert(bufSize == bufferFile.data.size());
+
+    if (desc.isCpuVisible()) {
+      void* pMapped = buf.mapMemory();
+      memcpy(pMapped, bufferFile.data.data(), bufSize);
+      buf.unmapMemory();
+    } else {
+      VkBuffer staging = commandBuffer.createStagingBuffer(
+          *GApplication,
+          gsl::span<const std::byte>(
+              (const std::byte*)bufferFile.data.data(),
+              bufSize));
+      BufferUtilities::copyBuffer(
+          commandBuffer,
+          staging,
+          0,
+          buf.getBuffer(),
+          0,
+          bufSize);
+    }
+
+    // delete the cpu copy after upload
+    bufferFile.data.clear();
   }
 
   m_images.reserve(m_parsed.m_images.size());
@@ -456,19 +491,21 @@ Project::Project(
         assert(draw.param0 >= 0);
         builder.addVertexInputBinding<ObjVertex>();
         builder.addVertexAttribute(
-            VertexAttributeType::VEC3,
+            VertexAttributeType::VEC4,
             offsetof(ObjVertex, position));
         builder.addVertexAttribute(
-            VertexAttributeType::VEC3,
+            VertexAttributeType::VEC4,
             offsetof(ObjVertex, normal));
         builder.addVertexAttribute(
-            VertexAttributeType::VEC2,
+            VertexAttributeType::VEC4,
             offsetof(ObjVertex, uvs));
       }
 
       {
         ShaderDefines defs{};
         defs.emplace("IS_VERTEX_SHADER", "");
+        if (draw.drawMode == ParsedFlr::DM_DRAW_OBJ)
+          defs.emplace("IS_OBJ_SHADER", "");
         defs.emplace(std::string("_ENTRY_POINT_") + draw.vertexShader, "");
         if (m_parsed.m_language == SHADER_LANGUAGE_HLSL)
           defs.emplace(draw.vertexShader, "main");
@@ -481,6 +518,8 @@ Project::Project(
       {
         ShaderDefines defs{};
         defs.emplace("IS_PIXEL_SHADER", "");
+        if (draw.drawMode == ParsedFlr::DM_DRAW_OBJ)
+          defs.emplace("IS_OBJ_SHADER", "");
         defs.emplace(std::string("_ENTRY_POINT_") + draw.pixelShader, "");
         defs.emplace(pass.name, "");
         builder.addFragmentShader(
@@ -924,7 +963,7 @@ void Project::executeTaskList(
               pass.getDrawContext().bindVertexBuffer(obj.m_vertices);
               pass.getDrawContext().drawIndexed(
                   mesh.m_indices.getIndexCount(),
-                  1);
+                  draw.param1);
             }
             break;
           }
@@ -1026,9 +1065,7 @@ void Project::draw(VkCommandBuffer commandBuffer, const FrameContext& frame) {
   if (m_pendingSaveBuffer) {
     auto& buf = m_buffers[m_pendingSaveBuffer->bufferIdx];
     // TODO support saving buffer heap...
-    assert(buf.size() == 0);
-    // TODO:
-    // TODO: assumes r8g8b8a8_unorm, generalize
+    assert(buf.size() == 1);
     const auto& desc = m_parsed.m_buffers[m_pendingSaveBuffer->bufferIdx];
     const auto& s = m_parsed.m_structDefs[desc.structIdx];
     size_t byteSize = s.size * desc.elemCount;
@@ -1050,13 +1087,50 @@ void Project::draw(VkCommandBuffer commandBuffer, const FrameContext& frame) {
     copy.regionCount = 1;
     copy.pNext = nullptr;
 
-    // TODO: barrier src ...
+    VkBufferMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    barrier.buffer = buf[0].getBuffer();
+    barrier.offset = 0;
+    barrier.size = byteSize;
+    barrier.srcAccessMask =
+        VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+    VkPipelineStageFlags srcStage = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+    VkPipelineStageFlags dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        srcStage,
+        dstStage,
+        0,
+        0,
+        nullptr,
+        1,
+        &barrier,
+        0,
+        nullptr);
+
     vkCmdCopyBuffer2(commandBuffer, &copy);
 
-    // TODO: barrier dst ...
+    std::swap(barrier.srcAccessMask, barrier.dstAccessMask);
+    std::swap(srcStage, dstStage);
+
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        srcStage,
+        dstStage,
+        0,
+        0,
+        nullptr,
+        1,
+        &barrier,
+        0,
+        nullptr);
 
     GApplication->addDeletiontask(
-        {[pStaging, byteSize, fileName = m_pendingSaveImage->m_saveFileName]() {
+        {[pStaging,
+          byteSize,
+          fileName = m_pendingSaveBuffer->m_saveFileName]() {
            void* pMapped = pStaging->mapMemory();
            Utilities::writeFile(
                fileName,
@@ -1279,16 +1353,18 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
 
       if (parsedBuf.bufferCount == 1) {
         CODE_APPEND(
-            "layout(set=1,binding=%u) buffer BUFFER_%s {  %s %s[]; };\n",
+            "layout(set=1,binding=%u) %sbuffer BUFFER_%s {  %s %s[]; };\n",
             slot++,
+            parsedBuf.isReadOnly() ? "readonly " : "",
             parsedBuf.name.c_str(),
             structdef.name.c_str(),
             parsedBuf.name.c_str());
       } else {
         CODE_APPEND(
-            "layout(set=1,binding=%u) buffer BUFFER_%s {  %s _INNER_%s[]; } "
+            "layout(set=1,binding=%u) %sbuffer BUFFER_%s {  %s _INNER_%s[]; } "
             "_HEAP_%s [%u];\n",
             slot++,
+            parsedBuf.isReadOnly() ? "readonly " : "",
             parsedBuf.name.c_str(),
             structdef.name.c_str(),
             parsedBuf.name.c_str(),
@@ -1455,10 +1531,13 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
               "layout(location = 0) out %s _VERTEX_OUTPUT;\n",
               m_parsed.m_structDefs[draw.vertexOutputStructIdx].name.c_str());
           CODE_APPEND(
-              "void main() { _VERTEX_OUTPUT = %s(); }\n",
-              draw.vertexShader.c_str());
+              "void main() { _VERTEX_OUTPUT = %s(%s); }\n",
+              draw.vertexShader.c_str(),
+              (draw.drawMode == ParsedFlr::DM_DRAW_OBJ) ? "FS_ObjVertex()" : "");
         } else {
-          CODE_APPEND("void main() { %s(); }\n", draw.vertexShader.c_str());
+          CODE_APPEND("void main() { %s(%s); }\n", 
+            draw.vertexShader.c_str(),
+            (draw.drawMode == ParsedFlr::DM_DRAW_OBJ) ? "FS_ObjVertex()" : "");
         }
         CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.vertexShader.c_str());
       }
@@ -1543,8 +1622,9 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
 
       if (parsedBuf.bufferCount == 1) {
         CODE_APPEND(
-            "[[vk::binding(%u, 1)]] RWStructuredBuffer<%s> %s;\n",
+            "[[vk::binding(%u, 1)]] %sStructuredBuffer<%s> %s;\n",
             slot++,
+            parsedBuf.isReadOnly() ? "" : "RW",
             structdef.name.c_str(),
             parsedBuf.name.c_str());
       } else {
@@ -1665,12 +1745,10 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
     CODE_APPEND(
         "[[vk::binding(%u, 1)]] StructuredBuffer<ObjVertex> %s_vertices;\n",
         slot++,
-        objName.c_str(),
         objName.c_str());
     CODE_APPEND(
         "[[vk::binding(%u, 1)]] Buffer<uint> %s_indices;\n",
         slot++,
-        objName.c_str(),
         objName.c_str());
   }
 

@@ -4,7 +4,7 @@
 // NOTE depends on including SimpleSky.flrh in flr file
 
 vec2 dirToPolar(vec3 dir) {
-    float yaw = atan(dir.z, dir.x) - PI;
+    float yaw = atan(dir.z, dir.x);
     float pitch = -atan(dir.y, length(dir.xz));
     return vec2(0.5 * yaw, pitch) / PI + 0.5;
 }
@@ -12,7 +12,6 @@ vec2 dirToPolar(vec3 dir) {
 vec3 polarToDir(vec2 p) {
   p -= 0.5.xx;
   p *= PI * vec2(2.0, -1.0);
-  p.x += PI;
   vec3 dir;
   dir.y = sin(p.y);
   float dirxzmag = cos(p.y);

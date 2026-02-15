@@ -55,6 +55,18 @@ vec2 VS_Circle(uint vertexIdx, vec2 pos, float radius, uint circleVerts) {
   return pos;
 }
 
+#ifdef IS_OBJ_SHADER
+layout(location = 0) in vec4 _inPosition;
+layout(location = 1) in vec4 _inNormal;
+layout(location = 2) in vec4 _inUvs;
+ObjVertex FS_ObjVertex() {
+  ObjVertex v;
+  v.position = _inPosition;
+  v.normal = _inNormal;
+  v.uvs = _inUvs;
+  return v;
+}
+#endif // IS_OBJ_SHADER
 #endif // IS_VERTEX_SHADER
 
 float wave(float a, float b) {

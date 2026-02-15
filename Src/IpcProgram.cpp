@@ -268,7 +268,7 @@ void assembleEstablishmentPacket(Project* project, char* outStream, size_t strea
   for (uint32_t bidx = 0; bidx < parsed.m_buffers.size(); bidx++) {
     const ParsedFlr::BufferDesc& buf = parsed.m_buffers[bidx];
     const ParsedFlr::StructDef& str = parsed.m_structDefs[buf.structIdx];
-    uint32_t bufType = buf.bCpuVisible ? 1u : 0u;
+    uint32_t bufType = buf.isCpuVisible() ? 1u : 0u;
     uint32_t bufSize = buf.elemCount * str.size;
     uint32_t cmd[] = {FMT_BUFFER, bidx, bufSize, buf.bufferCount, bufType};
     writer.serialize(cmd, 20);
