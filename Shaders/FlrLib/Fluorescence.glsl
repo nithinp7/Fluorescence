@@ -85,3 +85,37 @@ double wave(double a, double b) {
 double wave(double a, double b, double bottom, double top) {
   return wave(float(a), float(b), float(bottom), float(top));
 }
+
+float saturate(float f) { 
+  return min(max(f, 0.0), 1.0);
+}
+
+vec2 saturate(vec2 f) { 
+  return min(max(f, 0.0), 1.0);
+}
+
+vec3 saturate(vec3 f) { 
+  return min(max(f, 0.0), 1.0);
+}
+
+vec4 saturate(vec4 f) { 
+  return min(max(f, 0.0), 1.0);
+}
+
+#define lerp mix
+float unlerp(float a, float b, float c) {
+  return saturate((c - a) / (b - a));
+}
+
+bool isPressed(uint inputFlags) {
+  return (uniforms.inputMask & inputFlags) == inputFlags;
+}
+
+vec3 acesTonemap(vec3 color) {
+  float a = 2.51f;
+  float b = 0.03f;
+  float c = 2.43f;
+  float d = 0.59f;
+  float e = 0.14f;
+  return  saturate((color*(a*color+b))/(color*(c*color+d)+e));
+}

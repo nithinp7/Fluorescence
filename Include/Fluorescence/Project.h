@@ -117,7 +117,7 @@ public:
 
   bool hasRecompileFailed() const { return m_failedShaderCompile; }
 
-  const char* getShaderCompileErrors() const { return m_shaderCompileErrMsg; }
+  const char* getShaderCompileErrors() const { return m_shaderCompileErrMsg.c_str(); }
 
   void tryRecompile();
 
@@ -225,6 +225,6 @@ private:
   bool m_bFirstDraw;
 
   bool m_failedShaderCompile;
-  char m_shaderCompileErrMsg[2048];
+  std::string m_shaderCompileErrMsg;
 };
 } // namespace flr

@@ -175,9 +175,11 @@ Project::Project(
 
     ImageViewOptions viewOptions{};
     viewOptions.format = rsc.image.getOptions().format;
+    viewOptions.mipCount = tex.createOptions.mipCount;
     rsc.view = ImageView(*GApplication, rsc.image, viewOptions);
 
     SamplerOptions samplerOptions{};
+    samplerOptions.mipCount = tex.createOptions.mipCount;
     rsc.sampler = Sampler(*GApplication, samplerOptions);
   }
 
@@ -262,7 +264,7 @@ Project::Project(
 
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
     m_cameraController = CameraController(
-        60.0f,
+        m_parsed.m_fov,
         (float)GApplication->getSwapChainExtent().width /
             (float)GApplication->getSwapChainExtent().height);
     m_cameraController.setMaxSpeed(m_parsed.m_maxCameraSpeed);
@@ -433,6 +435,8 @@ Project::Project(
     m_computePipelines.emplace_back(*GApplication, std::move(builder));
   }
 
+  uint32_t drawIdx = 0u;
+
   m_drawPasses.reserve(m_parsed.m_renderPasses.size());
   for (const auto& pass : m_parsed.m_renderPasses) {
     std::vector<SubpassBuilder> subpassBuilders;
@@ -477,6 +481,9 @@ Project::Project(
 
       GraphicsPipelineBuilder& builder = subpass.pipelineBuilder;
 
+      const auto& vsName = m_parsed.m_vertexShaders[draw.vertexShaderIdx].name;
+      const auto& psName = m_parsed.m_pixelShaders[draw.pixelShaderIdx].name;
+
       if (!draw.isDepthDisabled() && depthAttachment)
         subpass.depthAttachment = *depthAttachment;
       else
@@ -486,6 +493,9 @@ Project::Project(
         subpass.pipelineBuilder.setCullMode(VK_CULL_MODE_FRONT_BIT);
       else if (draw.isBackFaceCullingDisabled())
         subpass.pipelineBuilder.setCullMode(VK_CULL_MODE_NONE);
+
+      if (draw.isAlphaBlendingDisabled())
+        subpass.pipelineBuilder.setAlphaBlending(false);
 
       if (draw.drawMode == ParsedFlr::DM_DRAW_OBJ) {
         assert(draw.param0 >= 0);
@@ -506,10 +516,11 @@ Project::Project(
         defs.emplace("IS_VERTEX_SHADER", "");
         if (draw.drawMode == ParsedFlr::DM_DRAW_OBJ)
           defs.emplace("IS_OBJ_SHADER", "");
-        defs.emplace(std::string("_ENTRY_POINT_") + draw.vertexShader, "");
+        defs.emplace(std::string("_ENTRY_POINT_") + vsName, "");
         if (m_parsed.m_language == SHADER_LANGUAGE_HLSL)
-          defs.emplace(draw.vertexShader, "main");
+          defs.emplace(vsName, "main");
         defs.emplace(pass.name, "");
+        defs.emplace(std::string("_PIPELINE_IDX_") + std::to_string(drawIdx), "");
         builder.addVertexShader(
             autoGenFileName.string(),
             defs,
@@ -520,8 +531,9 @@ Project::Project(
         defs.emplace("IS_PIXEL_SHADER", "");
         if (draw.drawMode == ParsedFlr::DM_DRAW_OBJ)
           defs.emplace("IS_OBJ_SHADER", "");
-        defs.emplace(std::string("_ENTRY_POINT_") + draw.pixelShader, "");
+        defs.emplace(std::string("_ENTRY_POINT_") + psName, "");
         defs.emplace(pass.name, "");
+        defs.emplace(std::string("_PIPELINE_IDX_") + std::to_string(drawIdx), "");
         builder.addFragmentShader(
             autoGenFileName.string(),
             defs,
@@ -541,6 +553,8 @@ Project::Project(
           .addDescriptorSet(GGlobalHeap->getDescriptorSetLayout())
           .addDescriptorSet(m_descriptorSets.getLayout())
           .addPushConstants<GenericPush>();
+
+      drawIdx++;
     }
 
     DrawPass& drawPass = m_drawPasses.emplace_back();
@@ -1161,13 +1175,14 @@ void Project::draw(VkCommandBuffer commandBuffer, const FrameContext& frame) {
 
 void Project::tryRecompile() {
   m_failedShaderCompile = false;
-  *m_shaderCompileErrMsg = 0;
+  m_shaderCompileErrMsg = "";
 
   std::string error;
   for (auto& c : m_computePipelines) {
     c.tryRecompile(*GApplication);
     if (c.hasShaderRecompileErrors()) {
-      error += c.getShaderRecompileErrors() + "\n";
+      m_shaderCompileErrMsg = true;
+      m_shaderCompileErrMsg += c.getShaderRecompileErrors() + "\n";
     }
   }
 
@@ -1176,14 +1191,10 @@ void Project::tryRecompile() {
     for (auto& s : p.m_renderPass.getSubpasses()) {
       GraphicsPipeline& g = s.getPipeline();
       if (g.hasShaderRecompileErrors()) {
-        error += g.getShaderRecompileErrors() + "\n";
+        m_shaderCompileErrMsg = true;
+        m_shaderCompileErrMsg += g.getShaderRecompileErrors() + "\n";
       }
     }
-  }
-
-  if (error.size() > 0) {
-    strncpy(m_shaderCompileErrMsg, error.c_str(), error.size());
-    m_failedShaderCompile = true;
   }
 }
 
@@ -1316,7 +1327,7 @@ void Project::loadOptions() {
 void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
   assert(m_parsed.m_language == SHADER_LANGUAGE_GLSL);
 
-  const uint32_t BUF_SIZE = 10000;
+  const uint32_t BUF_SIZE = 20000;
   char* codeBuf = new char[BUF_SIZE];
   size_t codeOffs = 0;
   memset(codeBuf, 0, BUF_SIZE);
@@ -1341,6 +1352,9 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
     if (s.body.size() > 0) // skip dummy structs
       CODE_APPEND("%s;\n\n", s.body.c_str());
   }
+
+  // includes
+  CODE_APPEND("#include <FlrLib/Fluorescence.glsl>\n\n");
 
   // resource declarations
   uint32_t slot = 0;
@@ -1427,9 +1441,6 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
     }
   }
 
-  // includes
-  CODE_APPEND("#include <FlrLib/Fluorescence.glsl>\n\n");
-
   // camera uniforms (references included structs)
   if (m_parsed.isFeatureEnabled(ParsedFlr::FF_PERSPECTIVE_CAMERA)) {
     CODE_APPEND(
@@ -1466,28 +1477,49 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
   // auto-gen pixel shader block, pre-include of user-file
   {
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
+
+    uint32_t drawIdx = 0u;
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
-        CODE_APPEND(
-            "#if defined(_ENTRY_POINT_%s) && "
-            "!defined(_ENTRY_POINT_%s_ATTACHMENTS)\n",
-            draw.pixelShader.c_str(),
-            draw.pixelShader.c_str());
-        CODE_APPEND(
-            "#define _ENTRY_POINT_%s_ATTACHMENTS\n",
-            draw.pixelShader.c_str());
+        CODE_APPEND("#ifdef _PIPELINE_IDX_%u\n", drawIdx);
+        for (const auto& attachmentRef : pass.attachments) {
+          if (attachmentRef.aliasNameIdx >= 0) {
+            CODE_APPEND("#define _ATTACHMENT_%s\n", m_parsed.m_attachmentNames[attachmentRef.aliasNameIdx].name.c_str());
+          }
+        }
+        CODE_APPEND("#endif // defined(_PIPELINE_IDX_%u)\n", drawIdx);
+        drawIdx++;
+      }
+    }
+
+    // all non-active attachments are provided as globals, so the non-active pixel shaders
+    // still compile fine
+    for (const auto& attachment : m_parsed.m_attachmentNames) {
+      CODE_APPEND("#ifndef _ATTACHMENT_%s\n", attachment.name.c_str());
+      CODE_APPEND("vec4 %s;\n", attachment.name.c_str());
+      CODE_APPEND("#endif // not defined(_ATTACHMENT_%s)\n", attachment.name.c_str());
+    }
+
+    drawIdx = 0u;
+    for (const auto& pass : m_parsed.m_renderPasses) {
+      for (const auto& draw : pass.draws) {
+        const auto& psName = m_parsed.m_pixelShaders[draw.pixelShaderIdx].name;
+        CODE_APPEND("#ifdef _PIPELINE_IDX_%u\n", drawIdx);
         uint32_t colorAttachmentIdx = 0;
         for (const auto& attachmentRef : pass.attachments) {
           const auto& img = m_images[attachmentRef.imageIdx];
           if ((img.image.getOptions().usage &
                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
+            assert(attachmentRef.aliasNameIdx >= 0);
             CODE_APPEND(
-                "layout(location = %d) out vec4 %s;\n",
-                colorAttachmentIdx++,
-                attachmentRef.aliasName.c_str());
+              "layout(location = %d) out vec4 %s;\n",
+              colorAttachmentIdx++,
+              m_parsed.m_attachmentNames[attachmentRef.aliasNameIdx].name.c_str());
           }
-        }
-        CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
+        }        
+        CODE_APPEND("#endif // defined(_PIPELINE_IDX_%u)\n", drawIdx);
+
+        drawIdx++;
       }
     }
     CODE_APPEND("#endif // IS_PIXEL_SHADER\n");
@@ -1523,24 +1555,53 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
   // auto-gen vertex shader block, post-include of user-file
   {
     CODE_APPEND("\n\n#ifdef IS_VERTEX_SHADER\n");
+
+    for (const auto& vs : m_parsed.m_vertexShaders) {
+        CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", vs.name.c_str());
+        CODE_APPEND("#define _VERT_OUTPUT_%u\n", vs.vertexOutputStructIdx);
+        CODE_APPEND("#endif // _ENTRY_POINT_%s\n", vs.name.c_str());
+    }
+
+    uint64_t declaredStructsBitset = 0ull;
+    assert(m_parsed.m_structDefs.size() <= 64);
+    for (const auto& vs : m_parsed.m_vertexShaders) {
+      if (vs.vertexOutputStructIdx >= 0 && 
+          (declaredStructsBitset & (1ull << vs.vertexOutputStructIdx)) == 0) {
+        declaredStructsBitset |= 1ull << vs.vertexOutputStructIdx;
+        const auto& s = m_parsed.m_structDefs[vs.vertexOutputStructIdx];
+        CODE_APPEND("#ifdef _VERT_OUTPUT_%u\n", vs.vertexOutputStructIdx);
+        CODE_APPEND("layout(location = 0) out %s _VERTEX_OUTPUT;\n", s.name.c_str());
+        CODE_APPEND("#endif // _VERT_OUTPUT_%u\n", vs.vertexOutputStructIdx);
+      }
+    }
+
+    uint64_t objVertShadersBitset = 0ull;
+    assert(m_parsed.m_vertexShaders.size() <= 64);
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
-        CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", draw.vertexShader.c_str());
-        if (draw.vertexOutputStructIdx >= 0) {
-          CODE_APPEND(
-              "layout(location = 0) out %s _VERTEX_OUTPUT;\n",
-              m_parsed.m_structDefs[draw.vertexOutputStructIdx].name.c_str());
-          CODE_APPEND(
-              "void main() { _VERTEX_OUTPUT = %s(%s); }\n",
-              draw.vertexShader.c_str(),
-              (draw.drawMode == ParsedFlr::DM_DRAW_OBJ) ? "FS_ObjVertex()" : "");
-        } else {
-          CODE_APPEND("void main() { %s(%s); }\n", 
-            draw.vertexShader.c_str(),
-            (draw.drawMode == ParsedFlr::DM_DRAW_OBJ) ? "FS_ObjVertex()" : "");
-        }
-        CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.vertexShader.c_str());
+        if (draw.drawMode == ParsedFlr::DM_DRAW_OBJ)
+          objVertShadersBitset |= 1ull << draw.vertexShaderIdx;
       }
+    }
+
+    for (const auto& vs : m_parsed.m_vertexShaders) {
+      const bool bIsObjVS = objVertShadersBitset & 1ull;
+
+      CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", vs.name.c_str());
+      if (vs.vertexOutputStructIdx >= 0) {
+        CODE_APPEND(
+            "void main() { _VERTEX_OUTPUT = %s(%s); }\n",
+            vs.name.c_str(),
+            bIsObjVS ? "FS_ObjVertex()" : "");
+      } else {
+        CODE_APPEND(
+          "void main() { %s(%s); }\n", 
+          vs.name.c_str(),
+          bIsObjVS ? "FS_ObjVertex()" : "");
+      }
+      CODE_APPEND("#endif // _ENTRY_POINT_%s\n", vs.name.c_str());
+
+      objVertShadersBitset >>= 1ull;
     }
     CODE_APPEND("#endif // IS_VERTEX_SHADER\n");
   }
@@ -1548,29 +1609,19 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
   // auto-gen pixel shader block, post-include of user-file
   {
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
-    for (const auto& pass : m_parsed.m_renderPasses) {
-      for (const auto& draw : pass.draws) {
+    for (const auto& ps : m_parsed.m_pixelShaders) {
+      CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", ps.name.c_str());
+      if (ps.vertexOutputStructIdx >= 0) {
         CODE_APPEND(
-            "#if defined(_ENTRY_POINT_%s) && "
-            "!defined(_ENTRY_POINT_%s_INTERPOLANTS)\n",
-            draw.pixelShader.c_str(),
-            draw.pixelShader.c_str());
+            "layout(location = 0) in %s _VERTEX_INPUT;\n",
+            m_parsed.m_structDefs[ps.vertexOutputStructIdx].name.c_str());
         CODE_APPEND(
-            "#define _ENTRY_POINT_%s_INTERPOLANTS\n",
-            draw.pixelShader.c_str());
-
-        if (draw.vertexOutputStructIdx >= 0) {
-          CODE_APPEND(
-              "layout(location = 0) in %s _VERTEX_INPUT;\n",
-              m_parsed.m_structDefs[draw.vertexOutputStructIdx].name.c_str());
-          CODE_APPEND(
-              "void main() { %s(_VERTEX_INPUT); }\n",
-              draw.pixelShader.c_str());
-        } else {
-          CODE_APPEND("void main() { %s(); }\n", draw.pixelShader.c_str());
-        }
-        CODE_APPEND("#endif // _ENTRY_POINT_%s\n", draw.pixelShader.c_str());
+            "void main() { %s(_VERTEX_INPUT); }\n",
+            ps.name.c_str());
+      } else {
+        CODE_APPEND("void main() { %s(); }\n", ps.name.c_str());
       }
+      CODE_APPEND("#endif // _ENTRY_POINT_%s\n", ps.name.c_str());
     }
     CODE_APPEND("#endif // IS_PIXEL_SHADER\n");
   }
@@ -1703,18 +1754,10 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
 
   {
     CODE_APPEND("\n\n#ifdef IS_VERTEX_SHADER\n");
-    for (const auto& pass : m_parsed.m_renderPasses) {
-      for (const auto& draw : pass.draws) {
-        CODE_APPEND(
-            "#if defined(_ENTRY_POINT_%s) && !defined(%s)\n",
-            draw.vertexShader.c_str(),
-            draw.vertexShader.c_str());
-        CODE_APPEND("#define %s main\n", draw.vertexShader.c_str());
-        CODE_APPEND(
-            "#endif // defined(_ENTRY_POINT_%s) && !defined(%s)\n\n",
-            draw.vertexShader.c_str(),
-            draw.vertexShader.c_str());
-      }
+    for (const auto& vs : m_parsed.m_vertexShaders) {
+      CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", vs.name.c_str());
+      CODE_APPEND("#define %s main\n", vs.name.c_str());
+      CODE_APPEND("#endif // _ENTRY_POINT_%s\n", vs.name.c_str());
     }
     CODE_APPEND("#endif // IS_VERTEX_SHADER\n\n");
   }
@@ -1755,24 +1798,9 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
   // auto-gen pixel shader block, pre-include of user-file
   {
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
-    for (const auto& pass : m_parsed.m_renderPasses) {
-      for (const auto& attachmentRef : pass.attachments) {
-        const auto& img = m_images[attachmentRef.imageIdx];
-        if ((img.image.getOptions().usage &
-             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
-          CODE_APPEND(
-              "#ifndef _ATTACHMENT_VAR_%s\n",
-              attachmentRef.aliasName.c_str());
-          CODE_APPEND(
-              "#define _ATTACHMENT_VAR_%s\n",
-              attachmentRef.aliasName.c_str());
-          CODE_APPEND("static float4 %s;\n", attachmentRef.aliasName.c_str());
-          CODE_APPEND(
-              "#endif // _ATTACHMENT_VAR_ %s\n",
-              attachmentRef.aliasName.c_str());
-        }
-      }
-    }
+    for (const auto& att : m_parsed.m_attachmentNames)
+      CODE_APPEND("static float4 %s;\n", att.name.c_str());
+
     CODE_APPEND("#endif // IS_PIXEL_SHADER\n");
   }
 
@@ -1784,45 +1812,41 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
 
   {
     CODE_APPEND("\n\n#ifdef IS_PIXEL_SHADER\n");
+    uint32_t drawIdx = 0u;
     for (const auto& pass : m_parsed.m_renderPasses) {
       for (const auto& draw : pass.draws) {
-        CODE_APPEND(
-            "#if defined(_ENTRY_POINT_%s) && !defined(_PS_WRAPPER)\n",
-            draw.pixelShader.c_str());
-        CODE_APPEND("#define _PS_WRAPPER\n");
+        const auto& ps = m_parsed.m_pixelShaders[draw.pixelShaderIdx];
+        CODE_APPEND("#if _PIPELINE_IDX == %u\n", drawIdx);
         CODE_APPEND("struct _PixelOutput {\n");
         uint32_t colorAttachmentIdx = 0;
         for (const auto& attachmentRef : pass.attachments) {
           const auto& img = m_images[attachmentRef.imageIdx];
           if ((img.image.getOptions().usage &
                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
-            CODE_APPEND(
-                "\tfloat4 _%s : SV_Target%u;\n",
-                attachmentRef.aliasName.c_str(),
-                colorAttachmentIdx++);
+            const auto& attName = m_parsed.m_attachmentNames[attachmentRef.aliasNameIdx];
+            CODE_APPEND("\tfloat4 _%s : SV_Target%u;\n", attName.name.c_str(), colorAttachmentIdx++);
           }
         }
         const auto& structdef =
-            m_parsed.m_structDefs[draw.vertexOutputStructIdx];
+            m_parsed.m_structDefs[ps.vertexOutputStructIdx];
         CODE_APPEND("}; // struct _PixelOutput\n");
         CODE_APPEND("_PixelOutput main(%s IN) {\n", structdef.name.c_str());
         CODE_APPEND("\t_PixelOutput OUT;\n");
-        CODE_APPEND("\t%s(IN);\n", draw.pixelShader.c_str());
+        CODE_APPEND("\t%s(IN);\n", ps.name.c_str());
         for (const auto& attachmentRef : pass.attachments) {
           const auto& img = m_images[attachmentRef.imageIdx];
           if ((img.image.getOptions().usage &
                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
-            CODE_APPEND(
-                "\tOUT._%s = %s;\n",
-                attachmentRef.aliasName.c_str(),
-                attachmentRef.aliasName.c_str());
+            assert(attachmentRef.aliasNameIdx >= 0);
+            const auto& attName = m_parsed.m_attachmentNames[attachmentRef.aliasNameIdx].name;
+            CODE_APPEND("\tOUT._%s = %s;\n", attName.c_str(), attName.c_str());
           }
         }
         CODE_APPEND("\treturn OUT;\n");
         CODE_APPEND("}\n");
-        CODE_APPEND(
-            "#endif // defined(_ENTRY_POINT_%s) && !defined(_PS_WRAPPER)\n",
-            draw.pixelShader.c_str());
+        CODE_APPEND("#endif // _PIPELINE_IDX == %u\n", drawIdx);
+
+        drawIdx++;
       }
     }
     CODE_APPEND("#endif // IS_PIXEL_SHADER\n");

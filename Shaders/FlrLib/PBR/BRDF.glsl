@@ -4,6 +4,12 @@
 #include <Misc/Constants.glsl>
 #include <Misc/Sampling.glsl>
 
+float calcFresnel0(float n1, float n2) {
+  float f0 = (n1 - n2) / (n1 + n2);
+  f0 *= f0;
+  return f0;
+}
+
 float phaseFunction(float cosTheta, float g) {
   float g2 = g * g;
   return  
@@ -173,9 +179,10 @@ vec3 evaluateMicrofacetBrdf(
     vec3 F = fresnelSchlick(VdotH, F0, mat.roughness);
     float G = 1.0 / (1.0 + Lambda(NdotV, a) + Lambda(NdotL, a));
 
-    vec3 ggx = D * G * F / (4.0 * NdotV /* NdotL*/);
+    vec3 ggx = (D * G / (4.0 * NdotV /* NdotL*/)).xxx;
+    vec3 diff = mat.diffuse * NdotL / PI;
 
-    return ggx + mat.diffuse * NdotL / PI;
+    return lerp(diff, ggx, F);
 }
 
 #endif // _FLR_BRDF_GLSL_

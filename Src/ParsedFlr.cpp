@@ -91,6 +91,8 @@ ParsedFlr::ParsedFlr(
 
   m_structDefs.push_back({"mat4", "", 64});
 
+  m_structDefs.push_back({"ObjVertex", "", sizeof(ObjVertex)});
+
   struct File {
     File(const char* filename)
         : m_filename(filename), m_stream(filename), m_lineNumber(0) {}
@@ -160,14 +162,36 @@ ParsedFlr::ParsedFlr(
 
     auto constUintResolver =
         [&](std::string_view n) -> std::optional<uint32_t> {
-      return findValueByName<ConstUint, uint32_t, &ConstUint::value>(
-          m_constUints,
-          n);
+      if (auto u = findValueByName<ConstUint, uint32_t, &ConstUint::value>(
+              m_constUints,
+              n))
+        return u;
+
+      if (auto i = findValueByName<ConstInt, int32_t, &ConstInt::value>(
+              m_constInts,
+              n)) {
+        if (*i >= 0)
+          return static_cast<uint32_t>(*i);
+      }
+
+      return std::nullopt;
     };
+
     auto constIntResolver = [&](std::string_view n) -> std::optional<int32_t> {
-      return findValueByName<ConstInt, int32_t, &ConstInt::value>(
-          m_constInts,
-          n);
+      if (auto i = findValueByName<ConstInt, int32_t, &ConstInt::value>(
+              m_constInts,
+              n))
+        return i;
+
+      if (auto u = findValueByName<ConstUint, uint32_t, &ConstUint::value>(
+              m_constUints,
+              n)) {
+        if (*u <= INT_MAX) {
+          return static_cast<int>(*u);
+        }
+      }
+
+      return std::nullopt;
     };
     auto constFloatResolver = [&](std::string_view n) -> std::optional<float> {
       if (auto f = findValueByName<ConstFloat, float, &ConstFloat::value>(
@@ -233,13 +257,22 @@ ParsedFlr::ParsedFlr(
                               uint32_t imageIdx,
                               bool bLoad,
                               bool bStore) {
+      bool bIsDepth = (m_images[imageIdx].createOptions.aspectMask &
+                       VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
+      auto attachmentNameIdx = findIndexByName(m_attachmentNames, aliasName);
+      if (!attachmentNameIdx && aliasName.size() != 0) {
+        attachmentNameIdx = (uint32_t)m_attachmentNames.size();
+        m_attachmentNames.push_back({std::string(aliasName)});
+      }
+
       m_renderPasses.back().attachments.push_back(
-          {std::string(aliasName), (int)imageIdx, bLoad, bStore});
+          {attachmentNameIdx ? (int)attachmentNameIdx.value() : -1,
+           (int)imageIdx,
+           bLoad,
+           bStore});
       m_renderPasses.back().width = m_images[imageIdx].createOptions.width;
       m_renderPasses.back().height = m_images[imageIdx].createOptions.height;
 
-      bool bIsDepth = (m_images[imageIdx].createOptions.aspectMask &
-                       VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
       if (bIsDepth) {
         m_images[imageIdx].createOptions.usage |=
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -327,11 +360,11 @@ ParsedFlr::ParsedFlr(
       p.parseWhitespace();
 
       auto min = parseUintOrVar();
-      PARSER_VERIFY(value, "Could not parse min value for uint slider.");
+      PARSER_VERIFY(min, "Could not parse min value for uint slider.");
       p.parseWhitespace();
 
       auto max = parseUintOrVar();
-      PARSER_VERIFY(value, "Could not parse max value for uint slider.");
+      PARSER_VERIFY(max, "Could not parse max value for uint slider.");
 
       m_uiElements.push_back({UET_SLIDER_UINT, (uint32_t)m_sliderUints.size()});
       m_sliderUints.push_back(
@@ -346,11 +379,11 @@ ParsedFlr::ParsedFlr(
       p.parseWhitespace();
 
       auto min = parseIntOrVar();
-      PARSER_VERIFY(value, "Could not parse min value for int slider.");
+      PARSER_VERIFY(min, "Could not parse min value for int slider.");
       p.parseWhitespace();
 
       auto max = parseIntOrVar();
-      PARSER_VERIFY(value, "Could not parse max value for int slider.");
+      PARSER_VERIFY(max, "Could not parse max value for int slider.");
 
       m_uiElements.push_back({UET_SLIDER_INT, (uint32_t)m_sliderInts.size()});
       m_sliderInts.push_back(
@@ -647,9 +680,9 @@ ParsedFlr::ParsedFlr(
     }
     case I_BUFFER_READONLY: {
       PARSER_VERIFY(
-        m_buffers.size(),
-        "Instruction buffer_readonly must be preceded by structured buffer "
-        "declaration.");
+          m_buffers.size(),
+          "Instruction buffer_readonly must be preceded by structured buffer "
+          "declaration.");
       m_buffers.back().flags |= BF_READONLY;
       break;
     }
@@ -938,6 +971,17 @@ ParsedFlr::ParsedFlr(
       m_renderPasses.back().draws.back().flags |= DF_DISABLE_BACKFACECULL;
       break;
     }
+    case I_DISABLE_ALPHA_BLENDING: {
+      PARSER_VERIFY(
+          m_renderPasses.size() > 0,
+          "Expected render-pass or display-pass declaration to precede "
+          "disable_alpha_blending.");
+      PARSER_VERIFY(
+          m_renderPasses.back().draws.size() > 0,
+          "Expected draw-call to precede disable_alpha_blending");
+      m_renderPasses.back().draws.back().flags |= DF_DISABLE_ALPHA_BLENDING;
+      break;
+    }
     case I_FRONTFACE_CULLING: {
       PARSER_VERIFY(
           m_renderPasses.size() > 0,
@@ -1141,14 +1185,26 @@ ParsedFlr::ParsedFlr(
           instanceCount,
           "Could not parse instanceCount in draw-call declaration.");
 
+      auto vsIdx = findIndexByName(m_vertexShaders, *vertShader);
+      if (!vsIdx) {
+        vsIdx = (uint32_t)m_vertexShaders.size();
+        m_vertexShaders.emplace_back(
+            RenderShader{std::string(*vertShader), -1});
+      }
+      auto psIdx = findIndexByName(m_pixelShaders, *pixelShader);
+      if (!psIdx) {
+        psIdx = (uint32_t)m_pixelShaders.size();
+        m_pixelShaders.emplace_back(
+            RenderShader{std::string(*pixelShader), -1});
+      }
+
       uint32_t renderPassIdx = m_renderPasses.size() - 1;
       m_renderPasses.back().draws.push_back(
-          {std::string(*vertShader),
-           std::string(*pixelShader),
+          {*vsIdx,
+           *psIdx,
            *vertexCount,
            *instanceCount,
            0,
-           -1,
            DM_DRAW,
            AltheaEngine::PrimitiveType::TRIANGLES,
            0.0f,
@@ -1198,14 +1254,26 @@ ParsedFlr::ParsedFlr(
           "Out-of-range subBufferIdx provided to draw_indexed instruction.");
       p.parseWhitespace();
 
+      auto vsIdx = findIndexByName(m_vertexShaders, *vertShader);
+      if (!vsIdx) {
+        vsIdx = (uint32_t)m_vertexShaders.size();
+        m_vertexShaders.emplace_back(
+            RenderShader{std::string(*vertShader), -1});
+      }
+      auto psIdx = findIndexByName(m_pixelShaders, *pixelShader);
+      if (!psIdx) {
+        psIdx = (uint32_t)m_pixelShaders.size();
+        m_pixelShaders.emplace_back(
+            RenderShader{std::string(*pixelShader), -1});
+      }
+
       uint32_t renderPassIdx = m_renderPasses.size() - 1;
       m_renderPasses.back().draws.push_back(
-          {std::string(*vertShader),
-           std::string(*pixelShader),
+          {*vsIdx,
+           *psIdx,
            *instanceCount,
            *bufIdx,
            subBufferIdx,
-           -1,
            DM_DRAW_INDEXED,
            AltheaEngine::PrimitiveType::TRIANGLES,
            0.0f,
@@ -1254,14 +1322,26 @@ ParsedFlr::ParsedFlr(
           subBufferIdx < m_buffers[*bufIdx].bufferCount,
           "Out-of-range subBufferIdx provided to draw_indirect instruction.");
 
+      auto vsIdx = findIndexByName(m_vertexShaders, *vertShader);
+      if (!vsIdx) {
+        vsIdx = (uint32_t)m_vertexShaders.size();
+        m_vertexShaders.emplace_back(
+            RenderShader{std::string(*vertShader), -1});
+      }
+      auto psIdx = findIndexByName(m_pixelShaders, *pixelShader);
+      if (!psIdx) {
+        psIdx = (uint32_t)m_pixelShaders.size();
+        m_pixelShaders.emplace_back(
+            RenderShader{std::string(*pixelShader), -1});
+      }
+
       uint32_t renderPassIdx = m_renderPasses.size() - 1;
       m_renderPasses.back().draws.push_back(
-          {std::string(*vertShader),
-           std::string(*pixelShader),
+          {*vsIdx,
+           *psIdx,
            *bufIdx,
            m_buffers[*bufIdx].elemCount,
            subBufferIdx,
-           -1,
            DM_DRAW_INDIRECT,
            AltheaEngine::PrimitiveType::TRIANGLES,
            0.0f,
@@ -1301,18 +1381,36 @@ ParsedFlr::ParsedFlr(
       p.parseWhitespace();
       auto instanceCount = parseUintOrVar();
 
+      auto vsIdx = findIndexByName(m_vertexShaders, *vertShader);
+      if (!vsIdx) {
+        vsIdx = (uint32_t)m_vertexShaders.size();
+        m_vertexShaders.emplace_back(
+            RenderShader{std::string(*vertShader), -1});
+      }
+      auto psIdx = findIndexByName(m_pixelShaders, *pixelShader);
+      if (!psIdx) {
+        psIdx = (uint32_t)m_pixelShaders.size();
+        m_pixelShaders.emplace_back(
+            RenderShader{std::string(*pixelShader), -1});
+      }
+
       uint32_t renderPassIdx = m_renderPasses.size() - 1;
       m_renderPasses.back().draws.push_back(
-          {std::string(*vertShader),
-           std::string(*pixelShader),
+          {*vsIdx,
+           *psIdx,
            *idx,
            instanceCount ? *instanceCount : 1,
            0,
-           -1,
            DM_DRAW_OBJ,
            AltheaEngine::PrimitiveType::TRIANGLES,
            0.0f,
            DF_NONE});
+      break;
+    }
+    case I_SET_FOV: {
+      auto fov = parseFloatOrVar();
+      PARSER_VERIFY(fov, "You gotta help I forget what you said but somethin wrong");
+      m_fov = *fov;
       break;
     }
     case I_PRIM_TYPE: {
@@ -1359,7 +1457,20 @@ ParsedFlr::ParsedFlr(
           structIdx,
           "Could not parse struct reference in vertex_output declaration.");
 
-      m_renderPasses.back().draws.back().vertexOutputStructIdx = *structIdx;
+      auto& draw = m_renderPasses.back().draws.back();
+      auto& vs = m_vertexShaders[draw.vertexShaderIdx];
+      PARSER_VERIFY(
+          vs.vertexOutputStructIdx == -1 ||
+              vs.vertexOutputStructIdx == (int)*structIdx,
+          "Vertex shader previously declared using a different vertex output");
+      vs.vertexOutputStructIdx = (int)*structIdx;
+
+      auto& ps = m_pixelShaders[draw.pixelShaderIdx];
+      PARSER_VERIFY(
+          ps.vertexOutputStructIdx == -1 ||
+              ps.vertexOutputStructIdx == (int)*structIdx,
+          "Pixel shader previously declared using a different vertex output");
+      ps.vertexOutputStructIdx = (int)*structIdx;
 
       break;
     }
@@ -1509,6 +1620,16 @@ ParsedFlr::ParsedFlr(
 
       m_textures.push_back({std::string(*name), -1, texFileIdx});
 
+      break;
+    }
+    case I_GENERATE_MIPS: {
+      PARSER_VERIFY(
+          m_textureFiles.size() > 0,
+          "generate_mips command needs to follow a texture_file declaration.");
+      auto& texFile = m_textureFiles.back();
+      texFile.createOptions.mipCount = AltheaEngine::Utilities::computeMipCount(
+          texFile.createOptions.width,
+          texFile.createOptions.height);
       break;
     }
     case I_TRANSITION: {
@@ -1675,12 +1796,25 @@ ParsedFlr::ParsedFlr(
   // post-process
   PARSER_VERIFY(m_displayImageIdx >= 0, "Must specify a display_image");
 
+  PARSER_VERIFY(
+      m_vertexShaders.size() <= 64,
+      "Exceeded max unique vertex shader limit of 64");
+  PARSER_VERIFY(
+      m_structDefs.size() <= 64,
+      "Exceeded max struct def count limit of 64");
+  PARSER_VERIFY(
+      m_attachmentNames.size() <= 64,
+      "Exceeded max unique attachment names limit of 64.");
+
   // enforce valid vertex output existence for hlsl
   if (m_language == AltheaEngine::SHADER_LANGUAGE_HLSL) {
     for (auto& pass : m_renderPasses) {
       for (auto& draw : pass.draws) {
+        const auto& vs = m_vertexShaders[draw.vertexShaderIdx];
+        const auto& ps = m_pixelShaders[draw.pixelShaderIdx];
         PARSER_VERIFY(
-            draw.vertexOutputStructIdx >= 0,
+            vs.vertexOutputStructIdx >= 0 &&
+                vs.vertexOutputStructIdx == ps.vertexOutputStructIdx,
             "Found draw call without declared vertex_output - this is not "
             "supported in hlsl mode.");
       }
@@ -1712,6 +1846,7 @@ ParsedFlr::ParsedFlr(
       continue;
 
     AttachmentRef& ref = pass.attachments.emplace_back();
+    ref.aliasNameIdx = -1;
     ref.imageIdx = m_images.size();
     ref.bLoad = false;
     ref.bStore = false;

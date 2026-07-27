@@ -266,12 +266,22 @@ struct ParsedFlr {
     DF_NONE = 0,
     DF_DISABLE_DEPTH = 1 << 0,
     DF_DISABLE_BACKFACECULL = 1 << 1,
-    DF_FRONTFACECULL = 1 << 2
+    DF_FRONTFACECULL = 1 << 2,
+    DF_DISABLE_ALPHA_BLENDING = 1 << 3
   };
+
+  struct RenderShader {
+    std::string name;
+    int vertexOutputStructIdx;
+  };
+  std::vector<RenderShader> m_vertexShaders;
+  std::vector<RenderShader> m_pixelShaders;
+
   struct Draw {
     // TODO: re-usable subpasses that can be used multiple times...
-    std::string vertexShader;
-    std::string pixelShader;
+    uint32_t vertexShaderIdx;
+    uint32_t pixelShaderIdx;
+
     // param0/1/2 are used as follows
     // if drawMode==DM_DRAW: vertexCount, instanceCount, UNUSED
     // if drawMode==DM_DRAW_INDEXED: instanceCount, indexBufferIdx, subBufferIdx(optional)
@@ -280,7 +290,6 @@ struct ParsedFlr {
     uint32_t param0;
     uint32_t param1;
     uint32_t param2;
-    int vertexOutputStructIdx;
     DrawMode drawMode;
     AltheaEngine::PrimitiveType primType;
     float lineWidth;
@@ -289,10 +298,13 @@ struct ParsedFlr {
     bool isDepthDisabled() const { return flags & DF_DISABLE_DEPTH; }
     bool isBackFaceCullingDisabled() const { return flags & DF_DISABLE_BACKFACECULL; }
     bool isFrontFaceCullingEnabled() const { return flags & DF_FRONTFACECULL; }
+    bool isAlphaBlendingDisabled() const { return flags & DF_DISABLE_ALPHA_BLENDING; }
   };
 
+  std::vector<GenericNamedElement> m_attachmentNames;
+
   struct AttachmentRef {
-    std::string aliasName;
+    int aliasNameIdx;
     int imageIdx;
     bool bLoad;
     bool bStore;
@@ -346,6 +358,7 @@ struct ParsedFlr {
       "system_audio_input" // TODO: mic audio input
   };
 
+  float m_fov = 60.0f;
   bool m_failed;
   char m_errMsg[2048];
 
@@ -383,6 +396,7 @@ struct ParsedFlr {
     I_RENDER_PASS,
     I_DISABLE_DEPTH,
     I_DISABLE_BACKFACE_CULLING,
+    I_DISABLE_ALPHA_BLENDING,
     I_FRONTFACE_CULLING,
     I_LOAD_ATTACHMENTS,
     I_STORE_ATTACHMENTS,
@@ -394,6 +408,7 @@ struct ParsedFlr {
     I_DRAW_INDEXED,
     I_DRAW_INDIRECT,
     I_DRAW_OBJ,
+    I_SET_FOV,
     I_PRIM_TYPE,
     I_VERTEX_OUTPUT,
     I_FEATURE,
@@ -401,6 +416,7 @@ struct ParsedFlr {
     I_DEPTH_IMAGE,
     I_TEXTURE_ALIAS,
     I_TEXTURE_FILE,
+    I_GENERATE_MIPS,
     I_TRANSITION,
     I_TASK_BLOCK_START,
     I_TASK_BLOCK_END,
@@ -445,6 +461,7 @@ struct ParsedFlr {
       "render_pass",
       "disable_depth",
       "disable_backface_culling",
+      "disable_alpha_blending",
       "frontface_culling",
       "load_attachments",
       "store_attachments",
@@ -456,6 +473,7 @@ struct ParsedFlr {
       "draw_indexed",
       "draw_indirect",
       "draw_obj",
+      "set_fov",
       "primitive_type",
       "vertex_output",
       "enable_feature",
@@ -463,6 +481,7 @@ struct ParsedFlr {
       "depth_image",
       "texture_alias",
       "texture_file",
+      "generate_mips",
       "transition_layout",
       "task_block_start",
       "task_block_end",
