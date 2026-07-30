@@ -1181,7 +1181,7 @@ void Project::tryRecompile() {
   for (auto& c : m_computePipelines) {
     c.tryRecompile(*GApplication);
     if (c.hasShaderRecompileErrors()) {
-      m_shaderCompileErrMsg = true;
+      m_failedShaderCompile = true;
       m_shaderCompileErrMsg += c.getShaderRecompileErrors() + "\n";
     }
   }
@@ -1191,7 +1191,7 @@ void Project::tryRecompile() {
     for (auto& s : p.m_renderPass.getSubpasses()) {
       GraphicsPipeline& g = s.getPipeline();
       if (g.hasShaderRecompileErrors()) {
-        m_shaderCompileErrMsg = true;
+        m_failedShaderCompile = true;
         m_shaderCompileErrMsg += g.getShaderRecompileErrors() + "\n";
       }
     }
