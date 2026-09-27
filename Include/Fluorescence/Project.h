@@ -9,6 +9,7 @@
 #include <Althea/ComputePipeline.h>
 #include <Althea/FrameContext.h>
 #include <Althea/Framebuffer.h>
+#include <Althea/ImageBasedLighting.h>
 #include <Althea/ImageResource.h>
 #include <Althea/PerFrameResources.h>
 #include <Althea/RenderPass.h>
@@ -171,6 +172,7 @@ private:
   std::vector<VkAccessFlags> m_bufferResourceStates;
   std::vector<ImageResource> m_images;
   std::vector<ImageResource> m_textureFiles;
+  std::vector<AltheaEngine::IBLResources> m_envMaps;
   std::vector<ComputePipeline> m_computePipelines;
 
   struct DrawTask {

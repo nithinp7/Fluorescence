@@ -223,6 +223,10 @@ ParsedFlr::ParsedFlr(
       });
     };
 
+    auto findCondRef = [&](std::string_view n)->std::optional<uint32_t> {
+      return findIndexByName(m_conditions, n);
+    };
+
     auto parseStructRef = [&]() -> std::optional<uint32_t> {
       return p.parseRef<uint32_t>(
           [&](std::string_view n) -> std::optional<uint32_t> {
@@ -282,11 +286,11 @@ ParsedFlr::ParsedFlr(
       }
     };
 
-    auto pushTask = [&](uint32_t idx, TaskType type) {
+    auto pushTask = [&](uint32_t idx, TaskType type, std::optional<uint32_t> cond=std::nullopt) {
       if (bTaskBlockActive)
-        m_taskBlocks.back().tasks.push_back(Task{idx, type});
+        m_taskBlocks.back().tasks.push_back(Task{idx, type, cond});
       else
-        m_taskList.push_back(Task{idx, type});
+        m_taskList.push_back(Task{idx, type, cond});
     };
 
     p.parseWhitespace();
@@ -449,8 +453,8 @@ ParsedFlr::ParsedFlr(
       auto value = p.parseBool();
       PARSER_VERIFY(value, "Could not parse default value for checkbox.");
 
-      m_uiElements.push_back({UET_CHECKBOX, (uint32_t)m_checkboxes.size()});
-      m_checkboxes.push_back({std::string(*name), *value, uiIdx++, nullptr});
+      m_uiElements.push_back({UET_CHECKBOX, (uint32_t)m_conditions.size()});
+      m_conditions.push_back({std::string(*name), *value, uiIdx++, nullptr});
 
       break;
     }
@@ -515,8 +519,8 @@ ParsedFlr::ParsedFlr(
     case I_BUTTON: {
       PARSER_VERIFY(name, "Missing name for button command");
 
-      m_uiElements.push_back({UET_BUTTON, (uint32_t)m_buttons.size()});
-      m_buttons.push_back({std::string(*name), uiIdx++, nullptr});
+      m_uiElements.push_back({UET_BUTTON, (uint32_t)m_conditions.size()});
+      m_conditions.push_back({std::string(*name), false, uiIdx++, nullptr});
       break;
     }
     case I_SEPARATOR: {
@@ -545,8 +549,9 @@ ParsedFlr::ParsedFlr(
       while (true) {
         bool breakOuter = false;
         while (*p.c) {
-          if (*p.c == '}') {
-            ++p.c;
+          if (p.parseChar('}')) {
+            p.parseWhitespace();
+            p.parseChar(';');
             breakOuter = true;
             break;
           }
@@ -663,10 +668,19 @@ ParsedFlr::ParsedFlr(
           bufferFile.data.size() > 0,
           "Could not load specified buffer file.");
       const auto& structDef = m_structDefs[m_buffers.back().structIdx];
-      size_t bufSize = structDef.size * m_buffers.back().elemCount;
-      PARSER_VERIFY(
-          bufferFile.data.size() == bufSize,
+      size_t structSize = structDef.size;
+      size_t prevElemCount = m_buffers.back().elemCount;
+      size_t prevBufSize = structDef.size * m_buffers.back().elemCount;
+      
+      if (prevElemCount == 0) {
+        PARSER_VERIFY((bufferFile.data.size() % structSize) == 0, "Loaded buffer size is not aligned to the element struct size.");
+        m_buffers.back().elemCount = bufferFile.data.size() / structSize;
+      }
+      else {
+        PARSER_VERIFY(
+          bufferFile.data.size() == prevBufSize,
           "Unexpected size of loaded file in buffer_file instruction.");
+      }
       m_buffers.back().flags |= BF_SKIP_ZERO_INIT;
       break;
     }
@@ -1560,9 +1574,9 @@ ParsedFlr::ParsedFlr(
           "Could not find preceding image declaration before texture_alias "
           "declaration.");
 
-      int imageIdx = m_images.size() - 1;
+      uint32_t imageIdx = m_images.size() - 1;
       m_images[imageIdx].createOptions.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-      m_textures.push_back({std::string(*name), imageIdx, -1});
+      m_textures.push_back({std::string(*name), imageIdx, TT_IMAGE});
 
       break;
     }
@@ -1594,7 +1608,7 @@ ParsedFlr::ParsedFlr(
           Utilities::checkFileExists(pathStr),
           "Could not find specified texture file.");
 
-      int texFileIdx = m_textureFiles.size();
+      uint32_t texFileIdx = m_textureFiles.size();
       auto& texFile = m_textureFiles.emplace_back();
       if (bHdr) {
         Utilities::loadHdri(pathStr, texFile.loadedImage);
@@ -1618,8 +1632,28 @@ ParsedFlr::ParsedFlr(
 
       assert(texFile.loadedImage.channels == 4);
 
-      m_textures.push_back({std::string(*name), -1, texFileIdx});
+      m_textures.push_back({std::string(*name), texFileIdx, TT_FILE});
 
+      break;
+    }
+    case I_ENVIRONMENT_MAP: {
+      PARSER_VERIFY(name, "Could not parse environment_map name");
+
+      auto path = p.parseStringLiteral();
+      PARSER_VERIFY(path, "Could not parse environment_map path.");
+
+      std::string pathStr(*path);
+      PARSER_VERIFY(
+        Utilities::checkFileExists(pathStr),
+        "Could not find specified environment map.");
+
+      std::filesystem::path envMapPath(pathStr);
+      std::string envMapName = envMapPath.stem().string();
+      uint32_t envMapIdx = static_cast<uint32_t>(m_envMaps.size());
+      m_textures.push_back({ std::string(*name), envMapIdx, TT_ENV_MAP});
+      m_textures.push_back({ std::string(*name) + "_irradiance", envMapIdx, TT_ENV_MAP_IRR});
+      m_textures.push_back({ std::string(*name) + "_prefiltered", envMapIdx, TT_ENV_MAP_PREF });
+      m_envMaps.push_back(pathStr);
       break;
     }
     case I_GENERATE_MIPS: {
@@ -1723,7 +1757,17 @@ ParsedFlr::ParsedFlr(
             taskIdx < (m_taskBlocks.size() - 1),
             "A task block cannot be invoked within itself, invalid usage of "
             "run_task");
-      pushTask(*taskIdx, TT_TASK);
+      p.parseWhitespace();
+      // optional condition
+      if (auto condName = p.parseName()) {
+        auto cond = findCondRef(*condName);
+        PARSER_VERIFY(cond, "Could not resolve condition specified in run_task instruction");
+        pushTask(*taskIdx, TT_TASK, cond);
+      }
+      else
+      {
+        pushTask(*taskIdx, TT_TASK);
+      }
       break;
     };
     case I_INITIALIZATION_TASK: {
@@ -1790,6 +1834,10 @@ ParsedFlr::ParsedFlr(
     // the instruction needs to consume the arrayCount and set it to nullopt, if
     // it is valid
     PARSER_VERIFY(!arrayCount, "Array syntax not valid for this instruction.");
+    
+    p.parseWhitespace();
+    PARSER_VERIFY(!*p.c, "Unexpected token at end-of-line");
+
     instrIdx++;
   }
 

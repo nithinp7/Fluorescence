@@ -22,3 +22,5 @@ struct IndirectDispatch {
   uint groupCountZ;
 }
 struct_size: 12
+
+texture_file ggxBrdfLUT: "C:/Users/nithi/Documents/Code/Fluorescence/Extern/Althea/Content/PrecomputedMaps/brdf_lut.png"

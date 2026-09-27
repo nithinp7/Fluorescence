@@ -41,6 +41,7 @@ Project::Project(
       m_parsed(*GApplication, projPath, params),
       m_buffers(),
       m_images(),
+      m_envMaps(),
       m_computePipelines(),
       m_drawPasses(),
       m_descriptorSets(),
@@ -63,6 +64,7 @@ Project::Project(
 
   std::filesystem::path projName = m_projPath.stem();
   std::filesystem::path folder = m_projPath.parent_path();
+  std::filesystem::path localCacheFolder(folder.string() + "/_cache/");
 
   m_buffers.reserve(m_parsed.m_buffers.size());
   for (const ParsedFlr::BufferDesc& desc : m_parsed.m_buffers) {
@@ -183,6 +185,17 @@ Project::Project(
     rsc.sampler = Sampler(*GApplication, samplerOptions);
   }
 
+  m_envMaps.reserve(m_parsed.m_envMaps.size());
+  for (const std::string& envMapPathStr : m_parsed.m_envMaps) {
+    // TODO need graceful error handling here...
+    m_envMaps.emplace_back() =
+        AltheaEngine::ImageBasedLighting::createResources(
+            *GApplication,
+            commandBuffer,
+            envMapPathStr,
+            localCacheFolder.string());
+  }
+
   m_objModels.reserve(m_parsed.m_objModels.size());
   for (const auto& m : m_parsed.m_objModels) {
     auto& obj = m_objModels.emplace_back();
@@ -200,15 +213,14 @@ Project::Project(
   m_bHasDynamicData =
       !m_parsed.m_sliderUints.empty() || !m_parsed.m_sliderInts.empty() ||
       !m_parsed.m_sliderFloats.empty() || !m_parsed.m_colorPickers.empty() ||
-      !m_parsed.m_checkboxes.empty() || !m_parsed.m_buttons.empty();
+      !m_parsed.m_conditions.empty();
   if (m_bHasDynamicData) {
     size_t size = 0;
     size += 16 * m_parsed.m_colorPickers.size();
     size += 4 * m_parsed.m_sliderUints.size();
     size += 4 * m_parsed.m_sliderInts.size();
     size += 4 * m_parsed.m_sliderFloats.size();
-    size += 4 * m_parsed.m_checkboxes.size();
-    size += 4 * m_parsed.m_buttons.size();
+    size += 4 * m_parsed.m_conditions.size();
     if (size % 64) {
       size += 64 - (size % 64);
     }
@@ -243,16 +255,10 @@ Project::Project(
       *fslider.pValue = fslider.defaultValue;
       offset += 4;
     }
-    for (auto& checkbox : m_parsed.m_checkboxes) {
-      checkbox.pValue =
+    for (auto& cond : m_parsed.m_conditions) {
+      cond.pValue =
           reinterpret_cast<uint32_t*>(m_dynamicDataBuffer.data() + offset);
-      *checkbox.pValue = (uint32_t)checkbox.defaultValue;
-      offset += 4; // bools are 32bit in glsl
-    }
-    for (auto& button : m_parsed.m_buttons) {
-      button.pValue =
-          reinterpret_cast<uint32_t*>(m_dynamicDataBuffer.data() + offset);
-      *button.pValue = 0u;
+      *cond.pValue = (uint32_t)cond.defaultValue;
       offset += 4; // bools are 32bit in glsl
     }
 
@@ -362,15 +368,37 @@ Project::Project(
     for (int i = 0; i < m_parsed.m_textures.size(); ++i) {
       const auto& txDesc = m_parsed.m_textures[i];
 
-      if (txDesc.imageIdx >= 0) {
-        const auto& rsc = m_images[txDesc.imageIdx];
+      switch (txDesc.type) {
+      case ParsedFlr::TT_IMAGE: {
+        const auto& rsc = m_images[txDesc.idx];
         assign.bindTexture(rsc);
-      } else if (txDesc.texFileIdx >= 0) {
-        const auto& rsc = m_textureFiles[txDesc.texFileIdx];
-        assign.bindTexture(rsc);
-      } else {
-        assert(false);
+        break;
       }
+      case ParsedFlr::TT_FILE: {
+        const auto& rsc = m_textureFiles[txDesc.idx];
+        assign.bindTexture(rsc);
+        break;
+      }
+      case ParsedFlr::TT_ENV_MAP: {
+        // TODO need to make brdf LUT available, maybe globally in fluorescence
+        // it's kind of awkward that it is embedded within ImageBasedResouces struct
+        const auto& rsc = m_envMaps[txDesc.idx];
+        assign.bindTexture(rsc.environmentMap);
+        break;
+      }
+      case ParsedFlr::TT_ENV_MAP_IRR: {
+        const auto& rsc = m_envMaps[txDesc.idx];
+        assign.bindTexture(rsc.irradianceMap);
+        break;
+      }
+      case ParsedFlr::TT_ENV_MAP_PREF: {
+        const auto& rsc = m_envMaps[txDesc.idx];
+        assign.bindTexture(rsc.prefilteredMap);
+        break;
+      }
+      default:
+        assert(false);
+      };
     }
 
     if (m_bHasDynamicData)
@@ -520,7 +548,9 @@ Project::Project(
         if (m_parsed.m_language == SHADER_LANGUAGE_HLSL)
           defs.emplace(vsName, "main");
         defs.emplace(pass.name, "");
-        defs.emplace(std::string("_PIPELINE_IDX_") + std::to_string(drawIdx), "");
+        defs.emplace(
+            std::string("_PIPELINE_IDX_") + std::to_string(drawIdx),
+            "");
         builder.addVertexShader(
             autoGenFileName.string(),
             defs,
@@ -533,7 +563,9 @@ Project::Project(
           defs.emplace("IS_OBJ_SHADER", "");
         defs.emplace(std::string("_ENTRY_POINT_") + psName, "");
         defs.emplace(pass.name, "");
-        defs.emplace(std::string("_PIPELINE_IDX_") + std::to_string(drawIdx), "");
+        defs.emplace(
+            std::string("_PIPELINE_IDX_") + std::to_string(drawIdx),
+            "");
         builder.addFragmentShader(
             autoGenFileName.string(),
             defs,
@@ -663,7 +695,7 @@ void Project::tick(const FrameContext& frame) {
             break;
           }
           case ParsedFlr::UET_CHECKBOX: {
-            const auto& checkbox = m_parsed.m_checkboxes[ui.idx];
+            const auto& checkbox = m_parsed.m_conditions[ui.idx];
             ImGui::Text(checkbox.name.c_str());
             sprintf(nameBuf, "##%s_%u", checkbox.name.c_str(), ui.idx);
             bool bValue = (bool)*checkbox.pValue;
@@ -745,7 +777,7 @@ void Project::tick(const FrameContext& frame) {
             char buf[256];
             sprintf(
                 buf,
-                "Run Task: %s",
+                "%s",
                 m_parsed.m_taskBlocks[taskButton.taskBlockIdx].name.c_str());
             if (ImGui::Button(buf))
               m_pendingTaskBlockExecs.push_back(taskButton.taskBlockIdx);
@@ -753,7 +785,7 @@ void Project::tick(const FrameContext& frame) {
             break;
           }
           case ParsedFlr::UET_BUTTON: {
-            const auto& button = m_parsed.m_buttons[ui.idx];
+            const auto& button = m_parsed.m_conditions[ui.idx];
             sprintf(
                 nameBuf,
                 "%s##%s_%u",
@@ -861,6 +893,9 @@ void Project::executeTaskList(
       m_descriptorSets.getCurrentDescriptorSet(frame)};
 
   for (const auto& task : tasks) {
+    if (task.cond && !*m_parsed.m_conditions[*task.cond].pValue)
+      continue;
+
     switch (task.type) {
     case ParsedFlr::TT_COMPUTE: {
       const auto& dispatch = m_parsed.m_computeDispatches[task.idx];
@@ -1406,7 +1441,7 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
 
     for (int i = 0; i < m_parsed.m_textures.size(); ++i) {
       const auto& txDesc = m_parsed.m_textures[i];
-      assert(txDesc.imageIdx >= 0 || txDesc.texFileIdx >= 0);
+      assert(txDesc.idx >= 0);
       CODE_APPEND(
           "layout(set=1,binding=%u) uniform sampler2D %s;\n",
           slot++,
@@ -1430,11 +1465,8 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
       for (const auto& fslider : m_parsed.m_sliderFloats) {
         CODE_APPEND("\tfloat %s;\n", fslider.name.c_str());
       }
-      for (const auto& checkbox : m_parsed.m_checkboxes) {
-        CODE_APPEND("\tbool %s;\n", checkbox.name.c_str());
-      }
-      for (const auto& button : m_parsed.m_buttons) {
-        CODE_APPEND("\tbool %s;\n", button.name.c_str());
+      for (const auto& cond : m_parsed.m_conditions) {
+        CODE_APPEND("\tbool %s;\n", cond.name.c_str());
       }
 
       CODE_APPEND("};\n\n");
@@ -1484,7 +1516,10 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
         CODE_APPEND("#ifdef _PIPELINE_IDX_%u\n", drawIdx);
         for (const auto& attachmentRef : pass.attachments) {
           if (attachmentRef.aliasNameIdx >= 0) {
-            CODE_APPEND("#define _ATTACHMENT_%s\n", m_parsed.m_attachmentNames[attachmentRef.aliasNameIdx].name.c_str());
+            CODE_APPEND(
+                "#define _ATTACHMENT_%s\n",
+                m_parsed.m_attachmentNames[attachmentRef.aliasNameIdx]
+                    .name.c_str());
           }
         }
         CODE_APPEND("#endif // defined(_PIPELINE_IDX_%u)\n", drawIdx);
@@ -1492,12 +1527,14 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
       }
     }
 
-    // all non-active attachments are provided as globals, so the non-active pixel shaders
-    // still compile fine
+    // all non-active attachments are provided as globals, so the non-active
+    // pixel shaders still compile fine
     for (const auto& attachment : m_parsed.m_attachmentNames) {
       CODE_APPEND("#ifndef _ATTACHMENT_%s\n", attachment.name.c_str());
       CODE_APPEND("vec4 %s;\n", attachment.name.c_str());
-      CODE_APPEND("#endif // not defined(_ATTACHMENT_%s)\n", attachment.name.c_str());
+      CODE_APPEND(
+          "#endif // not defined(_ATTACHMENT_%s)\n",
+          attachment.name.c_str());
     }
 
     drawIdx = 0u;
@@ -1512,11 +1549,12 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
             assert(attachmentRef.aliasNameIdx >= 0);
             CODE_APPEND(
-              "layout(location = %d) out vec4 %s;\n",
-              colorAttachmentIdx++,
-              m_parsed.m_attachmentNames[attachmentRef.aliasNameIdx].name.c_str());
+                "layout(location = %d) out vec4 %s;\n",
+                colorAttachmentIdx++,
+                m_parsed.m_attachmentNames[attachmentRef.aliasNameIdx]
+                    .name.c_str());
           }
-        }        
+        }
         CODE_APPEND("#endif // defined(_PIPELINE_IDX_%u)\n", drawIdx);
 
         drawIdx++;
@@ -1557,20 +1595,22 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
     CODE_APPEND("\n\n#ifdef IS_VERTEX_SHADER\n");
 
     for (const auto& vs : m_parsed.m_vertexShaders) {
-        CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", vs.name.c_str());
-        CODE_APPEND("#define _VERT_OUTPUT_%u\n", vs.vertexOutputStructIdx);
-        CODE_APPEND("#endif // _ENTRY_POINT_%s\n", vs.name.c_str());
+      CODE_APPEND("#ifdef _ENTRY_POINT_%s\n", vs.name.c_str());
+      CODE_APPEND("#define _VERT_OUTPUT_%u\n", vs.vertexOutputStructIdx);
+      CODE_APPEND("#endif // _ENTRY_POINT_%s\n", vs.name.c_str());
     }
 
     uint64_t declaredStructsBitset = 0ull;
     assert(m_parsed.m_structDefs.size() <= 64);
     for (const auto& vs : m_parsed.m_vertexShaders) {
-      if (vs.vertexOutputStructIdx >= 0 && 
+      if (vs.vertexOutputStructIdx >= 0 &&
           (declaredStructsBitset & (1ull << vs.vertexOutputStructIdx)) == 0) {
         declaredStructsBitset |= 1ull << vs.vertexOutputStructIdx;
         const auto& s = m_parsed.m_structDefs[vs.vertexOutputStructIdx];
         CODE_APPEND("#ifdef _VERT_OUTPUT_%u\n", vs.vertexOutputStructIdx);
-        CODE_APPEND("layout(location = 0) out %s _VERTEX_OUTPUT;\n", s.name.c_str());
+        CODE_APPEND(
+            "layout(location = 0) out %s _VERTEX_OUTPUT;\n",
+            s.name.c_str());
         CODE_APPEND("#endif // _VERT_OUTPUT_%u\n", vs.vertexOutputStructIdx);
       }
     }
@@ -1595,9 +1635,9 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
             bIsObjVS ? "FS_ObjVertex()" : "");
       } else {
         CODE_APPEND(
-          "void main() { %s(%s); }\n", 
-          vs.name.c_str(),
-          bIsObjVS ? "FS_ObjVertex()" : "");
+            "void main() { %s(%s); }\n",
+            vs.name.c_str(),
+            bIsObjVS ? "FS_ObjVertex()" : "");
       }
       CODE_APPEND("#endif // _ENTRY_POINT_%s\n", vs.name.c_str());
 
@@ -1615,9 +1655,7 @@ void Project::codeGenGlsl(const std::filesystem::path& autoGenFileName) {
         CODE_APPEND(
             "layout(location = 0) in %s _VERTEX_INPUT;\n",
             m_parsed.m_structDefs[ps.vertexOutputStructIdx].name.c_str());
-        CODE_APPEND(
-            "void main() { %s(_VERTEX_INPUT); }\n",
-            ps.name.c_str());
+        CODE_APPEND("void main() { %s(_VERTEX_INPUT); }\n", ps.name.c_str());
       } else {
         CODE_APPEND("void main() { %s(); }\n", ps.name.c_str());
       }
@@ -1710,7 +1748,7 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
 
     for (int i = 0; i < m_parsed.m_textures.size(); ++i) {
       const auto& txDesc = m_parsed.m_textures[i];
-      assert(txDesc.imageIdx >= 0 || txDesc.texFileIdx >= 0);
+      assert(txDesc.idx >= 0);
       CODE_APPEND(
           "[[vk::binding(%u, 1)]] Texture2D %s;\n",
           slot++,
@@ -1732,11 +1770,8 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
       for (const auto& fslider : m_parsed.m_sliderFloats) {
         CODE_APPEND("\tfloat %s;\n", fslider.name.c_str());
       }
-      for (const auto& checkbox : m_parsed.m_checkboxes) {
-        CODE_APPEND("\tbool %s;\n", checkbox.name.c_str());
-      }
-      for (const auto& button : m_parsed.m_buttons) {
-        CODE_APPEND("\tbool %s;\n", button.name.c_str());
+      for (const auto& cond : m_parsed.m_conditions) {
+        CODE_APPEND("\tbool %s;\n", cond.name.c_str());
       }
 
       CODE_APPEND("};\n\n");
@@ -1823,12 +1858,15 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
           const auto& img = m_images[attachmentRef.imageIdx];
           if ((img.image.getOptions().usage &
                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
-            const auto& attName = m_parsed.m_attachmentNames[attachmentRef.aliasNameIdx];
-            CODE_APPEND("\tfloat4 _%s : SV_Target%u;\n", attName.name.c_str(), colorAttachmentIdx++);
+            const auto& attName =
+                m_parsed.m_attachmentNames[attachmentRef.aliasNameIdx];
+            CODE_APPEND(
+                "\tfloat4 _%s : SV_Target%u;\n",
+                attName.name.c_str(),
+                colorAttachmentIdx++);
           }
         }
-        const auto& structdef =
-            m_parsed.m_structDefs[ps.vertexOutputStructIdx];
+        const auto& structdef = m_parsed.m_structDefs[ps.vertexOutputStructIdx];
         CODE_APPEND("}; // struct _PixelOutput\n");
         CODE_APPEND("_PixelOutput main(%s IN) {\n", structdef.name.c_str());
         CODE_APPEND("\t_PixelOutput OUT;\n");
@@ -1838,7 +1876,8 @@ void Project::codeGenHlsl(const std::filesystem::path& autoGenFileName) {
           if ((img.image.getOptions().usage &
                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0) {
             assert(attachmentRef.aliasNameIdx >= 0);
-            const auto& attName = m_parsed.m_attachmentNames[attachmentRef.aliasNameIdx].name;
+            const auto& attName =
+                m_parsed.m_attachmentNames[attachmentRef.aliasNameIdx].name;
             CODE_APPEND("\tOUT._%s = %s;\n", attName.c_str(), attName.c_str());
           }
         }
@@ -1945,7 +1984,7 @@ void Project::serializeOptions() {
         break;
       }
       case ParsedFlr::UET_CHECKBOX: {
-        const auto& checkbox = m_parsed.m_checkboxes[ui.idx];
+        const auto& checkbox = m_parsed.m_conditions[ui.idx];
         snprintf(
             buf,
             1024,
@@ -2000,7 +2039,7 @@ ComputeShaderId Project::findComputeShader(const char* name) const {
 }
 
 FlrUiView<bool> Project::getCheckBox(const char* name) const {
-  return getUiElemByName<bool>(name, m_parsed.m_checkboxes);
+  return getUiElemByName<bool>(name, m_parsed.m_conditions);
 }
 FlrUiView<float> Project::getSliderFloat(const char* name) const {
   return getUiElemByName<float>(name, m_parsed.m_sliderFloats);

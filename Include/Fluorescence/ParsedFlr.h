@@ -1,7 +1,7 @@
 
 #include <Althea/Application.h>
-#include <Althea/Utilities.h>
 #include <Althea/GraphicsPipeline.h>
+#include <Althea/Utilities.h>
 #include <Althea/Shader.h>
 
 #include <cstdint>
@@ -101,20 +101,13 @@ struct ParsedFlr {
   };
   std::vector<ColorPicker> m_colorPickers;
 
-  struct Checkbox {
+  struct DynamicCondition {
     std::string name;
     bool defaultValue;
     uint32_t uiIdx;
     uint32_t* pValue; // glsl bools are 32bit
   };
-  std::vector<Checkbox> m_checkboxes;
-
-  struct Button {
-    std::string name;
-    uint32_t uiIdx;
-    uint32_t* pValue; // glsl bools are 32bit
-  };
-  std::vector<Button> m_buttons;
+  std::vector<DynamicCondition> m_conditions;
 
   struct SaveImageButton {
     uint32_t imageIdx;
@@ -186,12 +179,22 @@ struct ParsedFlr {
   };
   std::vector<TextureFile> m_textureFiles;
 
+  enum TextureType : uint8_t {
+    TT_IMAGE = 0,
+    TT_FILE,
+    TT_ENV_MAP,
+    TT_ENV_MAP_IRR,
+    TT_ENV_MAP_PREF
+  };
+
   struct TextureDesc {
     std::string name;
-    int imageIdx;
-    int texFileIdx; // image idx or texfile idx, but not both
+    uint32_t idx;
+    TextureType type;
   };
   std::vector<TextureDesc> m_textures;
+
+  std::vector<std::string> m_envMaps;
 
   struct ComputeShader {
     std::string name;
@@ -328,6 +331,7 @@ struct ParsedFlr {
   struct Task {
     uint32_t idx;
     TaskType type;
+    std::optional<uint32_t> cond;
   };
   std::vector<Task> m_taskList;
 
@@ -414,6 +418,7 @@ struct ParsedFlr {
     I_FEATURE,
     I_IMAGE,
     I_DEPTH_IMAGE,
+    I_ENVIRONMENT_MAP,
     I_TEXTURE_ALIAS,
     I_TEXTURE_FILE,
     I_GENERATE_MIPS,
@@ -479,6 +484,7 @@ struct ParsedFlr {
       "enable_feature",
       "image",
       "depth_image",
+      "environment_map",
       "texture_alias",
       "texture_file",
       "generate_mips",

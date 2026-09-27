@@ -348,20 +348,12 @@ void assembleEstablishmentPacket(Project* project, char* outStream, size_t strea
     writer.serialize(slider.name);
   }
 
-  for (const ParsedFlr::Checkbox& checkbox : parsed.m_checkboxes) {
-    uint32_t uiCmdType = 4;
-    uint32_t ptrdif = static_cast<uint32_t>(((char*)checkbox.pValue) - pDynamicData);
+  for (const ParsedFlr::DynamicCondition& cond : parsed.m_conditions) {
+    uint32_t uiCmdType = 4; // checkboxes and buttons treated identically
+    uint32_t ptrdif = static_cast<uint32_t>(((char*)cond.pValue) - pDynamicData);
     uint32_t cmd[] = { FMT_UI, uiCmdType, ptrdif };
     writer.serialize(&cmd, 12);
-    writer.serialize(checkbox.name);
-  }
-
-  for (const ParsedFlr::Button& button : parsed.m_buttons) {
-    uint32_t uiCmdType = 4; // treat identical to checkboxes for now...
-    uint32_t ptrdif = static_cast<uint32_t>(((char*)button.pValue) - pDynamicData);
-    uint32_t cmd[] = { FMT_UI, uiCmdType, ptrdif };
-    writer.serialize(&cmd, 12);
-    writer.serialize(button.name);
+    writer.serialize(cond.name);
   }
 
   if (auto allocOffs = writer.allocate(pDynamicData, dynamicDataSize)) {
